@@ -9,7 +9,7 @@ if [[ "$configuration" != "release" && "$configuration" != "debug" ]]; then
 fi
 swift build --configuration "$configuration"
 binary_dir="$(swift build --configuration "$configuration" --show-bin-path)"
-app_dir="${MACB_APP_DIR:-$project_dir/dist/MacB.app}"
+app_dir="${MACB_APP_DIR:-$HOME/Applications/MacB.app}"
 rm -rf "$app_dir"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$binary_dir/MacB" "$app_dir/Contents/MacOS/MacB"

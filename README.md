@@ -11,17 +11,17 @@ Requires macOS 14+, Swift 6 Command Line Tools. The initial target is Apple Sili
 
 ```sh
 ./scripts/build.sh
-open dist/MacB.app
+open "$HOME/Applications/MacB.app"
 ```
 
 For daily use on this machine, build outside the Desktop/File Provider folder:
 
 ```sh
-MACB_APP_DIR="$HOME/Applications/MacB.app" ./scripts/build.sh
+./scripts/build.sh
 open "$HOME/Applications/MacB.app"
 ```
 
-The build creates a locally ad-hoc signed app. Run the bundled app rather than the bare Swift executable so macOS permissions attach to `dev.hamzababal.MacB`. In the first-run settings window, enable Accessibility for Dock/window control, Screen Recording for thumbnails, and Spotify Automation for music. Permissions are requested only through user actions. Local rebuilds may require granting permissions again. This build is not notarized for public distribution.
+The build creates a locally ad-hoc signed app in `~/Applications`. Run that bundled app rather than the bare Swift executable so macOS permissions attach to `dev.hamzababal.MacB`. In the first-run settings window, enable Accessibility for Dock/window control, Screen Recording for thumbnails, and Spotify Automation for music. Permissions are requested only through user actions. Local rebuilds that change the executable may require granting permissions again. This build is not notarized for public distribution.
 
 ## Use
 
@@ -41,8 +41,8 @@ The build creates a locally ad-hoc signed app. Run the bundled app rather than t
 
 ```sh
 ./scripts/test.sh
-./dist/MacB.app/Contents/MacOS/MacB --diagnostics
-./dist/MacB.app/Contents/MacOS/MacB --smoke-test
+"$HOME/Applications/MacB.app/Contents/MacOS/MacB" --diagnostics
+"$HOME/Applications/MacB.app/Contents/MacOS/MacB" --smoke-test
 ```
 
 The real notch UI can be opened in fixed review states with `--preview-glance`,
