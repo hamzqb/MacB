@@ -49,9 +49,9 @@ struct CoreTestRunner {
                 try expect(WindowMatcher.uniqueMatch(pid: 10, title: "Document", frame: .zero,
                     candidates: [candidate(1)]) == nil, "Zero-sized window matched")
             }),
-            ("WindowMatcher: different nonempty titles never match", {
-                try expect(WindowMatcher.uniqueMatch(pid: 10, title: "Private", frame: frame,
-                    candidates: [candidate(1)]) == nil, "Mismatched title accepted")
+            ("WindowMatcher: browser title suffix can differ when geometry is unique", {
+                try expect(WindowMatcher.uniqueMatch(pid: 10, title: "Private — Chrome", frame: frame,
+                    candidates: [candidate(1, title: "Private")]) == 1, "Unique geometry was rejected")
             }),
             ("PanelState: 180ms hover opens glance without resetting on repeated entry", {
                 var state = PanelState()

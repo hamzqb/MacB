@@ -14,6 +14,7 @@ private struct DockHit {
     private let previewService: PreviewService
     private let preferences: Preferences
     private let favorites: FavoriteWindowStore
+    private let recentTargets: RecentTargetStore
     private var panel: NSPanel?
     private var peekPanel: NSPanel?
     private var isPresented = false
@@ -21,8 +22,8 @@ private struct DockHit {
     private var localCardFrames: [String: CGRect] = [:]
     private var shouldAnimate: Bool { (UserDefaults.standard.object(forKey: "animationsEnabled") as? Bool ?? true) && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     private var monitors: [Any] = []
+    private var pointerTimer: Timer?
     private var observers: [NSObjectProtocol] = []
-    private let hitQueue = DispatchQueue(label: "com.macb.dock-hit", qos: .utility)
     private var hitInFlight = false
     private var lastHitTime: TimeInterval = 0
     private var hoverTask: Task<Void, Never>?
@@ -40,9 +41,10 @@ private struct DockHit {
     private var session = 0
     private var windowSubscription: AnyCancellable?
 
-    init(windowService: WindowService, previewService: PreviewService, preferences: Preferences, favorites: FavoriteWindowStore) {
+    init(windowService: WindowService, previewService: PreviewService, preferences: Preferences,
+         favorites: FavoriteWindowStore, recentTargets: RecentTargetStore) {
         self.windowService = windowService; self.previewService = previewService
-        self.preferences = preferences; self.favorites = favorites
+        self.preferences = preferences; self.favorites = favorites; self.recentTargets = recentTargets
         windowSubscription = windowService.$windows.dropFirst().sink { [weak self] _ in
             Task { @MainActor in
                 guard let self, let pid = self.activePID, self.isPresented else { return }
@@ -60,6 +62,12 @@ private struct DockHit {
         if let monitor = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
             Task { @MainActor in self?.handle(event) }; return event
         }) { monitors.append(monitor) }
+        // A low-frequency pointer check keeps Dock hover working when macOS withholds
+        // global mouse events until Input Monitoring has been granted.
+        pointerTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.handlePointer(at: NSEvent.mouseLocation) }
+        }
+        pointerTimer?.tolerance = 0.02
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.dismiss() }
@@ -79,6 +87,7 @@ private struct DockHit {
     }
     func stop() {
         monitors.forEach(NSEvent.removeMonitor); monitors = []
+        pointerTimer?.invalidate(); pointerTimer = nil
         for observer in observers { NotificationCenter.default.removeObserver(observer); NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         observers = []; dismiss()
     }
@@ -117,13 +126,19 @@ private struct DockHit {
         if event.type == .leftMouseDragged { dragging = true }
         guard !activatedDuringDrag else { return }
         let point = NSEvent.mouseLocation
+        handlePointer(at: point, eventType: event.type)
+    }
+
+    private func handlePointer(at point: CGPoint, eventType: NSEvent.EventType? = nil) {
+        guard enabled, AXIsProcessTrusted() else { if isPresented { dismiss() }; return }
+        guard !activatedDuringDrag else { return }
         if let panel, isPresented, panel.frame.contains(point) {
             closeTask?.cancel(); closeTask = nil
             if dragging { updateDrag(at: point) }
             return
         }
         dragTask?.cancel(); dragTask = nil; dragWindowID = nil
-        if event.type == .leftMouseDown, isPresented, !anchor.contains(point) { dismiss() }
+        if eventType == .leftMouseDown, isPresented, !anchor.contains(point) { dismiss() }
         if isPresented, anchor.insetBy(dx: -8, dy: -8).contains(point) { closeTask?.cancel(); closeTask = nil }
         else { scheduleClose() }
         let nearEdge = NSScreen.screens.contains { screen in
@@ -136,32 +151,29 @@ private struct DockHit {
         let dockPID = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first?.processIdentifier
         let axPoint = CGPoint(x: point.x, y: top - point.y)
         let hitSession = session
-        hitQueue.async { [weak self] in
-            var hit: DockHit?
-            if let dockPID {
-                let dock = AXUIElementCreateApplication(dockPID)
-                AXUIElementSetMessagingTimeout(dock, 0.1)
-                var element: AXUIElement?
-                if AXUIElementCopyElementAtPosition(dock, Float(axPoint.x), Float(axPoint.y), &element) == .success {
-                    for _ in 0..<5 {
-                        guard let current = element else { break }
-                        AXUIElementSetMessagingTimeout(current, 0.1)
-                        if let value = axAttribute(current, kAXURLAttribute), let frame = axFrame(current) {
-                            let url = (value as? URL) ?? (value as? String).flatMap(URL.init(string:))
-                            if let url, url.isFileURL, url.pathExtension == "app" { hit = DockHit(url: url, frame: frame); break }
-                        }
-                        guard let parent = axAttribute(current, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
-                        element = (parent as! AXUIElement)
+        // Dock hit-testing intermittently returns kAXErrorCannotComplete off the main
+        // thread on macOS 26. Keep the query short and run it on the main actor.
+        var hit: DockHit?
+        if let dockPID {
+            let dock = AXUIElementCreateApplication(dockPID)
+            AXUIElementSetMessagingTimeout(dock, 0.04)
+            var element: AXUIElement?
+            if AXUIElementCopyElementAtPosition(dock, Float(axPoint.x), Float(axPoint.y), &element) == .success {
+                for _ in 0..<5 {
+                    guard let current = element else { break }
+                    AXUIElementSetMessagingTimeout(current, 0.04)
+                    if let value = axAttribute(current, kAXURLAttribute), let frame = axFrame(current) {
+                        let url = (value as? URL) ?? (value as? String).flatMap(URL.init(string:))
+                        if let url, url.isFileURL, url.pathExtension == "app" { hit = DockHit(url: url, frame: frame); break }
                     }
+                    guard let parent = axAttribute(current, kAXParentAttribute), CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+                    element = (parent as! AXUIElement)
                 }
             }
-            Task { @MainActor in
-                guard let self else { return }
-                self.hitInFlight = false
-                guard self.enabled, self.session == hitSession else { return }
-                self.process(hit, top: top)
-            }
         }
+        hitInFlight = false
+        guard enabled, session == hitSession else { return }
+        process(hit, top: top)
     }
 
     private func process(_ hit: DockHit?, top: CGFloat) {
@@ -288,6 +300,7 @@ private struct DockHit {
             guard let self, !Task.isCancelled, self.dragging else { return }
             self.activatedDuringDrag = true
             self.windowService.focus(window, focusMode: self.preferences.focusModeEnabled)
+            self.recentTargets.record(window: window)
             self.dismiss()
             NotificationCenter.default.post(name: .init("MacBDropTargetActivated"), object: nil)
         }

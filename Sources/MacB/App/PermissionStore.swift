@@ -5,12 +5,14 @@ import Combine
 @MainActor final class PermissionStore: ObservableObject {
     @Published private(set) var accessibility = false
     @Published private(set) var screenCapture = false
+    @Published private(set) var inputMonitoring = false
     private var timer: Timer?
 
     init() { refresh() }
     func refresh() {
         accessibility = AXIsProcessTrusted()
         screenCapture = CGPreflightScreenCaptureAccess()
+        inputMonitoring = CGPreflightListenEventAccess()
     }
     func startObserving() {
         refresh()
@@ -30,6 +32,11 @@ import Combine
         _ = CGRequestScreenCaptureAccess()
         refresh()
         if !screenCapture { openPrivacy("Privacy_ScreenCapture") }
+    }
+    func requestInputMonitoring() {
+        _ = CGRequestListenEventAccess()
+        refresh()
+        if !inputMonitoring { openPrivacy("Privacy_ListenEvent") }
     }
     func openPrivacy(_ section: String) {
         guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(section)") else { return }

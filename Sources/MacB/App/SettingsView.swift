@@ -25,6 +25,7 @@ struct SettingsView: View {
     @ObservedObject var permissions: PermissionStore
     @ObservedObject var spotify: SpotifyService
     @ObservedObject var appleMusic: AppleMusicService
+    @ObservedObject var camera: CameraPreviewService
     @ObservedObject var shelf: ShelfStore
     var shortcutError: String?
     var openPanel: () -> Void
@@ -121,7 +122,7 @@ struct SettingsView: View {
             section("Çalışma alanı") {
                 settingToggle("Dock önizlemeleri", detail: "Bir simgenin üzerinde bekle, istediğin pencereye geç.", isOn: $preferences.dockEnabled)
                 rowDivider
-                settingToggle("Notch paneli", detail: "Spotify ve dosya rafını ekranın üst kenarından aç.", isOn: $preferences.notchEnabled)
+                settingToggle("Notch paneli", detail: "Medya, dosya, pano ve işlerini ekranın üst kenarından aç.", isOn: $preferences.notchEnabled)
                 rowDivider
                 settingToggle("Pencere seçici", detail: "Kısayolu basılı tut, Tab ile ilerle, bırakarak seç.", isOn: $preferences.switcherEnabled)
                 if preferences.switcherEnabled {
@@ -182,9 +183,12 @@ struct SettingsView: View {
             section("Raf yardımcıları") {
                 settingToggle("Son dosyalar", detail: "Downloads, Desktop ve Documents içinden son dosyaları öner. macOS klasör erişimi isteyebilir.", isOn: $preferences.recentFilesEnabled)
                 rowDivider
-                settingToggle("Mini pano rafı", detail: "Son kopyaladığın metinleri geçici olarak Dosyalar görünümünde tut.", isOn: $preferences.clipboardShelfEnabled)
+                settingToggle("Mini pano rafı", detail: "Son kopyaladığın metinleri Pano görünümünde tut.", isOn: $preferences.clipboardShelfEnabled)
                 rowDivider
                 settingToggle("İndirme göstergesi", detail: "Downloads klasöründeki yeni dosyaları göster. macOS klasör erişimi isteyebilir.", isOn: $preferences.fileActivityEnabled)
+            }
+            section("Gizlilik") {
+                settingToggle("Özel araçları kilitle", detail: "Pano ve kamera açılırken Touch ID, Apple Watch veya Mac parolanla doğrula.", isOn: $preferences.protectPrivateTools)
             }
             section("Yoğunluk") {
                 Picker("Görünüm yoğunluğu", selection: $preferences.interfaceDensity) {
@@ -216,6 +220,9 @@ struct SettingsView: View {
             permissionRow("Ekran kaydı", detail: "Açık önizlemelerde pencere görüntülerini göstermek için. Görüntüler diske kaydedilmez.",
                           granted: permissions.screenCapture, action: permissions.requestScreenCapture)
             rowDivider
+            permissionRow("Giriş izleme", detail: "⌘ Tab pencere seçicisini çalıştırmak için.",
+                          granted: permissions.inputMonitoring, action: permissions.requestInputMonitoring)
+            rowDivider
             permissionRow("Spotify otomasyonu", detail: "Parça bilgisini okumak ve oynatma kontrollerini kullanmak için.",
                           granted: spotify.isAuthorized,
                           actionTitle: spotify.isRunning ? "İzin ver" : "Spotify’ı aç",
@@ -227,6 +234,10 @@ struct SettingsView: View {
                           actionTitle: appleMusic.isRunning ? "İzin ver" : "Apple Music’i aç",
                           action: appleMusic.isRunning ? appleMusic.requestAuthorization : appleMusic.openAppleMusic)
             if let error = appleMusic.errorMessage { message(error, warning: true) }
+            rowDivider
+            permissionRow("Kamera", detail: "Canlı önizleme yalnız sen kamera düğmesine bastığında çalışır.",
+                          granted: camera.isAuthorized, actionTitle: "İzin ver", action: camera.requestAuthorization)
+            if let error = camera.errorMessage { message(error, warning: true) }
             Text("Bir izin kapalıyken diğer özellikler çalışmaya devam eder. macOS yeniden başlatma isterse MacB’yi kapatıp aç.")
                 .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
                 .fixedSize(horizontal: false, vertical: true)

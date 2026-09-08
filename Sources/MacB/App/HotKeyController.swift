@@ -9,13 +9,23 @@ import CoreGraphics
     private var commandTabTap: CFMachPort?
     private var commandTabSource: CFRunLoopSource?
     private(set) var registrationError: String?
+    private(set) var activeShortcut: SwitcherShortcut?
 
     func register(_ shortcut: SwitcherShortcut) {
         unregister()
         if shortcut == .commandTab {
             registerCommandTabTap()
+            if commandTabTap == nil {
+                let reason = registrationError ?? "⌘ Tab dinleyicisi açılamadı."
+                registerCarbon(.optionTab)
+                if activeShortcut == .optionTab { registrationError = "\(reason) Geçici olarak ⌥ Tab aktif." }
+            }
             return
         }
+        registerCarbon(shortcut)
+    }
+
+    private func registerCarbon(_ shortcut: SwitcherShortcut) {
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let pointer = Unmanaged.passUnretained(self).toOpaque()
         let status = InstallEventHandler(GetApplicationEventTarget(), { _, event, context in
@@ -41,6 +51,7 @@ import CoreGraphics
             hotKeys.append(reference)
         }
         registrationError = nil
+        activeShortcut = shortcut
     }
     func unregister() {
         for reference in hotKeys { UnregisterEventHotKey(reference) }
@@ -51,6 +62,7 @@ import CoreGraphics
         if let source = commandTabSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         commandTabSource = nil
         commandTabTap = nil
+        activeShortcut = nil
     }
 
     private func registerCommandTabTap() {
@@ -68,17 +80,29 @@ import CoreGraphics
         commandTabTap = tap
         commandTabSource = source
         registrationError = nil
+        activeShortcut = .commandTab
+    }
+
+    fileprivate func reenableCommandTabTap() {
+        guard let commandTabTap else { return }
+        CGEvent.tapEnable(tap: commandTabTap, enable: true)
+        registrationError = nil
     }
 }
 
 private let commandTabCallback: CGEventTapCallBack = { _, type, event, userInfo in
-    guard type == .keyDown, let userInfo else { return Unmanaged.passUnretained(event) }
+    guard let userInfo else { return Unmanaged.passUnretained(event) }
+    let controller = Unmanaged<HotKeyController>.fromOpaque(userInfo).takeUnretainedValue()
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        Task { @MainActor in controller.reenableCommandTabTap() }
+        return Unmanaged.passUnretained(event)
+    }
+    guard type == .keyDown else { return Unmanaged.passUnretained(event) }
     let keyCode = UInt32(event.getIntegerValueField(.keyboardEventKeycode))
     let flags = event.flags
     guard keyCode == UInt32(kVK_Tab), flags.contains(.maskCommand) else {
         return Unmanaged.passUnretained(event)
     }
-    let controller = Unmanaged<HotKeyController>.fromOpaque(userInfo).takeUnretainedValue()
     let backwards = flags.contains(.maskShift)
     Task { @MainActor in controller.onPress?(backwards) }
     return nil

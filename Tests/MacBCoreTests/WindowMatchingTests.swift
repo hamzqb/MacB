@@ -21,6 +21,16 @@ final class WindowMatchingTests: XCTestCase {
         XCTAssertNil(WindowMatcher.uniqueMatch(pid: 10, title: "Document", frame: .zero, candidates: [candidate(1)]))
     }
     func testDifferentNonemptyTitlesNeverMatch() {
-        XCTAssertNil(WindowMatcher.uniqueMatch(pid: 10, title: "Private", frame: frame, candidates: [candidate(1)]))
+        XCTAssertEqual(WindowMatcher.uniqueMatch(pid: 10, title: "Private — Chrome", frame: frame,
+                                                  candidates: [candidate(1, title: "Private")]), 1)
+    }
+    func testSmallFrameworkFrameDifferencesStillMatch() {
+        let rounded = CGRect(x: 24, y: 37, width: 794, height: 606)
+        XCTAssertEqual(WindowMatcher.uniqueMatch(pid: 10, title: "Document", frame: frame,
+                                                  candidates: [candidate(1, frame: rounded)]), 1)
+    }
+    func testNearIdenticalGeometryRemainsAmbiguous() {
+        XCTAssertNil(WindowMatcher.uniqueMatch(pid: 10, title: "Document", frame: frame,
+            candidates: [candidate(1), candidate(2, frame: frame.offsetBy(dx: 1, dy: 0))]))
     }
 }

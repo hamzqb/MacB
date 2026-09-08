@@ -40,7 +40,8 @@ private final class PreviewOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         guard CGPreflightScreenCaptureAccess() else {
             stop(); images = [:]; staleIDs = []; errorMessage = "Önizlemeler için Ekran Kaydı izni gerekli."; return
         }
-        if signature == desiredSignature { return }
+        let eligibleIDs = Set(visible.filter { !$0.isMinimized && !$0.captureAmbiguous }.map(\.id))
+        if signature == desiredSignature && eligibleIDs.isSubset(of: Set(streams.keys)) { return }
         generation += 1
         desiredIDs = ids
         desiredSignature = signature
@@ -49,7 +50,7 @@ private final class PreviewOutput: NSObject, SCStreamOutput, SCStreamDelegate {
         let transition = Task { [weak self] in
             await previous?.value
             guard let self, self.generation == currentGeneration else { return }
-            let eligible = Set(visible.filter { !$0.isMinimized && !$0.captureAmbiguous }.map(\.id))
+            let eligible = eligibleIDs
             await self.retireStreams(except: eligible)
             guard self.generation == currentGeneration else { return }
             let ambiguous = Set(visible.filter(\.captureAmbiguous).map(\.id))
@@ -67,6 +68,7 @@ private final class PreviewOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
             guard generation == currentGeneration else { return }
             let descriptors = content.windows.map { WindowDescriptor(id: $0.windowID, pid: $0.owningApplication?.processID ?? -1, title: $0.title ?? "", frame: $0.frame) }
+            var started = 0
             for window in visible where !window.isMinimized && !window.captureAmbiguous {
                 guard generation == currentGeneration else { return }
                 guard let id = WindowMatcher.uniqueMatch(pid: window.pid, title: window.title, frame: window.frame, candidates: descriptors),
@@ -98,9 +100,10 @@ private final class PreviewOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: outputQueue)
                 streams[window.id] = (stream, output)
                 try await stream.startCapture()
+                started += 1
                 guard generation == currentGeneration else { return }
             }
-            errorMessage = nil
+            errorMessage = started == 0 && !visible.isEmpty ? "Canlı görüntü eşleştirilemedi." : nil
         } catch {
             guard generation == currentGeneration else { return }
             await retireStreams(); errorMessage = "Önizleme açılamadı. Ekran Kaydı iznini kontrol edin."

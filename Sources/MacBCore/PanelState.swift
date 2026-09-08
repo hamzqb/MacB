@@ -1,7 +1,7 @@
 import Foundation
 
 public enum NotchPhase: String, Equatable { case collapsed, glance, expanded }
-public enum NotchContent: String, Equatable { case music, files }
+public enum NotchContent: String, Equatable { case music, files, clipboard, tasks }
 
 /// Interaction policy is independent of rendering and of animation progress.
 public struct PanelState: Equatable {

@@ -10,6 +10,7 @@ import ApplicationServices
             print("macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)")
             print("Accessibility: \(AXIsProcessTrusted())")
             print("Screen capture: \(CGPreflightScreenCaptureAccess())")
+            print("Input monitoring: \(CGPreflightListenEventAccess())")
             print("Spotify installed: \(NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.spotify.client") != nil)")
             print("Displays: \(NSScreen.screens.count)")
             return
@@ -35,11 +36,18 @@ import ApplicationServices
     private let recentFiles = RecentFileStore()
     private let clipboardShelf = ClipboardShelfStore()
     private let fileActivity = FileActivityStore()
+    private let tasks = TaskStore()
+    private let camera = CameraPreviewService()
+    private let biometricAuth = BiometricAuthService()
+    private let recentTargets = RecentTargetStore()
     private let hotKey = HotKeyController()
-    private lazy var dock = DockController(windowService: windows, previewService: previews, preferences: preferences, favorites: favorites)
+    private lazy var dock = DockController(windowService: windows, previewService: previews, preferences: preferences,
+                                           favorites: favorites, recentTargets: recentTargets)
     private lazy var notch = NotchController(media: media, shelf: shelf, preferences: preferences,
                                             recentFiles: recentFiles, clipboard: clipboardShelf,
-                                            fileActivity: fileActivity)
+                                            fileActivity: fileActivity, tasks: tasks, camera: camera,
+                                            auth: biometricAuth, recentTargets: recentTargets,
+                                            openSettings: { [weak self] in self?.showSettings() })
     private lazy var switcher = SwitcherController(windowService: windows, previewService: previews,
                                                    preferences: preferences, favorites: favorites)
     private var statusItem: NSStatusItem?
@@ -61,7 +69,7 @@ import ApplicationServices
             guard let self, self.preferences.switcherEnabled else { return }
             self.permissions.refresh()
             guard self.permissions.accessibility else { self.showSettings(); return }
-            self.switcher.begin(backwards: backwards, shortcut: self.preferences.shortcut)
+            self.switcher.begin(backwards: backwards, shortcut: self.hotKey.activeShortcut ?? self.preferences.shortcut)
         }
         switcher.onWillOpen = { [weak self] in
             self?.dock.dismiss()
@@ -159,7 +167,7 @@ import ApplicationServices
 
     private func refreshSettingsContent() {
         settingsWindow?.contentView = NSHostingView(rootView: SettingsView(preferences: preferences, permissions: permissions,
-            spotify: spotify, appleMusic: appleMusic, shelf: shelf, shortcutError: hotKey.registrationError,
+            spotify: spotify, appleMusic: appleMusic, camera: camera, shelf: shelf, shortcutError: hotKey.registrationError,
             openPanel: { [weak self] in self?.openNotch() }))
     }
 
@@ -207,6 +215,8 @@ import ApplicationServices
         recentFiles.stop()
         clipboardShelf.stop()
         fileActivity.stop()
+        camera.stop()
+        biometricAuth.reset()
         permissions.stopObserving()
         for observer in workspaceObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         NotificationCenter.default.removeObserver(self)

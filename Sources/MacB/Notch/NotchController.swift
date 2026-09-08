@@ -11,6 +11,11 @@ struct NotchLayout: Equatable {
     var radius: CGFloat = 12
 }
 
+struct IslandToast: Equatable {
+    let symbol: String
+    let message: String
+}
+
 @MainActor final class NotchPresentation: ObservableObject {
     @Published var layout = NotchLayout()
     @Published var previousLayout = NotchLayout()
@@ -22,6 +27,8 @@ struct NotchLayout: Equatable {
     @Published var cameraWidth: CGFloat = 0
     @Published var isDropTarget = false
     @Published var indicators = true
+    @Published var toast: IslandToast?
+    @Published var cameraPreviewVisible = false
 }
 
 @MainActor final class NotchController: NSObject, NSWindowDelegate {
@@ -31,6 +38,11 @@ struct NotchLayout: Equatable {
     private let recentFiles: RecentFileStore
     private let clipboard: ClipboardShelfStore
     private let fileActivity: FileActivityStore
+    private let tasks: TaskStore
+    private let camera: CameraPreviewService
+    private let auth: BiometricAuthService
+    private let recentTargets: RecentTargetStore
+    private let openSettings: () -> Void
     private let presentation = NotchPresentation()
     private var state = PanelState()
     private var panel: NotchPanel?
@@ -46,16 +58,22 @@ struct NotchLayout: Equatable {
     private var dragHandedOff = false
     private var developmentPreviewLocked = false
     private var display: NSScreen?
+    private var toastTask: Task<Void, Never>?
+    private var cameraWindow: NSWindow?
     var enabled = true {
         didSet { if enabled { start() } else { stop() } }
     }
 
     init(media: MediaService, shelf: ShelfStore, preferences: Preferences,
          recentFiles: RecentFileStore, clipboard: ClipboardShelfStore,
-         fileActivity: FileActivityStore) {
+         fileActivity: FileActivityStore, tasks: TaskStore,
+         camera: CameraPreviewService, auth: BiometricAuthService,
+         recentTargets: RecentTargetStore, openSettings: @escaping () -> Void) {
         self.media = media; self.shelf = shelf; self.preferences = preferences
         self.recentFiles = recentFiles; self.clipboard = clipboard
         self.fileActivity = fileActivity
+        self.tasks = tasks; self.camera = camera; self.auth = auth
+        self.recentTargets = recentTargets; self.openSettings = openSettings
         super.init()
     }
 
@@ -69,12 +87,19 @@ struct NotchLayout: Equatable {
         window.onEscape = { [weak self] in self?.closePanel() }
         let view = NotchView(presentation: presentation, media: media, shelf: shelf,
             preferences: preferences, recentFiles: recentFiles, clipboard: clipboard,
-            fileActivity: fileActivity,
+            fileActivity: fileActivity, tasks: tasks, camera: camera, auth: auth,
+            recentTargets: recentTargets,
             open: { [weak self] in self?.openPanel() }, close: { [weak self] in self?.closePanel() },
-            select: { [weak self] content in self?.select(content) })
+            select: { [weak self] content in self?.select(content) },
+            openSettings: { [weak self] in self?.openSettings() },
+            cameraAction: { [weak self] in self?.handleCameraAction() },
+            notify: { [weak self] symbol, message in self?.showToast(symbol: symbol, message: message) })
         let host = NotchHostingView(rootView: view)
         host.onDragChanged = { [weak self] active in self?.setDrag(active, incoming: true) }
-        host.onFilesDropped = { [weak self] urls in self?.shelf.add(urls: urls) }
+        host.onFilesDropped = { [weak self] urls in
+            self?.shelf.add(urls: urls)
+            self?.showToast(symbol: "checkmark", message: "\(urls.count) öğe eklendi")
+        }
         window.contentView = host; panel = window
         updateDisplay(); window.orderFrontRegardless()
         let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .leftMouseDown, .leftMouseUp]
@@ -108,10 +133,17 @@ struct NotchLayout: Equatable {
         fileActivity.$activeCount.removeDuplicates().sink { [weak self] _ in
             DispatchQueue.main.async { self?.render() }
         }.store(in: &subscriptions)
+        tasks.$items.map(\.count).removeDuplicates().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.render() }
+        }.store(in: &subscriptions)
+        camera.$isRunning.removeDuplicates().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.render() }
+        }.store(in: &subscriptions)
     }
 
     func stop() {
         animationTimer?.invalidate(); animationTimer = nil
+        toastTask?.cancel(); toastTask = nil
         deadlineTask?.cancel(); deadlineTask = nil
         observers.forEach(NotificationCenter.default.removeObserver); observers.removeAll()
         monitors.forEach(NSEvent.removeMonitor); monitors.removeAll(); subscriptions.removeAll()
@@ -119,6 +151,9 @@ struct NotchLayout: Equatable {
         state.close(); sourceDragActive = false; incomingDragActive = false; dragHandedOff = false
         developmentPreviewLocked = false
         pointerInside = false; media.setPanelVisible(false)
+        presentation.cameraPreviewVisible = false
+        camera.stop()
+        cameraWindow?.orderOut(nil); cameraWindow = nil
     }
 
     func openPanel() {
@@ -153,19 +188,33 @@ struct NotchLayout: Equatable {
         render(immediate: true)
     }
     private func select(_ content: NotchContent) {
-        state.select(content); if content == .files { shelf.refreshAvailability() }; render()
+        state.select(content)
+        if content == .files { shelf.refreshAvailability() }
+        if content == .clipboard && preferences.protectPrivateTools && !auth.isAuthenticated {
+            auth.authenticate { [weak self] success in
+                guard let self else { return }
+                self.showToast(symbol: success ? "lock.open.fill" : "lock.fill", message: success ? "Pano açıldı" : "Kilitli")
+                self.render()
+            }
+        }
+        render()
     }
     func closePanel() { closePanel(immediate: false) }
     private func closePanel(immediate: Bool) {
         developmentPreviewLocked = false
         deadlineTask?.cancel(); state.close(); presentation.isDropTarget = false
         suppressHoverUntilExit = true; panel?.resignKey(); render(immediate: immediate)
+        if cameraWindow == nil { presentation.cameraPreviewVisible = false; camera.stop() }
+        auth.reset()
     }
     func windowDidBecomeKey(_ notification: Notification) {
+        guard let source = notification.object as? NSWindow, source === panel else { return }
+        guard state.isOpen else { return }
         guard !developmentPreviewLocked else { return }
         state.setKeyboardFocus(true); render()
     }
     func windowDidResignKey(_ notification: Notification) {
+        guard let source = notification.object as? NSWindow, source === panel else { return }
         state.setKeyboardFocus(false)
         if !pointerInside && !developmentPreviewLocked { state.pointerExited(at: ProcessInfo.processInfo.systemUptime); scheduleDeadline() }
     }
@@ -238,17 +287,79 @@ struct NotchLayout: Equatable {
                 width: min(maxWidth, presentation.cameraWidth > 0 ? presentation.cameraWidth + extra + 12 : max(84, extra + 28)),
                 height: max(28, camera), radius: camera > 0 ? 11 : 14)
         case .glance:
-            return NotchLayout(phase: .glance, content: .music, width: min(360, maxWidth), height: camera + 90, radius: 23)
+            return NotchLayout(phase: .glance, content: .music,
+                width: min(MacBDesign.Island.glanceWidth, maxWidth),
+                height: camera + MacBDesign.Island.glanceBodyHeight, radius: 22)
         case .expanded:
-            let hasFileContent = !shelf.items.isEmpty || !recentFiles.items.isEmpty || !clipboard.items.isEmpty
+            let hasFileContent = !shelf.items.isEmpty || (preferences.recentFilesEnabled && !recentFiles.items.isEmpty)
             let bodyHeight: CGFloat
             switch state.content {
             case .music:
-                bodyHeight = media.errorMessage == nil ? 304 : 336
+                bodyHeight = media.isPlaying || media.isRunning ? MacBDesign.Island.mediaBodyHeight : MacBDesign.Island.emptyMediaBodyHeight
             case .files:
-                bodyHeight = hasFileContent ? min(390, 138 + CGFloat(shelf.items.count + recentFiles.items.count + clipboard.items.count) * 38) : 216
+                bodyHeight = hasFileContent ? min(316, 118 + CGFloat(shelf.items.count + recentFiles.items.count) * 36) : MacBDesign.Island.filesEmptyBodyHeight
+            case .clipboard, .tasks:
+                bodyHeight = MacBDesign.Island.utilityBodyHeight
             }
-            return NotchLayout(phase: .expanded, content: state.content, width: min(440, maxWidth), height: camera + bodyHeight, radius: 25)
+            let cameraExtra: CGFloat = presentation.cameraPreviewVisible ? 136 : 0
+            return NotchLayout(phase: .expanded, content: state.content,
+                width: min(MacBDesign.Island.expandedWidth, maxWidth), height: camera + bodyHeight + cameraExtra,
+                radius: MacBDesign.Island.cornerRadius)
+        }
+    }
+
+    private func showToast(symbol: String, message: String) {
+        toastTask?.cancel()
+        withAnimation(.easeOut(duration: 0.16)) { presentation.toast = IslandToast(symbol: symbol, message: message) }
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled, let self else { return }
+            withAnimation(.easeIn(duration: 0.14)) { self.presentation.toast = nil }
+        }
+    }
+
+    private func handleCameraAction() {
+        if presentation.cameraPreviewVisible && camera.isRunning {
+            showLargeCamera()
+            return
+        }
+        let start = { [weak self] in
+            guard let self else { return }
+            self.presentation.cameraPreviewVisible = true
+            self.state.open()
+            self.camera.start()
+            self.showToast(symbol: "camera.fill", message: "Kamera açılıyor")
+            self.render()
+        }
+        if preferences.protectPrivateTools && !auth.isAuthenticated {
+            auth.authenticate { success in if success { start() } }
+        } else { start() }
+    }
+
+    private func showLargeCamera() {
+        if let cameraWindow { cameraWindow.makeKeyAndOrderFront(nil); return }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 480),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        window.title = "MacB Kamera"
+        window.minSize = NSSize(width: 420, height: 280)
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.contentView = NSHostingView(rootView: CameraPreviewView(service: camera)
+            .background(.black).clipShape(RoundedRectangle(cornerRadius: 14)).padding(12).background(.black))
+        window.center()
+        cameraWindow = window
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        showToast(symbol: "arrow.up.left.and.arrow.down.right", message: "Büyük önizleme açıldı")
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let closing = notification.object as? NSWindow, closing === cameraWindow else { return }
+        cameraWindow = nil
+        if !state.isOpen {
+            presentation.cameraPreviewVisible = false
+            camera.stop()
+            render()
         }
     }
     private func render(immediate: Bool = false) {

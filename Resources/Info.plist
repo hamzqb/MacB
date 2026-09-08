@@ -16,6 +16,7 @@
     <key>NSHighResolutionCapable</key><true/>
     <key>CFBundleDevelopmentRegion</key><string>tr</string>
     <key>NSAppleEventsUsageDescription</key><string>MacB, Spotify ve Apple Music parça bilgisini göstermek ve seçtiğiniz oynatma komutlarını uygulamak için izin ister.</string>
+    <key>NSCameraUsageDescription</key><string>MacB, yalnız kamerayı açtığınızda yerel canlı önizleme göstermek için kamera izni ister. Görüntü kaydedilmez veya paylaşılmaz.</string>
     <key>NSScreenCaptureUsageDescription</key><string>MacB, yalnız açık pencere önizlemeleri için görüntü alır. Görüntüler diske kaydedilmez veya paylaşılmaz.</string>
 </dict>
 </plist>

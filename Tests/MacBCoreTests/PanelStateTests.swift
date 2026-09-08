@@ -104,6 +104,17 @@ final class PanelStateTests: XCTestCase {
         XCTAssertEqual(state, PanelState())
     }
 
+    func testUtilityContentsOpenAndCloseCleanly() {
+        for content in [NotchContent.clipboard, .tasks] {
+            var state = PanelState()
+            state.select(content)
+            XCTAssertEqual(state.phase, .expanded)
+            XCTAssertEqual(state.content, content)
+            state.close()
+            XCTAssertEqual(state, PanelState())
+        }
+    }
+
     func testMorphHasExactEndpointsAndSmallFiniteOvershoot() {
         XCTAssertEqual(MorphTiming.progress(-1), 0)
         XCTAssertEqual(MorphTiming.progress(0), 0)

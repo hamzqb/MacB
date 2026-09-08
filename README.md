@@ -2,6 +2,9 @@
 
 Native macOS Dock previews, a keyboard window switcher, and a notch panel with automatic media controls, smart status, and a persistent file shelf. Free, MIT licensed. The interface is Turkish.
 
+The local build also includes clipboard favorites, a persistent task list, animated confirmations,
+recent drop targets, an optional system-authentication lock, and two-stage camera preview.
+
 ## Build and run
 
 Requires macOS 14+, Swift 6 Command Line Tools. The initial target is Apple Silicon macOS 26. No third-party packages or paid API keys are needed.

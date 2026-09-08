@@ -42,16 +42,16 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
     }
     var cardWidth: CGFloat {
         switch self {
-        case .compact: return 220
-        case .balanced: return 244
-        case .spacious: return 268
+        case .compact: return 196
+        case .balanced: return 220
+        case .spacious: return 244
         }
     }
     var cardHeight: CGFloat {
         switch self {
-        case .compact: return 116
-        case .balanced: return 132
-        case .spacious: return 150
+        case .compact: return 104
+        case .balanced: return 118
+        case .spacious: return 134
         }
     }
 }
@@ -70,6 +70,7 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
     @Published var clipboardShelfEnabled: Bool { didSet { defaults.set(clipboardShelfEnabled, forKey: "clipboardShelfEnabled") } }
     @Published var focusModeEnabled: Bool { didSet { defaults.set(focusModeEnabled, forKey: "focusModeEnabled") } }
     @Published var fileActivityEnabled: Bool { didSet { defaults.set(fileActivityEnabled, forKey: "fileActivityEnabled") } }
+    @Published var protectPrivateTools: Bool { didSet { defaults.set(protectPrivateTools, forKey: "protectPrivateTools") } }
     @Published var interfaceDensity: InterfaceDensity { didSet { defaults.set(interfaceDensity.rawValue, forKey: "interfaceDensity") } }
     @Published var shortcut: SwitcherShortcut { didSet { defaults.set(shortcut.rawValue, forKey: "shortcut") } }
     private let defaults: UserDefaults
@@ -83,6 +84,7 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
                                     "groupedWindowsEnabled": true,
                                     "clipboardShelfEnabled": true, "focusModeEnabled": false,
                                     "fileActivityEnabled": false,
+                                    "protectPrivateTools": false,
                                     "interfaceDensity": InterfaceDensity.balanced.rawValue])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
         notchEnabled = defaults.bool(forKey: "notchEnabled")
@@ -97,6 +99,7 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
         clipboardShelfEnabled = defaults.bool(forKey: "clipboardShelfEnabled")
         focusModeEnabled = defaults.bool(forKey: "focusModeEnabled")
         fileActivityEnabled = defaults.bool(forKey: "fileActivityEnabled")
+        protectPrivateTools = defaults.bool(forKey: "protectPrivateTools")
         interfaceDensity = InterfaceDensity(rawValue: defaults.string(forKey: "interfaceDensity") ?? "") ?? .balanced
         let storedShortcut = SwitcherShortcut(rawValue: defaults.string(forKey: "shortcut") ?? "") ?? .commandTab
         let shouldPreferCommandTab = !defaults.bool(forKey: "didPreferCommandTabForSwitcher") && storedShortcut == .optionTab
