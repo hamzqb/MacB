@@ -136,53 +136,117 @@ struct NotchView: View {
     }
 
     private var music: some View {
-        VStack(spacing: 17) {
-            HStack(spacing: 17) {
-                cover(size: 72, radius: 14)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title).font(.system(size: 17, weight: .semibold)).lineLimit(2)
-                    Text(subtitle).font(.system(size: 12)).foregroundStyle(.white.opacity(0.48)).lineLimit(1)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if media.isPlaying {
-                HStack(spacing: 26) {
-                    playbackButton("backward.fill", label: "Önceki parça", size: 32, action: media.previousTrack)
-                    playbackButton(media.isPlaying ? "pause.fill" : "play.fill", label: media.isPlaying ? "Duraklat" : "Oynat", size: 42, prominent: true, action: media.playPause)
-                    playbackButton("forward.fill", label: "Sonraki parça", size: 32, action: media.nextTrack)
-                }.frame(maxWidth: .infinity)
-            } else if media.isRunning && !media.isAuthorized {
-                Button("\(media.source.title)’e bağlan", action: media.requestAuthorization)
-                    .buttonStyle(.plain).font(.system(size: 12, weight: .medium))
-                    .frame(maxWidth: .infinity).frame(height: 36).background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
-            } else {
-                emptyMediaState
-            }
+        VStack(spacing: 14) {
+            mediaHero
+            mediaControls
             if let error = media.errorMessage { Text(error).font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)).lineLimit(2) }
-            if preferences.quickCommandsEnabled { quickCommandsView }
+            if preferences.quickCommandsEnabled { quickCommandsView.padding(.top, 2) }
             if preferences.fileActivityEnabled && fileActivity.activeCount > 0 {
                 activityPill("\(fileActivity.activeCount) yeni indirme", symbol: "arrow.down.circle")
             }
         }
     }
 
-    private var emptyMediaState: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "waveform.slash").font(.system(size: 11, weight: .medium))
-            Text("Şu an çalan medya yok").font(.system(size: 11, weight: .medium)).lineLimit(1)
+    private var mediaHero: some View {
+        HStack(spacing: 15) {
+            cover(size: 76, radius: 18)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 7) {
+                    Image(systemName: media.source == .none ? "sparkles.rectangle.stack" : media.source.symbol)
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(media.source == .none ? "Hazır" : media.source.title)
+                        .font(.system(size: 10, weight: .semibold))
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.white.opacity(0.56))
+                Text(title)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.94))
+                    .lineLimit(2)
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.58))
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .foregroundStyle(.white.opacity(0.36))
+        .padding(13)
+        .background {
+            ZStack {
+                LinearGradient(colors: [.white.opacity(0.14), .white.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                Circle()
+                    .fill(MacBDesign.accent.opacity(media.source == .none ? 0.08 : 0.18))
+                    .frame(width: 150, height: 150)
+                    .blur(radius: 34)
+                    .offset(x: 138, y: -26)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 22))
+        .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.white.opacity(0.075)))
+    }
+
+    @ViewBuilder private var mediaControls: some View {
+        if media.isPlaying {
+            HStack(spacing: 18) {
+                playbackButton("backward.fill", label: "Önceki parça", size: 36, action: media.previousTrack)
+                playbackButton("pause.fill", label: "Duraklat", size: 48, prominent: true, action: media.playPause)
+                playbackButton("forward.fill", label: "Sonraki parça", size: 36, action: media.nextTrack)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 2)
+        } else if media.isRunning && !media.isAuthorized {
+            Button("\(media.source.title)’e bağlan", action: media.requestAuthorization)
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.06)))
+        } else {
+            emptyMediaState
+        }
+    }
+
+    private var emptyMediaState: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9).fill(.white.opacity(0.075))
+                Image(systemName: "play.slash.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .frame(width: 30, height: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Şu an çalan medya yok")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .lineLimit(1)
+                Text("Spotify, Apple Music veya tarayıcıda oynatınca buraya düşer.")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.42))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 11)
         .frame(maxWidth: .infinity)
-        .frame(height: 34)
-        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
+        .frame(height: 46)
+        .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 15))
+        .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(.white.opacity(0.045)))
     }
 
     private var quickCommandsView: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 9) {
             quickButton("rectangle.on.rectangle", "Masaüstü", quickCommands.showDesktop)
             quickButton("face.smiling", "Finder", quickCommands.openFinder)
             quickButton("terminal", "Terminal", quickCommands.openTerminal)
             quickButton("camera.viewfinder", "Görüntü", quickCommands.takeScreenshot)
         }
+        .padding(7)
+        .frame(maxWidth: .infinity)
+        .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.045)))
     }
 
     private var commands: some View {
@@ -280,8 +344,19 @@ struct NotchView: View {
 
     private func quickButton(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 12, weight: .medium)).frame(width: 36, height: 32)
-                .background(.white.opacity(0.075), in: RoundedRectangle(cornerRadius: 9))
+            VStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(height: 13)
+                Text(label)
+                    .font(.system(size: 9, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(.white.opacity(0.82))
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+            .background(.white.opacity(0.065), in: RoundedRectangle(cornerRadius: 13))
+            .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(.white.opacity(0.045)))
         }
         .buttonStyle(.plain).help(label).accessibilityLabel(label)
     }
@@ -321,10 +396,26 @@ struct NotchView: View {
     }
     private func cover(size: CGFloat, radius: CGFloat) -> some View {
         ZStack {
-            Color.white.opacity(0.07)
-            if let artwork = media.artwork { Image(nsImage: artwork).resizable().scaledToFill() }
-            else { Image(systemName: media.source.symbol).font(.system(size: size * 0.34, weight: .medium)).foregroundStyle(.white.opacity(0.4)) }
-        }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: radius)).accessibilityHidden(true)
+            LinearGradient(colors: [.white.opacity(0.11), .white.opacity(0.045)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            if let artwork = media.artwork {
+                Image(nsImage: artwork).resizable().scaledToFill()
+            } else {
+                VStack(spacing: 6) {
+                    Image(systemName: media.source == .none ? "play.rectangle" : media.source.symbol)
+                        .font(.system(size: size * 0.30, weight: .semibold))
+                    if media.source == .none {
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(.white.opacity(0.22))
+                            .frame(width: size * 0.36, height: 4)
+                    }
+                }
+                .foregroundStyle(.white.opacity(media.source == .none ? 0.62 : 0.68))
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: radius))
+        .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(.white.opacity(0.085)))
+        .accessibilityHidden(true)
     }
     private func playbackButton(_ icon: String, label: String, size: CGFloat, prominent: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
