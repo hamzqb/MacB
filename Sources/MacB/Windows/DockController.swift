@@ -384,6 +384,9 @@ private struct DockPreviewView: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: MacBDesign.corner))
             .overlay(RoundedRectangle(cornerRadius: MacBDesign.corner).strokeBorder(.white.opacity(0.075)))
             .preferredColorScheme(.dark)
+            .task(id: visibleWindows.map(\.id).joined(separator: "|")) {
+                await previewService.show(visibleWindows)
+            }
             .task(id: pid) {
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(2))

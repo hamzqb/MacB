@@ -14,6 +14,7 @@ private final class SwitcherPanel: NSPanel {
     @Published var isLoading = false
     @Published var message: String?
     var pageCapacity = 4
+    var selectedWindow: WindowRecord? { windows.first { $0.id == selectedID } }
     var visibleWindows: [WindowRecord] {
         let index = windows.firstIndex { $0.id == selectedID } ?? 0
         let start = (index / pageCapacity) * pageCapacity
@@ -126,7 +127,7 @@ private final class SwitcherPanel: NSPanel {
         guard let screen else { return }
         let width = min(1080, screen.visibleFrame.width - 40)
         model.pageCapacity = max(1, min(4, Int((width - 28) / (preferences.interfaceDensity.cardWidth + 12))))
-        let size = NSSize(width: width, height: 304)
+        let size = NSSize(width: width, height: 432)
         let panel = SwitcherPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -259,6 +260,10 @@ private struct SwitcherView: View {
                     Text("Erişilebilirlik iznini MacB ayarlarından kontrol edebilirsin.").font(.system(size: 11)).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
+                if let selectedWindow = model.selectedWindow {
+                    SelectedWindowPreviewView(window: selectedWindow, previews: previews)
+                        .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                }
                 HStack(spacing: 12) {
                     ForEach(model.visibleWindows) { window in
                         WindowCardView(window: window, previewService: previews, isSelected: window.id == model.selectedID,
@@ -298,4 +303,58 @@ private struct SwitcherView: View {
         return "\(count) uygulama"
     }
 
+}
+
+private struct SelectedWindowPreviewView: View {
+    let window: WindowRecord
+    @ObservedObject var previews: PreviewService
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            if let image = previews.images[window.id] {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.black.opacity(0.22))
+            } else {
+                WindowPreviewPlaceholder(window: window)
+            }
+            LinearGradient(colors: [.clear, .black.opacity(0.58)], startPoint: .center, endPoint: .bottom)
+                .allowsHitTesting(false)
+            HStack(spacing: 10) {
+                if let icon = window.appIcon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .frame(width: 28, height: 28)
+                        .accessibilityHidden(true)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(window.appName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .lineLimit(1)
+                    Text(window.title)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
+                Spacer()
+                if window.isMinimized || previews.staleIDs.contains(window.id) {
+                    Text(window.isMinimized ? "Küçültülmüş" : "Son görüntü")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.78))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(.white.opacity(0.09), in: Capsule())
+                }
+            }
+            .padding(14)
+        }
+        .frame(height: 190)
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(MacBDesign.accent.opacity(0.42), lineWidth: 1))
+        .accessibilityLabel("\(window.appName), \(window.title), seçili pencere önizlemesi")
+    }
 }
