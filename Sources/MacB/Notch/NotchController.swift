@@ -25,7 +25,7 @@ struct NotchLayout: Equatable {
 }
 
 @MainActor final class NotchController: NSObject, NSWindowDelegate {
-    private let spotify: SpotifyService
+    private let media: MediaService
     private let shelf: ShelfStore
     private let preferences: Preferences
     private let recentFiles: RecentFileStore
@@ -51,10 +51,10 @@ struct NotchLayout: Equatable {
         didSet { if enabled { start() } else { stop() } }
     }
 
-    init(spotify: SpotifyService, shelf: ShelfStore, preferences: Preferences,
+    init(media: MediaService, shelf: ShelfStore, preferences: Preferences,
          recentFiles: RecentFileStore, clipboard: ClipboardShelfStore,
          fileActivity: FileActivityStore, quickCommands: QuickCommandService) {
-        self.spotify = spotify; self.shelf = shelf; self.preferences = preferences
+        self.media = media; self.shelf = shelf; self.preferences = preferences
         self.recentFiles = recentFiles; self.clipboard = clipboard
         self.fileActivity = fileActivity; self.quickCommands = quickCommands
         super.init()
@@ -68,7 +68,7 @@ struct NotchLayout: Equatable {
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         window.hidesOnDeactivate = false; window.isMovable = false; window.delegate = self
         window.onEscape = { [weak self] in self?.closePanel() }
-        let view = NotchView(presentation: presentation, spotify: spotify, shelf: shelf,
+        let view = NotchView(presentation: presentation, media: media, shelf: shelf,
             preferences: preferences, recentFiles: recentFiles, clipboard: clipboard,
             fileActivity: fileActivity, quickCommands: quickCommands,
             open: { [weak self] in self?.openPanel() }, close: { [weak self] in self?.closePanel() },
@@ -94,7 +94,7 @@ struct NotchLayout: Equatable {
         preferences.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.render() }
         }.store(in: &subscriptions)
-        spotify.$isPlaying.removeDuplicates().sink { [weak self] _ in
+        media.$isPlaying.removeDuplicates().sink { [weak self] _ in
             DispatchQueue.main.async { self?.render() }
         }.store(in: &subscriptions)
         shelf.$items.map(\.count).removeDuplicates().sink { [weak self] _ in
@@ -119,7 +119,7 @@ struct NotchLayout: Equatable {
         panel?.orderOut(nil); panel?.delegate = nil; panel = nil
         state.close(); sourceDragActive = false; incomingDragActive = false; dragHandedOff = false
         developmentPreviewLocked = false
-        pointerInside = false; spotify.setPanelVisible(false)
+        pointerInside = false; media.setPanelVisible(false)
     }
 
     func openPanel() {
@@ -231,7 +231,7 @@ struct NotchLayout: Equatable {
         let maxWidth = (display?.frame.width ?? 480) - 24
         switch state.phase {
         case .collapsed:
-            let showMusic = preferences.compactIndicators && spotify.isPlaying
+            let showMusic = preferences.compactIndicators && media.isPlaying
             let showFiles = preferences.compactIndicators && !shelf.items.isEmpty
             let showActivity = preferences.compactIndicators && preferences.fileActivityEnabled && fileActivity.activeCount > 0
             let extra: CGFloat = (showMusic || showFiles || showActivity) ? 92 : 0
@@ -245,7 +245,7 @@ struct NotchLayout: Equatable {
             let bodyHeight: CGFloat
             switch state.content {
             case .music:
-                bodyHeight = spotify.errorMessage == nil ? 274 : 306
+                bodyHeight = media.errorMessage == nil ? 294 : 326
             case .files:
                 bodyHeight = hasFileContent ? min(390, 138 + CGFloat(shelf.items.count + recentFiles.items.count + clipboard.items.count) * 38) : 216
             case .commands:
@@ -258,7 +258,7 @@ struct NotchLayout: Equatable {
         guard let panel, let screen = display else { return }
         presentation.indicators = preferences.compactIndicators
         let target = targetLayout()
-        spotify.setPanelVisible(state.isOpen)
+        media.setPanelVisible(state.isOpen)
         guard target != presentation.layout || immediate else { return }
         animationTimer?.invalidate(); animationTimer = nil
         presentation.previousLayout = presentation.layout

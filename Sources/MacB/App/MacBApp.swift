@@ -27,6 +27,8 @@ import ApplicationServices
     private let windows = WindowService()
     private let previews = PreviewService()
     private let spotify = SpotifyService()
+    private let appleMusic = AppleMusicService()
+    private lazy var media = MediaService(spotify: spotify, appleMusic: appleMusic)
     private let shelf = ShelfStore()
     private let favorites = FavoriteWindowStore()
     private let recentFiles = RecentFileStore()
@@ -35,7 +37,7 @@ import ApplicationServices
     private let quickCommands = QuickCommandService()
     private let hotKey = HotKeyController()
     private lazy var dock = DockController(windowService: windows, previewService: previews, preferences: preferences, favorites: favorites)
-    private lazy var notch = NotchController(spotify: spotify, shelf: shelf, preferences: preferences,
+    private lazy var notch = NotchController(media: media, shelf: shelf, preferences: preferences,
                                             recentFiles: recentFiles, clipboard: clipboardShelf,
                                             fileActivity: fileActivity, quickCommands: quickCommands)
     private lazy var switcher = SwitcherController(windowService: windows, previewService: previews,
@@ -77,7 +79,7 @@ import ApplicationServices
             if !granted { self.dock.dismiss(); self.switcher.dismiss() }
         }.store(in: &subscriptions)
         setupWorkspaceObservers()
-        spotify.start()
+        media.start()
         applyPreferences()
         if CommandLine.arguments.contains("--smoke-test") {
             NSLog("MacB smoke: application launched; menu and services initialized")
@@ -156,7 +158,9 @@ import ApplicationServices
     }
 
     private func refreshSettingsContent() {
-        settingsWindow?.contentView = NSHostingView(rootView: SettingsView(preferences: preferences, permissions: permissions, spotify: spotify, shelf: shelf, shortcutError: hotKey.registrationError, openPanel: { [weak self] in self?.openNotch() }))
+        settingsWindow?.contentView = NSHostingView(rootView: SettingsView(preferences: preferences, permissions: permissions,
+            spotify: spotify, appleMusic: appleMusic, shelf: shelf, shortcutError: hotKey.registrationError,
+            openPanel: { [weak self] in self?.openNotch() }))
     }
 
     func windowWillClose(_ notification: Notification) { permissions.stopObserving() }
@@ -171,7 +175,7 @@ import ApplicationServices
                 self.switcher.dismiss()
                 self.dock.stop()
                 self.notch.stop()
-                self.spotify.stop()
+                self.media.stop()
                 self.hotKey.unregister()
             }
         })
@@ -181,7 +185,7 @@ import ApplicationServices
                 self.isSleeping = false
                 self.permissions.refresh()
                 self.shelf.refreshAvailability()
-                self.spotify.start()
+                self.media.start()
                 self.applyPreferences()
             }
         })
@@ -199,7 +203,7 @@ import ApplicationServices
         switcher.dismiss()
         dock.stop()
         notch.stop()
-        spotify.stop()
+        media.stop()
         recentFiles.stop()
         clipboardShelf.stop()
         fileActivity.stop()

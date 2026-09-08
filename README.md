@@ -1,6 +1,6 @@
 # MacB
 
-Native macOS Dock previews, a keyboard window switcher, and a notch panel with Spotify controls, quick commands, smart status, and a persistent file shelf. Free, MIT licensed. The interface is Turkish.
+Native macOS Dock previews, a keyboard window switcher, and a notch panel with Spotify/Apple Music controls, quick commands, smart status, and a persistent file shelf. Free, MIT licensed. The interface is Turkish.
 
 ## Build and run
 
@@ -32,7 +32,7 @@ The build creates a locally ad-hoc signed app. Run the bundled app rather than t
 - Enable focus mode to hide other regular apps when MacB focuses the selected window.
 - Use Appearance settings to choose Compact, Balanced or Spacious density.
 - “Raftan kaldır” removes only the saved reference. It never deletes the source file. Missing files remain visible; shelf data is stored in `~/Library/Application Support/MacB/shelf.json`.
-- Spotify must be installed and running for authorization and playback control. MacB never silently launches Spotify. Only album artwork is fetched from Spotify CDN hosts; file/window data remains local.
+- Spotify or Apple Music must be installed and running for authorization and playback control. MacB never silently launches media apps. Only Spotify album artwork is fetched from Spotify CDN hosts; file/window data remains local.
 
 ## Verification
 
@@ -54,7 +54,7 @@ Capture is limited to four visible streams at 8 FPS, stops when panels close, an
 ## Structure
 
 - `MacBCore`: deterministic matching, panel/selection state and bookmark persistence.
-- `MacB`: AppKit controllers, SwiftUI views, Accessibility, ScreenCaptureKit and Spotify Apple Events.
+- `MacB`: AppKit controllers, SwiftUI views, Accessibility, ScreenCaptureKit, Spotify Apple Events and Apple Music automation.
 - `scripts/build.sh`: release compilation, icon generation, app packaging and local signing.
 
 No private window-server APIs, Dock replacement, telemetry, accounts or background updates. Calendar, layouts, HUD replacement and other media players are outside this version.

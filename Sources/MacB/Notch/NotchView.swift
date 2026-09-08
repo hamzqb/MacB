@@ -4,7 +4,7 @@ import MacBCore
 
 struct NotchView: View {
     @ObservedObject var presentation: NotchPresentation
-    @ObservedObject var spotify: SpotifyService
+    @ObservedObject var media: MediaService
     @ObservedObject var shelf: ShelfStore
     @ObservedObject var preferences: Preferences
     @ObservedObject var recentFiles: RecentFileStore
@@ -69,14 +69,14 @@ struct NotchView: View {
     private var compact: some View {
         Button(action: open) {
             HStack(spacing: 0) {
-                if presentation.indicators && (spotify.isPlaying || !shelf.items.isEmpty || fileActivity.activeCount > 0) {
+                if presentation.indicators && (media.isPlaying || !shelf.items.isEmpty || fileActivity.activeCount > 0) {
                     Group {
-                        if spotify.isPlaying { cover(size: 20, radius: 5) }
+                        if media.isPlaying { cover(size: 20, radius: 5) }
                         else { Color.clear.frame(width: 20, height: 20) }
                     }.frame(width: 38)
                 }
                 Color.clear.frame(width: max(24, presentation.cameraWidth))
-                if presentation.indicators && (spotify.isPlaying || !shelf.items.isEmpty || fileActivity.activeCount > 0) {
+                if presentation.indicators && (media.isPlaying || !shelf.items.isEmpty || fileActivity.activeCount > 0) {
                     Group {
                         if !shelf.items.isEmpty || fileActivity.activeCount > 0 {
                             Text("\(max(shelf.items.count, fileActivity.activeCount))").font(.system(size: 10, weight: .semibold, design: .rounded))
@@ -88,7 +88,7 @@ struct NotchView: View {
             }.frame(maxWidth: .infinity).frame(height: max(28, presentation.cameraHeight)).contentShape(Rectangle())
         }
         .buttonStyle(.plain).accessibilityLabel("MacB panelini aç")
-        .accessibilityValue("\(shelf.items.count) dosya. \(spotify.isPlaying ? "Müzik çalıyor" : "Müzik duraklatıldı")")
+        .accessibilityValue("\(shelf.items.count) dosya. \(media.isPlaying ? "Medya çalıyor" : "Medya duraklatıldı")")
     }
 
     private var glance: some View {
@@ -102,20 +102,22 @@ struct NotchView: View {
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel("\(title), ayrıntıları aç")
-            if spotify.isRunning && spotify.isAuthorized {
-                playbackButton(spotify.isPlaying ? "pause.fill" : "play.fill", label: spotify.isPlaying ? "Duraklat" : "Oynat", size: 36, action: spotify.playPause)
+            if media.isRunning && media.isAuthorized {
+                playbackButton(media.isPlaying ? "pause.fill" : "play.fill", label: media.isPlaying ? "Duraklat" : "Oynat", size: 36, action: media.playPause)
+            } else if !media.isRunning {
+                mediaLaunchChoices(compact: true)
             } else {
-                Button(spotify.isRunning ? "Bağlan" : "Aç", action: spotify.isRunning ? spotify.requestAuthorization : spotify.openSpotify)
+                Button(media.isRunning ? "Bağlan" : "Aç", action: media.isRunning ? media.requestAuthorization : media.openActiveSource)
                     .buttonStyle(.plain).font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 12).padding(.vertical, 8).background(.white.opacity(0.10), in: Capsule())
-                    .accessibilityLabel(spotify.isRunning ? "Spotify erişimine izin ver" : "Spotify’ı aç")
+                    .accessibilityLabel(media.isRunning ? "\(media.source.title) erişimine izin ver" : "\(media.source.title) aç")
             }
         }
     }
 
     private func tabs(_ section: NotchContent) -> some View {
         HStack(spacing: 6) {
-            tab("Müzik", symbol: "music.note", section: .music, selected: section)
+            tab("Medya", symbol: "play.rectangle", section: .music, selected: section)
             tab("Dosyalar", symbol: "tray", section: .files, selected: section)
             if preferences.quickCommandsEnabled { tab("Komutlar", symbol: "command", section: .commands, selected: section) }
             Spacer()
@@ -137,6 +139,7 @@ struct NotchView: View {
 
     private var music: some View {
         VStack(spacing: 17) {
+            sourcePicker
             HStack(spacing: 17) {
                 cover(size: 72, radius: 14)
                 VStack(alignment: .leading, spacing: 6) {
@@ -144,21 +147,64 @@ struct NotchView: View {
                     Text(subtitle).font(.system(size: 12)).foregroundStyle(.white.opacity(0.48)).lineLimit(1)
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
-            if spotify.isRunning && spotify.isAuthorized {
+            if media.isRunning && media.isAuthorized {
                 HStack(spacing: 26) {
-                    playbackButton("backward.fill", label: "Önceki parça", size: 32, action: spotify.previousTrack)
-                    playbackButton(spotify.isPlaying ? "pause.fill" : "play.fill", label: spotify.isPlaying ? "Duraklat" : "Oynat", size: 42, prominent: true, action: spotify.playPause)
-                    playbackButton("forward.fill", label: "Sonraki parça", size: 32, action: spotify.nextTrack)
+                    playbackButton("backward.fill", label: "Önceki parça", size: 32, action: media.previousTrack)
+                    playbackButton(media.isPlaying ? "pause.fill" : "play.fill", label: media.isPlaying ? "Duraklat" : "Oynat", size: 42, prominent: true, action: media.playPause)
+                    playbackButton("forward.fill", label: "Sonraki parça", size: 32, action: media.nextTrack)
                 }.frame(maxWidth: .infinity)
+            } else if !media.isRunning {
+                mediaLaunchChoices(compact: false)
             } else {
-                Button(spotify.isRunning ? "Spotify’a bağlan" : "Spotify’ı aç", action: spotify.isRunning ? spotify.requestAuthorization : spotify.openSpotify)
+                Button(media.isRunning ? "\(media.source.title)’e bağlan" : "\(media.source.title)’i aç", action: media.isRunning ? media.requestAuthorization : media.openActiveSource)
                     .buttonStyle(.plain).font(.system(size: 12, weight: .medium))
                     .frame(maxWidth: .infinity).frame(height: 36).background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
             }
-            if let error = spotify.errorMessage { Text(error).font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)).lineLimit(2) }
+            if let error = media.errorMessage { Text(error).font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)).lineLimit(2) }
             if preferences.quickCommandsEnabled { quickCommandsView }
             if preferences.fileActivityEnabled && fileActivity.activeCount > 0 {
                 activityPill("\(fileActivity.activeCount) yeni indirme", symbol: "arrow.down.circle")
+            }
+        }
+    }
+
+    private var sourcePicker: some View {
+        HStack(spacing: 6) {
+            ForEach(MediaSource.allCases) { source in
+                Button { media.choose(source) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: source.symbol).font(.system(size: 10, weight: .medium))
+                        Text(source.title).font(.system(size: 10, weight: .medium)).lineLimit(1)
+                    }
+                    .padding(.horizontal, 9)
+                    .frame(height: 24)
+                    .foregroundStyle(.white.opacity(media.source == source ? 0.92 : 0.42))
+                    .background(media.source == source ? .white.opacity(0.10) : .clear, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .help(source.title)
+                .accessibilityLabel("\(source.title) kaynağını seç")
+                .accessibilityAddTraits(media.source == source ? .isSelected : [])
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func mediaLaunchChoices(compact: Bool) -> some View {
+        HStack(spacing: compact ? 7 : 10) {
+            ForEach(MediaSource.allCases) { source in
+                Button { media.open(source) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: source.symbol).font(.system(size: compact ? 10 : 11, weight: .medium))
+                        if !compact { Text(source.title).font(.system(size: 11, weight: .medium)).lineLimit(1) }
+                    }
+                    .frame(width: compact ? 34 : nil, height: compact ? 34 : 36)
+                    .padding(.horizontal, compact ? 0 : 12)
+                    .background(.white.opacity(0.10), in: compact ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 10)))
+                }
+                .buttonStyle(.plain)
+                .help(source.title)
+                .accessibilityLabel("\(source.title) aç")
             }
         }
     }
@@ -297,20 +343,20 @@ struct NotchView: View {
         .accessibilityLabel(title)
     }
     private var title: String {
-        if !spotify.isRunning { return "Biraz müzik?" }
-        if !spotify.isAuthorized { return "Spotify’a bağlan" }
-        return spotify.trackTitle.isEmpty ? "Sıradaki parçan" : spotify.trackTitle
+        if !media.isRunning { return "Ne dinleyelim?" }
+        if !media.isAuthorized { return "\(media.source.title)’e bağlan" }
+        return media.title.isEmpty ? "Sıradaki parçan" : media.title
     }
     private var subtitle: String {
-        if !spotify.isRunning { return "Spotify, bir dokunuş uzağında." }
-        if !spotify.isAuthorized { return "Oynatmayı buradan yönet." }
-        return spotify.artist.isEmpty ? "Spotify’dan bir parça seç." : spotify.artist
+        if !media.isRunning { return "Spotify veya Apple Music’i buradan aç." }
+        if !media.isAuthorized { return "Oynatmayı buradan yönet." }
+        return media.artist.isEmpty ? "\(media.source.title)’ten bir parça seç." : "\(media.artist) · \(media.source.title)"
     }
     private func cover(size: CGFloat, radius: CGFloat) -> some View {
         ZStack {
             Color.white.opacity(0.07)
-            if let artwork = spotify.artwork { Image(nsImage: artwork).resizable().scaledToFill() }
-            else { Image(systemName: "music.note").font(.system(size: size * 0.34, weight: .medium)).foregroundStyle(.white.opacity(0.4)) }
+            if let artwork = media.artwork { Image(nsImage: artwork).resizable().scaledToFill() }
+            else { Image(systemName: media.source.symbol).font(.system(size: size * 0.34, weight: .medium)).foregroundStyle(.white.opacity(0.4)) }
         }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: radius)).accessibilityHidden(true)
     }
     private func playbackButton(_ icon: String, label: String, size: CGFloat, prominent: Bool = false, action: @escaping () -> Void) -> some View {

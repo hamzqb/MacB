@@ -24,6 +24,7 @@ struct SettingsView: View {
     @ObservedObject var preferences: Preferences
     @ObservedObject var permissions: PermissionStore
     @ObservedObject var spotify: SpotifyService
+    @ObservedObject var appleMusic: AppleMusicService
     @ObservedObject var shelf: ShelfStore
     var shortcutError: String?
     var openPanel: () -> Void
@@ -222,6 +223,12 @@ struct SettingsView: View {
                           actionTitle: spotify.isRunning ? "İzin ver" : "Spotify’ı aç",
                           action: spotify.isRunning ? spotify.requestAuthorization : spotify.openSpotify)
             if let error = spotify.errorMessage { message(error, warning: true) }
+            rowDivider
+            permissionRow("Apple Music otomasyonu", detail: "Apple Music parça bilgisini okumak ve oynatma kontrollerini kullanmak için.",
+                          granted: appleMusic.isAuthorized,
+                          actionTitle: appleMusic.isRunning ? "İzin ver" : "Apple Music’i aç",
+                          action: appleMusic.isRunning ? appleMusic.requestAuthorization : appleMusic.openAppleMusic)
+            if let error = appleMusic.errorMessage { message(error, warning: true) }
             Text("Bir izin kapalıyken diğer özellikler çalışmaya devam eder. macOS yeniden başlatma isterse MacB’yi kapatıp aç.")
                 .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
                 .fixedSize(horizontal: false, vertical: true)
