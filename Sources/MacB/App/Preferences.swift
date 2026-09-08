@@ -66,7 +66,6 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
     @Published var favoriteWindowsEnabled: Bool { didSet { defaults.set(favoriteWindowsEnabled, forKey: "favoriteWindowsEnabled") } }
     @Published var recentFilesEnabled: Bool { didSet { defaults.set(recentFilesEnabled, forKey: "recentFilesEnabled") } }
     @Published var peekEnabled: Bool { didSet { defaults.set(peekEnabled, forKey: "peekEnabled") } }
-    @Published var quickCommandsEnabled: Bool { didSet { defaults.set(quickCommandsEnabled, forKey: "quickCommandsEnabled") } }
     @Published var groupedWindowsEnabled: Bool { didSet { defaults.set(groupedWindowsEnabled, forKey: "groupedWindowsEnabled") } }
     @Published var clipboardShelfEnabled: Bool { didSet { defaults.set(clipboardShelfEnabled, forKey: "clipboardShelfEnabled") } }
     @Published var focusModeEnabled: Bool { didSet { defaults.set(focusModeEnabled, forKey: "focusModeEnabled") } }
@@ -81,7 +80,7 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
                                     "compactIndicators": true, "animationsEnabled": true,
                                     "smartNotchEnabled": true, "favoriteWindowsEnabled": true,
                                     "recentFilesEnabled": false, "peekEnabled": true,
-                                    "quickCommandsEnabled": true, "groupedWindowsEnabled": true,
+                                    "groupedWindowsEnabled": true,
                                     "clipboardShelfEnabled": true, "focusModeEnabled": false,
                                     "fileActivityEnabled": false,
                                     "interfaceDensity": InterfaceDensity.balanced.rawValue])
@@ -94,7 +93,6 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
         favoriteWindowsEnabled = defaults.bool(forKey: "favoriteWindowsEnabled")
         recentFilesEnabled = defaults.bool(forKey: "recentFilesEnabled")
         peekEnabled = defaults.bool(forKey: "peekEnabled")
-        quickCommandsEnabled = defaults.bool(forKey: "quickCommandsEnabled")
         groupedWindowsEnabled = defaults.bool(forKey: "groupedWindowsEnabled")
         clipboardShelfEnabled = defaults.bool(forKey: "clipboardShelfEnabled")
         focusModeEnabled = defaults.bool(forKey: "focusModeEnabled")

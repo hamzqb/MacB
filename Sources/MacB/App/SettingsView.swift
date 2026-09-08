@@ -178,8 +178,6 @@ struct SettingsView: View {
                 settingToggle("Yumuşak geçişler", detail: "Paneller açılırken ve kapanırken kısa animasyonlar kullan.", isOn: $preferences.animationsEnabled)
                 rowDivider
                 settingToggle("Pencere peek modu", detail: "Kartta bekleyince pencerenin ekrandaki yerini hafifçe vurgula.", isOn: $preferences.peekEnabled)
-                rowDivider
-                settingToggle("Notch hızlı komutları", detail: "Masaüstü, Finder, Terminal ve ekran görüntüsü komutlarını müzik paneline ekle.", isOn: $preferences.quickCommandsEnabled)
             }
             section("Raf yardımcıları") {
                 settingToggle("Son dosyalar", detail: "Downloads, Desktop ve Documents içinden son dosyaları öner. macOS klasör erişimi isteyebilir.", isOn: $preferences.recentFilesEnabled)

@@ -31,7 +31,6 @@ struct NotchLayout: Equatable {
     private let recentFiles: RecentFileStore
     private let clipboard: ClipboardShelfStore
     private let fileActivity: FileActivityStore
-    private let quickCommands: QuickCommandService
     private let presentation = NotchPresentation()
     private var state = PanelState()
     private var panel: NotchPanel?
@@ -53,10 +52,10 @@ struct NotchLayout: Equatable {
 
     init(media: MediaService, shelf: ShelfStore, preferences: Preferences,
          recentFiles: RecentFileStore, clipboard: ClipboardShelfStore,
-         fileActivity: FileActivityStore, quickCommands: QuickCommandService) {
+         fileActivity: FileActivityStore) {
         self.media = media; self.shelf = shelf; self.preferences = preferences
         self.recentFiles = recentFiles; self.clipboard = clipboard
-        self.fileActivity = fileActivity; self.quickCommands = quickCommands
+        self.fileActivity = fileActivity
         super.init()
     }
 
@@ -70,7 +69,7 @@ struct NotchLayout: Equatable {
         window.onEscape = { [weak self] in self?.closePanel() }
         let view = NotchView(presentation: presentation, media: media, shelf: shelf,
             preferences: preferences, recentFiles: recentFiles, clipboard: clipboard,
-            fileActivity: fileActivity, quickCommands: quickCommands,
+            fileActivity: fileActivity,
             open: { [weak self] in self?.openPanel() }, close: { [weak self] in self?.closePanel() },
             select: { [weak self] content in self?.select(content) })
         let host = NotchHostingView(rootView: view)
@@ -248,8 +247,6 @@ struct NotchLayout: Equatable {
                 bodyHeight = media.errorMessage == nil ? 304 : 336
             case .files:
                 bodyHeight = hasFileContent ? min(390, 138 + CGFloat(shelf.items.count + recentFiles.items.count + clipboard.items.count) * 38) : 216
-            case .commands:
-                bodyHeight = 230
             }
             return NotchLayout(phase: .expanded, content: state.content, width: min(440, maxWidth), height: camera + bodyHeight, radius: 25)
         }

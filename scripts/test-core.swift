@@ -91,11 +91,11 @@ struct CoreTestRunner {
                 state.glance()
                 try expect(state.phase == .expanded && state.content == .files, "Glance downgraded selected expanded content")
             }),
-            ("PanelState: drag opens files directly and explicit close clears all interaction", {
+            ("PanelState: drag opens without forcing files and explicit close clears all interaction", {
                 var state = PanelState()
                 state.pointerEntered(at: 0)
                 state.setDragging(true)
-                try expect(state.phase == .expanded && state.content == .files, "Drag did not open files directly")
+                try expect(state.phase == .expanded && state.content == .music, "Drag forced another section instead of preserving content")
                 try expect(state.hoverDeadline == nil, "Drag retained hover deadline")
                 state.setKeyboardFocus(true)
                 state.pointerExited(at: 0.1)
@@ -157,12 +157,12 @@ struct CoreTestRunner {
                 state.close()
                 try expect(state == PanelState(), "Explicit close left stale interaction state")
             }),
-            ("PanelState: commands content closes to default music state", {
+            ("PanelState: files content closes to default music state", {
                 var state = PanelState()
-                state.select(.commands)
-                try expect(state.phase == .expanded && state.content == .commands, "Commands section did not open")
+                state.select(.files)
+                try expect(state.phase == .expanded && state.content == .files, "Files section did not open")
                 state.close()
-                try expect(state == PanelState(), "Commands section did not close to default state")
+                try expect(state == PanelState(), "Files section did not close to default state")
             }),
             ("WindowSelection: cycle and reverse wrap", {
                 var selection = WindowSelection()

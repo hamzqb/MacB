@@ -1,6 +1,6 @@
 # Plan: MacB Dynamic Island Redesign
 
-**Generated**: 2026-09-08
+**Updated**: 2026-09-08
 **Estimated Complexity**: High
 
 ## Overview
@@ -18,6 +18,8 @@ Hover should never show the full product. Hover only answers the immediate quest
 - What is playing?
 - What window is under this Dock icon?
 - Is there one useful thing waiting for me?
+
+The expanded notch should no longer expose a generic Commands section. The product should move toward four useful surfaces: Media, Files, Clipboard/Favorites, and later Tasks/Camera. Quick actions can return later only when they are contextual to the selected item.
 
 Click opens the richer surface.
 
@@ -41,11 +43,11 @@ Click opens the richer surface.
 
 ### Task 1.2: Split Hover and Expanded Content
 - **Location**: `Sources/MacB/Notch/NotchView.swift`, `Sources/MacB/Notch/NotchController.swift`
-- **Description**: Hover should show only music glance or one status chip. Expanded view should contain Music, Files, Commands, and Activity.
+- **Description**: Hover should show only media glance or one status chip. Expanded view should contain Media and Files first, then Clipboard/Favorites and Tasks once those modules exist.
 - **Dependencies**: Task 1.1
 - **Acceptance Criteria**:
   - Hover has no tabs.
-  - Expanded state has tabs or segmented navigation.
+  - Expanded state has only useful tabs; no generic Commands tab.
   - Empty music view is small and elegant.
 - **Validation**: Open with `--preview-glance` and `--show-panel`, inspect screenshots.
 
@@ -81,7 +83,7 @@ Click opens the richer surface.
 
 ### Task 2.2: Add Interactive Wave/Scrub Visual
 - **Location**: `Sources/MacB/Notch/NotchView.swift`, `Sources/MacB/Services/SpotifyService.swift`
-- **Description**: Add a subtle dotted waveform/progress strip in expanded music view. It should animate only while panel is open and Spotify is playing.
+- **Description**: Add a subtle dotted waveform/progress strip in expanded media view. It should animate only while panel is open and media is playing.
 - **Dependencies**: Task 2.1
 - **Acceptance Criteria**:
   - No idle animation when panel is closed.
@@ -167,7 +169,7 @@ Click opens the richer surface.
 
 ### Task 5.1: Add Local Authentication Service
 - **Location**: `Sources/MacB/App/BiometricAuthService.swift`
-- **Description**: Use `LAContext` and `LAPolicy.deviceOwnerAuthentication` to authenticate before sensitive actions such as revealing clipboard history, opening protected files, or enabling focus mode.
+- **Description**: Use `LAContext` and `LAPolicy.deviceOwnerAuthentication` to authenticate before sensitive actions such as revealing clipboard history, opening protected files, or opening the camera preview.
 - **Dependencies**: None
 - **Acceptance Criteria**:
   - Uses system authentication UI.
@@ -194,17 +196,38 @@ Click opens the richer surface.
 - Add files to shelf.
 - Open Activity tab.
 
-### Task 6.1: Activity Tab
+### Task 6.1: Clipboard and Favorites
 - **Location**: `Sources/MacB/Notch/NotchView.swift`, `Sources/MacB/App/FeatureStores.swift`
-- **Description**: Add an Activity tab for downloads, clipboard, and quick commands. Keep Files tab only for persistent shelf and recent local files.
+- **Description**: Add a Clipboard/Favorites surface for copied text, links, code snippets and pinned reusable items. Keep Files for persistent file shelf and recent local files.
 - **Dependencies**: Sprint 1
 - **Acceptance Criteria**:
   - Hover remains minimal.
-  - Activity tab has compact rows and status chips.
-  - Folder access prompts only occur after enabling the feature.
+  - Clipboard items can be copied back with one click.
+  - Favorites persist after restart.
+  - Sensitive clipboard capture can be disabled and later protected by LocalAuthentication.
 - **Validation**: Permission and idle CPU test.
 
-### Task 6.2: Better Empty States
+### Task 6.2: Drop Anywhere
+- **Location**: `Sources/MacB/Notch/NotchController.swift`, `Sources/MacB/Notch/NotchView.swift`, `Sources/MacB/Services/ShelfStore.swift`
+- **Description**: The whole notch accepts local files and folders in collapsed, glance, media and files states. Dragging opens the island without forcing the Files tab.
+- **Dependencies**: Sprint 1
+- **Acceptance Criteria**:
+  - A file can be dropped without manually opening Files.
+  - The current tab is preserved while dragging.
+  - A small animated success toast confirms the file was added.
+- **Validation**: Drag from Finder over collapsed notch, expanded Media and expanded Files.
+
+### Task 6.3: Recent Targets
+- **Location**: `Sources/MacB/Windows/DockController.swift`, `Sources/MacB/App/FeatureStores.swift`
+- **Description**: Remember the last apps/windows used as drop targets and show them as small suggestions during file or clipboard drags.
+- **Dependencies**: Drop Anywhere
+- **Acceptance Criteria**:
+  - Recent targets are local only.
+  - Suggestions never replace the real drop target behavior.
+  - Stale windows are removed automatically.
+- **Validation**: Drop to Finder/Chrome/Terminal, restart app, verify target suggestions.
+
+### Task 6.4: Better Empty States
 - **Location**: `Sources/MacB/Notch/NotchView.swift`, `Sources/MacB/App/SettingsView.swift`
 - **Description**: Replace explanatory blocks with compact empty visuals and one clear action.
 - **Dependencies**: Sprint 1
@@ -213,11 +236,34 @@ Click opens the richer surface.
   - Buttons use icons and short labels.
 - **Validation**: Screenshot review.
 
+## Sprint 7: Tasks and Camera
+
+**Goal**: Add useful personal modules without making the island noisy.
+
+### Task 7.1: Tasks Surface
+- **Location**: `Sources/MacB/Notch/NotchView.swift`, `Sources/MacB/App/TaskStore.swift`
+- **Description**: Add a small local task list for quick reminders and work-in-progress items. It should stay local and simple.
+- **Acceptance Criteria**:
+  - Add, complete, delete and pin tasks.
+  - Pinned tasks appear above regular tasks.
+  - Data persists in Application Support.
+- **Validation**: Restart persistence test and visual check.
+
+### Task 7.2: Camera Preview
+- **Location**: `Sources/MacB/Services/CameraPreviewService.swift`, `Sources/MacB/Notch/NotchView.swift`
+- **Description**: Add a camera tile. First click opens a small live preview inside the island; second click opens a separate larger preview window.
+- **Acceptance Criteria**:
+  - Uses public `AVCaptureSession`.
+  - Requests Camera permission only when the user opens camera preview.
+  - Shows clear no-permission and no-camera states.
+  - Stops capture when both previews close.
+- **Validation**: Camera permission allowed/denied, small preview, large preview, CPU check.
+
 ## Testing Strategy
 
 - Run `swift build` after each sprint.
 - Run `./scripts/test.sh` for core state and persistence.
-- Add core tests for any new state transition, especially activity/auth/commands.
+- Add core tests for any new state transition, especially activity, clipboard, tasks, camera and authentication.
 - Use debug arguments for visual screenshots: `--preview-glance`, `--show-panel`, `--preview-files`, and add `--preview-auth`.
 - Manually verify on the real Mac: Accessibility on/off, Screen Recording on/off, Spotify closed/running/authorized, right Dock hover, `⌘ Tab`, sleep/wake, Space changes, Reduce Motion.
 
@@ -228,6 +274,7 @@ Click opens the richer surface.
 - Atoll is GPL-3.0, so copying source code would affect MacB's license. Rebuild ideas independently.
 - Dynamic utility modules can make hover noisy. Keep hover minimal and move modules into expanded tabs.
 - Downloads/recent file monitoring can trigger folder permissions. Keep these disabled until the user opts in.
+- Camera preview can turn on a physical camera indicator. Request permission only after user action and stop the session aggressively.
 
 ## Rollback Plan
 

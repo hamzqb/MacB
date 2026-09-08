@@ -155,26 +155,3 @@ struct ClipboardShelfItem: Identifiable {
         lastUpdate = recent.isEmpty ? nil : Date()
     }
 }
-
-@MainActor final class QuickCommandService {
-    func showDesktop() {
-        NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular && !$0.isHidden }.forEach { $0.hide() }
-    }
-
-    func openFinder() {
-        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Library/CoreServices/Finder.app"), configuration: NSWorkspace.OpenConfiguration())
-    }
-
-    func openTerminal() {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") {
-            NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration())
-        }
-    }
-
-    func takeScreenshot() {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-        task.arguments = ["-i"]
-        try? task.run()
-    }
-}

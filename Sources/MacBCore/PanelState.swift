@@ -1,7 +1,7 @@
 import Foundation
 
 public enum NotchPhase: String, Equatable { case collapsed, glance, expanded }
-public enum NotchContent: String, Equatable { case music, files, commands }
+public enum NotchContent: String, Equatable { case music, files }
 
 /// Interaction policy is independent of rendering and of animation progress.
 public struct PanelState: Equatable {
@@ -19,7 +19,7 @@ public struct PanelState: Equatable {
     public mutating func select(_ content: NotchContent) { self.content = content; open() }
     public mutating func setDragging(_ value: Bool) {
         isDragging = value
-        if value { select(.files) }
+        if value { open() }
     }
     public mutating func setKeyboardFocus(_ value: Bool) {
         hasKeyboardFocus = value

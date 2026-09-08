@@ -1,6 +1,6 @@
 # MacB
 
-Native macOS Dock previews, a keyboard window switcher, and a notch panel with automatic media controls, quick commands, smart status, and a persistent file shelf. Free, MIT licensed. The interface is Turkish.
+Native macOS Dock previews, a keyboard window switcher, and a notch panel with automatic media controls, smart status, and a persistent file shelf. Free, MIT licensed. The interface is Turkish.
 
 ## Build and run
 
@@ -25,7 +25,7 @@ The build creates a locally ad-hoc signed app. Run the bundled app rather than t
 - Hover a running application's Dock icon for 250 ms; click a preview to focus it. Right, left and bottom Dock placement are supported without changing Dock preferences.
 - Hold Command and press Tab to cycle windows with live previews. Release Command to select; Escape cancels. Change or disable the shortcut in settings if macOS rejects `⌘ Tab` on your machine.
 - Hover or click the notch panel. On displays without a notch it appears at the top center.
-- The notch can surface the right context automatically: music, files, recent downloads, recent local files, clipboard snippets and quick commands.
+- The notch can surface the right context automatically: music, files, recent downloads, recent local files and clipboard snippets.
 - Add local files/folders to the shelf with drag-and-drop or “Dosya ekle…”. Drag a shelf item over a Dock preview for 500 ms to bring the real target window forward, then drop into that window.
 - Star a window card to keep that window title near the front in Dock previews and the keyboard switcher.
 - Hover a window card briefly to highlight the real window location without focusing it.

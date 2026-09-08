@@ -35,12 +35,11 @@ import ApplicationServices
     private let recentFiles = RecentFileStore()
     private let clipboardShelf = ClipboardShelfStore()
     private let fileActivity = FileActivityStore()
-    private let quickCommands = QuickCommandService()
     private let hotKey = HotKeyController()
     private lazy var dock = DockController(windowService: windows, previewService: previews, preferences: preferences, favorites: favorites)
     private lazy var notch = NotchController(media: media, shelf: shelf, preferences: preferences,
                                             recentFiles: recentFiles, clipboard: clipboardShelf,
-                                            fileActivity: fileActivity, quickCommands: quickCommands)
+                                            fileActivity: fileActivity)
     private lazy var switcher = SwitcherController(windowService: windows, previewService: previews,
                                                    preferences: preferences, favorites: favorites)
     private var statusItem: NSStatusItem?

@@ -10,7 +10,6 @@ struct NotchView: View {
     @ObservedObject var recentFiles: RecentFileStore
     @ObservedObject var clipboard: ClipboardShelfStore
     @ObservedObject var fileActivity: FileActivityStore
-    let quickCommands: QuickCommandService
     var open: () -> Void
     var close: () -> Void
     var select: (NotchContent) -> Void
@@ -56,7 +55,6 @@ struct NotchView: View {
                         switch layout.content {
                         case .music: music
                         case .files: files
-                        case .commands: commands
                         }
                     }.padding(.horizontal, 24).padding(.top, 12).padding(.bottom, 20)
                 }
@@ -117,7 +115,6 @@ struct NotchView: View {
         HStack(spacing: 6) {
             tab("Medya", symbol: "play.rectangle", section: .music, selected: section)
             tab("Dosyalar", symbol: "tray", section: .files, selected: section)
-            if preferences.quickCommandsEnabled { tab("Komutlar", symbol: "command", section: .commands, selected: section) }
             Spacer()
             Button(action: close) { Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).frame(width: 26, height: 26) }
                 .buttonStyle(.plain).foregroundStyle(.white.opacity(0.38)).help("Kapat · Esc").accessibilityLabel("Paneli kapat")
@@ -140,7 +137,6 @@ struct NotchView: View {
             mediaHero
             mediaControls
             if let error = media.errorMessage { Text(error).font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)).lineLimit(2) }
-            if preferences.quickCommandsEnabled { quickCommandsView.padding(.top, 2) }
             if preferences.fileActivityEnabled && fileActivity.activeCount > 0 {
                 activityPill("\(fileActivity.activeCount) yeni indirme", symbol: "arrow.down.circle")
             }
@@ -236,36 +232,6 @@ struct NotchView: View {
         .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(.white.opacity(0.045)))
     }
 
-    private var quickCommandsView: some View {
-        HStack(spacing: 9) {
-            quickButton("rectangle.on.rectangle", "Masaüstü", quickCommands.showDesktop)
-            quickButton("face.smiling", "Finder", quickCommands.openFinder)
-            quickButton("terminal", "Terminal", quickCommands.openTerminal)
-            quickButton("camera.viewfinder", "Görüntü", quickCommands.takeScreenshot)
-        }
-        .padding(7)
-        .frame(maxWidth: .infinity)
-        .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.045)))
-    }
-
-    private var commands: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Hızlı Komutlar")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.82))
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                commandButton("Finder", symbol: "face.smiling", action: quickCommands.openFinder)
-                commandButton("Terminal", symbol: "terminal", action: quickCommands.openTerminal)
-                commandButton("Ekran görüntüsü", symbol: "camera.viewfinder", action: quickCommands.takeScreenshot)
-                commandButton("Masaüstü", symbol: "rectangle.on.rectangle.slash", action: quickCommands.showDesktop)
-            }
-            if preferences.focusModeEnabled {
-                activityPill("Odak modu açık: seçilen pencere diğerlerini gizler.", symbol: "scope")
-            }
-        }
-    }
-
     private var files: some View {
         VStack(spacing: 12) {
             if shelf.items.isEmpty && recentFiles.items.isEmpty && clipboard.items.isEmpty {
@@ -342,25 +308,6 @@ struct NotchView: View {
         .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 9))
     }
 
-    private func quickButton(_ symbol: String, _ label: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Image(systemName: symbol)
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(height: 13)
-                Text(label)
-                    .font(.system(size: 9, weight: .medium))
-                    .lineLimit(1)
-            }
-            .foregroundStyle(.white.opacity(0.82))
-            .frame(maxWidth: .infinity)
-            .frame(height: 46)
-            .background(.white.opacity(0.065), in: RoundedRectangle(cornerRadius: 13))
-            .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(.white.opacity(0.045)))
-        }
-        .buttonStyle(.plain).help(label).accessibilityLabel(label)
-    }
-
     private func activityPill(_ text: String, symbol: String) -> some View {
         Label(text, systemImage: symbol)
             .font(.system(size: 10, weight: .medium))
@@ -369,21 +316,6 @@ struct NotchView: View {
             .background(.white.opacity(0.055), in: Capsule())
     }
 
-    private func commandButton(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: symbol).font(.system(size: 13, weight: .medium)).frame(width: 18)
-                Text(title).font(.system(size: 12, weight: .medium)).lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 11)
-            .frame(height: 42)
-            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
-        }
-        .buttonStyle(.plain)
-        .help(title)
-        .accessibilityLabel(title)
-    }
     private var title: String {
         if !media.isPlaying && !media.isRunning { return "Sessiz" }
         if !media.isAuthorized { return "\(media.source.title)’e bağlan" }

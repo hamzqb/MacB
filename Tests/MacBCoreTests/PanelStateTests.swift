@@ -46,12 +46,12 @@ final class PanelStateTests: XCTestCase {
         XCTAssertEqual(state.content, .files)
     }
 
-    func testDragOpensFilesDirectlyAndCloseResetsAllState() {
+    func testDragOpensWithoutForcingFilesAndCloseResetsAllState() {
         var state = PanelState()
         state.pointerEntered(at: 0)
         state.setDragging(true)
         XCTAssertEqual(state.phase, .expanded)
-        XCTAssertEqual(state.content, .files)
+        XCTAssertEqual(state.content, .music)
         XCTAssertNil(state.hoverDeadline)
         state.setKeyboardFocus(true)
         state.pointerExited(at: 0.1)
@@ -95,11 +95,11 @@ final class PanelStateTests: XCTestCase {
         XCTAssertEqual(state, PanelState())
     }
 
-    func testCommandsContentClosesBackToDefaultMusicState() {
+    func testFilesContentClosesBackToDefaultMusicState() {
         var state = PanelState()
-        state.select(.commands)
+        state.select(.files)
         XCTAssertEqual(state.phase, .expanded)
-        XCTAssertEqual(state.content, .commands)
+        XCTAssertEqual(state.content, .files)
         state.close()
         XCTAssertEqual(state, PanelState())
     }
