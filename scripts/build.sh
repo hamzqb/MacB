@@ -21,7 +21,19 @@ xattr -cr "$app_dir"
 xattr -d -r com.apple.provenance "$app_dir" 2>/dev/null || true
 xattr -d com.apple.FinderInfo "$app_dir" 2>/dev/null || true
 xattr -d 'com.apple.fileprovider.fpfs#P' "$app_dir" 2>/dev/null || true
-codesign --force --sign - --options runtime --entitlements Resources/MacB.entitlements "$app_dir"
+signing_identity="${MACB_SIGNING_IDENTITY:--}"
+if [[ "$signing_identity" == "-" ]]; then
+    # Keep a stable designated requirement for local ad-hoc builds. Without this,
+    # every rebuild is identified only by its changing CDHash and macOS drops the
+    # Accessibility, Screen Recording, and Input Monitoring grants.
+    codesign --force --sign - --options runtime \
+        --identifier dev.hamzababal.MacB \
+        --requirements '=designated => identifier "dev.hamzababal.MacB"' \
+        --entitlements Resources/MacB.entitlements "$app_dir"
+else
+    codesign --force --sign "$signing_identity" --options runtime \
+        --entitlements Resources/MacB.entitlements "$app_dir"
+fi
 # Some Desktop/File Provider locations can attach metadata immediately after signing.
 xattr -cr "$app_dir"
 xattr -d -r com.apple.provenance "$app_dir" 2>/dev/null || true

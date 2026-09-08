@@ -1,15 +1,16 @@
 import AppKit
 import Carbon
+import Combine
 import CoreGraphics
 
-@MainActor final class HotKeyController {
+@MainActor final class HotKeyController: ObservableObject {
     var onPress: ((Bool) -> Void)?
     private var hotKeys: [EventHotKeyRef] = []
     private var handler: EventHandlerRef?
     private var commandTabTap: CFMachPort?
     private var commandTabSource: CFRunLoopSource?
-    private(set) var registrationError: String?
-    private(set) var activeShortcut: SwitcherShortcut?
+    @Published private(set) var registrationError: String?
+    @Published private(set) var activeShortcut: SwitcherShortcut?
 
     func register(_ shortcut: SwitcherShortcut) {
         unregister()

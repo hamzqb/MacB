@@ -27,7 +27,7 @@ struct SettingsView: View {
     @ObservedObject var appleMusic: AppleMusicService
     @ObservedObject var camera: CameraPreviewService
     @ObservedObject var shelf: ShelfStore
-    var shortcutError: String?
+    @ObservedObject var hotKey: HotKeyController
     var openPanel: () -> Void
     @State private var selectedPage: SettingsPage = .general
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -137,7 +137,7 @@ struct SettingsView: View {
                     }
                     .padding(.top, 2)
                 }
-                if let shortcutError { message(shortcutError, warning: true) }
+                if let shortcutError = hotKey.registrationError { message(shortcutError, warning: true) }
             }
             Divider().opacity(0.55)
             section("Akıllı akış") {

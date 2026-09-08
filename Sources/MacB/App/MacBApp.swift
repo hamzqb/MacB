@@ -85,6 +85,12 @@ import ApplicationServices
         permissions.$accessibility.removeDuplicates().dropFirst().sink { [weak self] granted in
             guard let self else { return }
             if !granted { self.dock.dismiss(); self.switcher.dismiss() }
+            else if self.preferences.switcherEnabled { self.hotKey.register(self.preferences.shortcut) }
+        }.store(in: &subscriptions)
+        permissions.$inputMonitoring.removeDuplicates().dropFirst().sink { [weak self] granted in
+            guard let self, granted, self.preferences.switcherEnabled,
+                  self.preferences.shortcut == .commandTab else { return }
+            self.hotKey.register(.commandTab)
         }.store(in: &subscriptions)
         setupWorkspaceObservers()
         media.start()
@@ -167,7 +173,7 @@ import ApplicationServices
 
     private func refreshSettingsContent() {
         settingsWindow?.contentView = NSHostingView(rootView: SettingsView(preferences: preferences, permissions: permissions,
-            spotify: spotify, appleMusic: appleMusic, camera: camera, shelf: shelf, shortcutError: hotKey.registrationError,
+            spotify: spotify, appleMusic: appleMusic, camera: camera, shelf: shelf, hotKey: hotKey,
             openPanel: { [weak self] in self?.openNotch() }))
     }
 
