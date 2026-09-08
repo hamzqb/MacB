@@ -1,6 +1,6 @@
 # MacB
 
-Native macOS Dock previews, a keyboard window switcher, and a notch panel with Spotify/Apple Music controls, quick commands, smart status, and a persistent file shelf. Free, MIT licensed. The interface is Turkish.
+Native macOS Dock previews, a keyboard window switcher, and a notch panel with automatic media controls, quick commands, smart status, and a persistent file shelf. Free, MIT licensed. The interface is Turkish.
 
 ## Build and run
 
@@ -32,7 +32,7 @@ The build creates a locally ad-hoc signed app. Run the bundled app rather than t
 - Enable focus mode to hide other regular apps when MacB focuses the selected window.
 - Use Appearance settings to choose Compact, Balanced or Spacious density.
 - “Raftan kaldır” removes only the saved reference. It never deletes the source file. Missing files remain visible; shelf data is stored in `~/Library/Application Support/MacB/shelf.json`.
-- Spotify or Apple Music must be installed and running for authorization and playback control. MacB never silently launches media apps. Only Spotify album artwork is fetched from Spotify CDN hosts; file/window data remains local.
+- Playing media appears automatically in the notch. Spotify and Apple Music expose track details through local automation; browser media is inferred from visible browser window titles such as YouTube, YouTube Music, Twitch, Netflix and Spotify Web. If nothing is playing, the media area stays quiet. MacB never silently launches media apps. Only Spotify album artwork is fetched from Spotify CDN hosts; file/window data remains local.
 
 ## Verification
 

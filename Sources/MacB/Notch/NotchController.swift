@@ -245,7 +245,7 @@ struct NotchLayout: Equatable {
             let bodyHeight: CGFloat
             switch state.content {
             case .music:
-                bodyHeight = media.errorMessage == nil ? 294 : 326
+                bodyHeight = media.source == .none ? 220 : (media.errorMessage == nil ? 250 : 292)
             case .files:
                 bodyHeight = hasFileContent ? min(390, 138 + CGFloat(shelf.items.count + recentFiles.items.count + clipboard.items.count) * 38) : 216
             case .commands:

@@ -1,26 +1,30 @@
 import AppKit
 import Combine
 
-enum MediaSource: String, CaseIterable, Identifiable {
-    case spotify, appleMusic
+enum MediaSource: String, Identifiable {
+    case none, spotify, appleMusic, browser
     var id: String { rawValue }
     var title: String {
         switch self {
+        case .none: return "Medya"
         case .spotify: return "Spotify"
         case .appleMusic: return "Apple Music"
+        case .browser: return "Tarayıcı"
         }
     }
     var symbol: String {
         switch self {
+        case .none: return "play.rectangle"
         case .spotify: return "music.note"
         case .appleMusic: return "music.quarternote.3"
+        case .browser: return "globe"
         }
     }
 }
 
 @MainActor
 final class MediaService: ObservableObject {
-    @Published private(set) var source: MediaSource = .spotify
+    @Published private(set) var source: MediaSource = .none
     @Published private(set) var title = ""
     @Published private(set) var artist = ""
     @Published private(set) var artwork: NSImage?
@@ -31,23 +35,27 @@ final class MediaService: ObservableObject {
 
     let spotify: SpotifyService
     let appleMusic: AppleMusicService
+    let browser: BrowserMediaService
     private var subscriptions: Set<AnyCancellable> = []
 
-    init(spotify: SpotifyService, appleMusic: AppleMusicService) {
+    init(spotify: SpotifyService, appleMusic: AppleMusicService, browser: BrowserMediaService) {
         self.spotify = spotify
         self.appleMusic = appleMusic
+        self.browser = browser
         wire()
     }
 
     func start() {
         spotify.start()
         appleMusic.start()
+        browser.start()
         sync()
     }
 
     func stop() {
         spotify.stop()
         appleMusic.stop()
+        browser.stop()
         sync()
     }
 
@@ -56,55 +64,46 @@ final class MediaService: ObservableObject {
         appleMusic.setPanelVisible(visible)
     }
 
-    func choose(_ source: MediaSource) {
-        self.source = source
-        sync(preferred: source)
-    }
-
     func requestAuthorization() {
         switch source {
+        case .none, .browser: break
         case .spotify: spotify.requestAuthorization()
         case .appleMusic: appleMusic.requestAuthorization()
         }
     }
 
-    func openActiveSource() {
-        switch source {
-        case .spotify: spotify.openSpotify()
-        case .appleMusic: appleMusic.openAppleMusic()
-        }
-    }
-
-    func open(_ source: MediaSource) {
-        choose(source)
-        openActiveSource()
-    }
-
     func playPause() {
         switch source {
+        case .none: break
         case .spotify: spotify.playPause()
         case .appleMusic: appleMusic.playPause()
+        case .browser: browser.playPause()
         }
     }
 
     func previousTrack() {
         switch source {
+        case .none: break
         case .spotify: spotify.previousTrack()
         case .appleMusic: appleMusic.previousTrack()
+        case .browser: browser.previousTrack()
         }
     }
 
     func nextTrack() {
         switch source {
+        case .none: break
         case .spotify: spotify.nextTrack()
         case .appleMusic: appleMusic.nextTrack()
+        case .browser: browser.nextTrack()
         }
     }
 
     private func wire() {
         let publishers: [AnyPublisher<Void, Never>] = [
             spotify.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
-            appleMusic.objectWillChange.map { _ in () }.eraseToAnyPublisher()
+            appleMusic.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
+            browser.objectWillChange.map { _ in () }.eraseToAnyPublisher()
         ]
         publishers.forEach { publisher in
             publisher
@@ -114,10 +113,18 @@ final class MediaService: ObservableObject {
         }
     }
 
-    private func sync(preferred: MediaSource? = nil) {
-        let next = preferred ?? bestSource()
+    private func sync() {
+        let next = bestSource()
         source = next
         switch next {
+        case .none:
+            title = ""
+            artist = ""
+            artwork = nil
+            isPlaying = false
+            isRunning = false
+            isAuthorized = true
+            errorMessage = nil
         case .spotify:
             title = spotify.trackTitle
             artist = spotify.artist
@@ -134,16 +141,21 @@ final class MediaService: ObservableObject {
             isRunning = appleMusic.isRunning
             isAuthorized = appleMusic.isAuthorized
             errorMessage = appleMusic.errorMessage
+        case .browser:
+            title = browser.title
+            artist = browser.sourceName
+            artwork = nil
+            isPlaying = browser.isPlaying
+            isRunning = browser.isPlaying
+            isAuthorized = true
+            errorMessage = nil
         }
     }
 
     private func bestSource() -> MediaSource {
         if spotify.isPlaying { return .spotify }
         if appleMusic.isPlaying { return .appleMusic }
-        if source == .spotify, spotify.isRunning { return .spotify }
-        if source == .appleMusic, appleMusic.isRunning { return .appleMusic }
-        if spotify.isRunning { return .spotify }
-        if appleMusic.isRunning { return .appleMusic }
-        return source
+        if browser.isPlaying { return .browser }
+        return .none
     }
 }

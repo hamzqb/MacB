@@ -102,12 +102,10 @@ struct NotchView: View {
                     }.frame(maxWidth: .infinity, alignment: .leading)
                 }.contentShape(Rectangle())
             }.buttonStyle(.plain).accessibilityLabel("\(title), ayrıntıları aç")
-            if media.isRunning && media.isAuthorized {
+            if media.isPlaying {
                 playbackButton(media.isPlaying ? "pause.fill" : "play.fill", label: media.isPlaying ? "Duraklat" : "Oynat", size: 36, action: media.playPause)
-            } else if !media.isRunning {
-                mediaLaunchChoices(compact: true)
-            } else {
-                Button(media.isRunning ? "Bağlan" : "Aç", action: media.isRunning ? media.requestAuthorization : media.openActiveSource)
+            } else if media.isRunning && !media.isAuthorized {
+                Button("Bağlan", action: media.requestAuthorization)
                     .buttonStyle(.plain).font(.system(size: 12, weight: .medium))
                     .padding(.horizontal, 12).padding(.vertical, 8).background(.white.opacity(0.10), in: Capsule())
                     .accessibilityLabel(media.isRunning ? "\(media.source.title) erişimine izin ver" : "\(media.source.title) aç")
@@ -139,7 +137,6 @@ struct NotchView: View {
 
     private var music: some View {
         VStack(spacing: 17) {
-            sourcePicker
             HStack(spacing: 17) {
                 cover(size: 72, radius: 14)
                 VStack(alignment: .leading, spacing: 6) {
@@ -147,18 +144,18 @@ struct NotchView: View {
                     Text(subtitle).font(.system(size: 12)).foregroundStyle(.white.opacity(0.48)).lineLimit(1)
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
-            if media.isRunning && media.isAuthorized {
+            if media.isPlaying {
                 HStack(spacing: 26) {
                     playbackButton("backward.fill", label: "Önceki parça", size: 32, action: media.previousTrack)
                     playbackButton(media.isPlaying ? "pause.fill" : "play.fill", label: media.isPlaying ? "Duraklat" : "Oynat", size: 42, prominent: true, action: media.playPause)
                     playbackButton("forward.fill", label: "Sonraki parça", size: 32, action: media.nextTrack)
                 }.frame(maxWidth: .infinity)
-            } else if !media.isRunning {
-                mediaLaunchChoices(compact: false)
-            } else {
-                Button(media.isRunning ? "\(media.source.title)’e bağlan" : "\(media.source.title)’i aç", action: media.isRunning ? media.requestAuthorization : media.openActiveSource)
+            } else if media.isRunning && !media.isAuthorized {
+                Button("\(media.source.title)’e bağlan", action: media.requestAuthorization)
                     .buttonStyle(.plain).font(.system(size: 12, weight: .medium))
                     .frame(maxWidth: .infinity).frame(height: 36).background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
+            } else {
+                emptyMediaState
             }
             if let error = media.errorMessage { Text(error).font(.system(size: 10)).foregroundStyle(.white.opacity(0.55)).lineLimit(2) }
             if preferences.quickCommandsEnabled { quickCommandsView }
@@ -168,45 +165,15 @@ struct NotchView: View {
         }
     }
 
-    private var sourcePicker: some View {
-        HStack(spacing: 6) {
-            ForEach(MediaSource.allCases) { source in
-                Button { media.choose(source) } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: source.symbol).font(.system(size: 10, weight: .medium))
-                        Text(source.title).font(.system(size: 10, weight: .medium)).lineLimit(1)
-                    }
-                    .padding(.horizontal, 9)
-                    .frame(height: 24)
-                    .foregroundStyle(.white.opacity(media.source == source ? 0.92 : 0.42))
-                    .background(media.source == source ? .white.opacity(0.10) : .clear, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .help(source.title)
-                .accessibilityLabel("\(source.title) kaynağını seç")
-                .accessibilityAddTraits(media.source == source ? .isSelected : [])
-            }
-            Spacer(minLength: 0)
+    private var emptyMediaState: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "waveform.slash").font(.system(size: 11, weight: .medium))
+            Text("Şu an çalan medya yok").font(.system(size: 11, weight: .medium)).lineLimit(1)
         }
-    }
-
-    private func mediaLaunchChoices(compact: Bool) -> some View {
-        HStack(spacing: compact ? 7 : 10) {
-            ForEach(MediaSource.allCases) { source in
-                Button { media.open(source) } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: source.symbol).font(.system(size: compact ? 10 : 11, weight: .medium))
-                        if !compact { Text(source.title).font(.system(size: 11, weight: .medium)).lineLimit(1) }
-                    }
-                    .frame(width: compact ? 34 : nil, height: compact ? 34 : 36)
-                    .padding(.horizontal, compact ? 0 : 12)
-                    .background(.white.opacity(0.10), in: compact ? AnyShape(Circle()) : AnyShape(RoundedRectangle(cornerRadius: 10)))
-                }
-                .buttonStyle(.plain)
-                .help(source.title)
-                .accessibilityLabel("\(source.title) aç")
-            }
-        }
+        .foregroundStyle(.white.opacity(0.36))
+        .frame(maxWidth: .infinity)
+        .frame(height: 34)
+        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var quickCommandsView: some View {
@@ -343,12 +310,12 @@ struct NotchView: View {
         .accessibilityLabel(title)
     }
     private var title: String {
-        if !media.isRunning { return "Ne dinleyelim?" }
+        if !media.isPlaying && !media.isRunning { return "Sessiz" }
         if !media.isAuthorized { return "\(media.source.title)’e bağlan" }
         return media.title.isEmpty ? "Sıradaki parçan" : media.title
     }
     private var subtitle: String {
-        if !media.isRunning { return "Spotify veya Apple Music’i buradan aç." }
+        if !media.isPlaying && !media.isRunning { return "Bir şey çalmaya başlayınca burada görünür." }
         if !media.isAuthorized { return "Oynatmayı buradan yönet." }
         return media.artist.isEmpty ? "\(media.source.title)’ten bir parça seç." : "\(media.artist) · \(media.source.title)"
     }
