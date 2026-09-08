@@ -41,8 +41,7 @@ struct NotchView: View {
         }
         .frame(width: presentation.width, height: presentation.height, alignment: .top)
         .clipShape(islandShape)
-        .overlay(islandShape.strokeBorder(presentation.isDropTarget ? MacBDesign.accent.opacity(0.8) : .white.opacity(0.075), lineWidth: presentation.isDropTarget ? 1.5 : 0.7))
-        .shadow(color: .black.opacity(0.42), radius: 24, y: 10)
+        .overlay(islandShape.strokeBorder(presentation.isDropTarget ? MacBDesign.accent.opacity(0.8) : .white.opacity(0.045), lineWidth: presentation.isDropTarget ? 1.5 : 0.5))
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .onExitCommand(perform: close)
@@ -52,7 +51,6 @@ struct NotchView: View {
         ZStack {
             Color.black
             LinearGradient(colors: [.white.opacity(0.055), .clear, .black.opacity(0.2)], startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [MacBDesign.accent.opacity(0.07), .clear], center: .topTrailing, startRadius: 0, endRadius: 250)
         }
     }
 
