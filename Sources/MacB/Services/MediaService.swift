@@ -62,6 +62,7 @@ final class MediaService: ObservableObject {
     func setPanelVisible(_ visible: Bool) {
         spotify.setPanelVisible(visible)
         appleMusic.setPanelVisible(visible)
+        browser.setPanelVisible(visible)
     }
 
     func requestAuthorization() {
@@ -146,9 +147,9 @@ final class MediaService: ObservableObject {
             artist = browser.sourceName
             artwork = nil
             isPlaying = browser.isPlaying
-            isRunning = browser.isPlaying
-            isAuthorized = true
-            errorMessage = nil
+            isRunning = browser.isRunning
+            isAuthorized = browser.isAuthorized
+            errorMessage = browser.errorMessage
         }
     }
 

@@ -165,15 +165,17 @@ final class AppleMusicService: ObservableObject {
             commandLine = ""
         }
         let source = """
-        tell application id "com.apple.Music"
-            \(commandLine)set stateText to player state as text
-            if stateText is "stopped" then
-                return "|||stopped"
-            end if
-            set trackName to name of current track
-            set artistName to artist of current track
-            return trackName & "|" & artistName & "|" & stateText
-        end tell
+        with timeout of 2 seconds
+            tell application id "com.apple.Music"
+                \(commandLine)set stateText to player state as text
+                if stateText is "stopped" then
+                    return "|||stopped"
+                end if
+                set trackName to name of current track
+                set artistName to artist of current track
+                return trackName & "|" & artistName & "|" & stateText
+            end tell
+        end timeout
         """
         var errorInfo: NSDictionary?
         guard let result = NSAppleScript(source: source)?.executeAndReturnError(&errorInfo).stringValue else {

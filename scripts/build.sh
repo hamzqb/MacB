@@ -7,9 +7,28 @@ if [[ "$configuration" != "release" && "$configuration" != "debug" ]]; then
     echo "Usage: scripts/build.sh [release|debug]" >&2
     exit 1
 fi
-swift build --configuration "$configuration"
-binary_dir="$(swift build --configuration "$configuration" --show-bin-path)"
 app_dir="${MACB_APP_DIR:-$HOME/Applications/MacB.app}"
+case "$app_dir" in
+    /*.app) ;;
+    *) echo "MACB_APP_DIR must be an absolute .app path" >&2; exit 1 ;;
+esac
+if [[ "$app_dir" == "/" || "$app_dir" == "$HOME" || "$app_dir" == "/Applications.app" ]]; then
+    echo "Refusing unsafe MACB_APP_DIR: $app_dir" >&2
+    exit 1
+fi
+build_args=(--configuration "$configuration")
+if [[ "${MACB_UNIVERSAL:-0}" == "1" ]]; then
+    if ! xcodebuild -version >/dev/null 2>&1; then
+        echo "Universal build requires full Xcode." >&2
+        exit 1
+    fi
+    build_args+=(--arch arm64 --arch x86_64)
+fi
+swift build "${build_args[@]}"
+binary_dir="$(swift build "${build_args[@]}" --show-bin-path)"
+if [[ "${MACB_UNIVERSAL:-0}" == "1" ]]; then
+    lipo -verify_arch arm64 x86_64 "$binary_dir/MacB"
+fi
 rm -rf "$app_dir"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$binary_dir/MacB" "$app_dir/Contents/MacOS/MacB"

@@ -51,9 +51,9 @@ struct WindowCardView: View {
                         }
                     }
                     .frame(height: density.cardHeight)
-                    .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(hasPreview ? 0.05 : 0.08)))
-                    .contentShape(RoundedRectangle(cornerRadius: 12))
+                    .background(MacBDesign.controlBackground, in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
+                    .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card).strokeBorder(MacBDesign.separator, lineWidth: 0.5))
+                    .contentShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
                 }.buttonStyle(.plain).focused($focused)
                     .accessibilityLabel("\(window.appName), \(window.title), pencereye geç")
                 HStack(spacing: 5) {
@@ -71,14 +71,17 @@ struct WindowCardView: View {
                 Spacer(minLength: 0)
             }.padding(.horizontal, 3)
         }.padding(density == .compact ? 7 : 8).frame(width: density.cardWidth)
-            .background(emphasized ? Color.white.opacity(0.065) : Color.clear, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(isSelected ? MacBDesign.accent.opacity(0.9) : Color.white.opacity(emphasized ? 0.12 : 0.025), lineWidth: isSelected ? 2 : 1))
+            .background(emphasized ? MacBDesign.selectedBackground.opacity(0.34) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
+            .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card)
+                .strokeBorder(isSelected ? MacBDesign.focusRing : (emphasized ? MacBDesign.separator : .clear),
+                              lineWidth: isSelected ? 2 : 0.5))
             .onHover { hovered = $0; onHover($0) }
             .animation(animationsEnabled && !reduceMotion ? .easeOut(duration: 0.16) : nil, value: emphasized)
     }
 
     private func actionButton(symbol: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).font(.system(size: 10, weight: .semibold)).frame(width: 26, height: 26).background(.ultraThinMaterial, in: Circle()) }
+        Button(action: action) { Image(systemName: symbol).font(.system(size: 10, weight: .semibold)).frame(width: 26, height: 26).background(.regularMaterial, in: Circle()) }
             .buttonStyle(.plain).focused($controlFocused).disabled(!enabled).help(label).accessibilityLabel(label)
     }
 }

@@ -28,6 +28,66 @@ struct CoreTestRunner {
             WindowDescriptor(id: id, pid: pid, title: title, frame: bounds ?? frame)
         }
         let tests: [(String, () throws -> Void)] = [
+            ("VersionNumber: compares release versions numerically", {
+                try expect(VersionNumber.isNewer("v0.2.0", than: "0.1.9"), "New minor release was missed")
+                try expect(VersionNumber.isNewer("1.10.0", than: "1.9.9"), "Numeric components were compared as text")
+                try expect(!VersionNumber.isNewer("1.2", than: "1.2.0"), "Equivalent versions differed")
+                try expect(!VersionNumber.isNewer("1.1.9", than: "1.2.0"), "Older release was accepted")
+            }),
+            ("WindowVisibility: removes an inactive generic helper beside a named primary window", {
+                let helper = WindowVisibilityCandidate(title: "Window", bundleIdentifier: "com.openai.codex", isMain: false, isFocused: false)
+                let primary = WindowVisibilityCandidate(title: "ChatGPT", bundleIdentifier: "com.openai.codex", isMain: true, isFocused: true)
+                try expect(!WindowVisibilityPolicy.shouldKeep(helper, among: [helper, primary]), "Generic helper remained visible")
+                try expect(WindowVisibilityPolicy.shouldKeep(primary, among: [helper, primary]), "Primary window was removed")
+            }),
+            ("WindowVisibility: preserves focused or standalone windows named Window", {
+                let focused = WindowVisibilityCandidate(title: "Window", isMain: true, isFocused: true)
+                let standalone = WindowVisibilityCandidate(title: "Pencere", isMain: false, isFocused: false)
+                try expect(WindowVisibilityPolicy.shouldKeep(focused, among: [focused]), "Focused generic-title document was removed")
+                try expect(WindowVisibilityPolicy.shouldKeep(standalone, among: [standalone]), "Standalone generic-title window was removed")
+            }),
+            ("WindowVisibility: preserves generic document titles in unknown applications", {
+                let document = WindowVisibilityCandidate(title: "Window", bundleIdentifier: "com.example.editor", isMain: false, isFocused: false)
+                let primary = WindowVisibilityCandidate(title: "Project", bundleIdentifier: "com.example.editor", isMain: true, isFocused: true)
+                try expect(WindowVisibilityPolicy.shouldKeep(document, among: [document, primary]), "An unknown app's real document was removed")
+            }),
+            ("WindowVisibility: removes Claude's inactive generic helper", {
+                let helper = WindowVisibilityCandidate(title: "Window", bundleIdentifier: "com.anthropic.claudefordesktop", isMain: false, isFocused: false)
+                let primary = WindowVisibilityCandidate(title: "Claude", bundleIdentifier: "com.anthropic.claudefordesktop", isMain: true, isFocused: true)
+                try expect(!WindowVisibilityPolicy.shouldKeep(helper, among: [helper, primary]), "Claude helper remained visible")
+            }),
+            ("WindowLayout: halves and corners tile the visible screen", {
+                let area = CGRect(x: 100, y: 40, width: 1200, height: 800)
+                let current = CGRect(x: 200, y: 100, width: 640, height: 480)
+                guard let left = WindowLayout.frame(for: .leftHalf, in: area, current: current),
+                      let right = WindowLayout.frame(for: .rightHalf, in: area, current: current),
+                      let topLeft = WindowLayout.frame(for: .topLeft, in: area, current: current),
+                      let bottomRight = WindowLayout.frame(for: .bottomRight, in: area, current: current) else {
+                    throw TestFailure(description: "Layout unexpectedly returned nil")
+                }
+                try expect(left.union(right) == area && left.intersection(right).width == 0, "Halves do not tile the screen")
+                try expect(topLeft == CGRect(x: 100, y: 40, width: 600, height: 400), "Top-left frame is wrong")
+                try expect(bottomRight == CGRect(x: 700, y: 440, width: 600, height: 400), "Bottom-right frame is wrong")
+            }),
+            ("WindowLayout: center clamps size and display move preserves proportions", {
+                let area = CGRect(x: 100, y: 40, width: 1200, height: 800)
+                let centered = WindowLayout.frame(for: .center, in: area,
+                    current: CGRect(x: 0, y: 0, width: 2000, height: 1000))
+                try expect(centered == area, "Oversized centered window was not clamped")
+                let moved = WindowLayout.frameOnNextDisplay(
+                    current: CGRect(x: 250, y: 200, width: 500, height: 400),
+                    from: CGRect(x: 0, y: 0, width: 1000, height: 800),
+                    to: CGRect(x: 1000, y: 0, width: 2000, height: 1200))
+                try expect(moved == CGRect(x: 1500, y: 300, width: 1000, height: 600),
+                           "Moving displays did not preserve relative size and position")
+            }),
+            ("BrowserMediaProbe: accepts only real playing media and cleans titles", {
+                let playing = BrowserMediaProbe.decode(#"{"title":"Example — YouTube","artist":"Artist","isPlaying":true,"currentTime":12.5,"duration":90}"#)
+                try expect(playing?.title == "Example", "Browser title suffix was not cleaned")
+                try expect(playing?.artist == "Artist" && playing?.currentTime == 12.5, "Playing metadata was not decoded")
+                try expect(BrowserMediaProbe.decode(#"{"title":"Paused","isPlaying":false}"#) == nil, "Paused media was accepted")
+                try expect(BrowserMediaProbe.decode(#"{"title":"","isPlaying":true}"#) == nil, "Untitled media was accepted")
+            }),
             ("WindowMatcher: requires same process and geometry", {
                 try expect(WindowMatcher.uniqueMatch(pid: 10, title: "Document", frame: frame,
                     candidates: [candidate(1, pid: 20), candidate(2)]) == 2, "Wrong process matched")

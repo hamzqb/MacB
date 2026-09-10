@@ -64,10 +64,10 @@ private struct DockHit {
         }) { monitors.append(monitor) }
         // A low-frequency pointer check keeps Dock hover working when macOS withholds
         // global mouse events until Input Monitoring has been granted.
-        pointerTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+        pointerTimer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.handlePointer(at: NSEvent.mouseLocation) }
         }
-        pointerTimer?.tolerance = 0.02
+        pointerTimer?.tolerance = 0.06
         let center = NotificationCenter.default
         observers.append(center.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.dismiss() }
@@ -142,9 +142,9 @@ private struct DockHit {
         if isPresented, anchor.insetBy(dx: -8, dy: -8).contains(point) { closeTask?.cancel(); closeTask = nil }
         else { scheduleClose() }
         let nearEdge = NSScreen.screens.contains { screen in
-            screen.frame.contains(point) && (point.x < screen.frame.minX + 180 || point.x > screen.frame.maxX - 180 || point.y < screen.frame.minY + 180)
+            screen.frame.contains(point) && (point.x < screen.frame.minX + 110 || point.x > screen.frame.maxX - 110 || point.y < screen.frame.minY + 110)
         }
-        guard nearEdge, !hitInFlight, Date.timeIntervalSinceReferenceDate - lastHitTime > 0.06 else { return }
+        guard nearEdge, !hitInFlight, Date.timeIntervalSinceReferenceDate - lastHitTime > 0.12 else { return }
         lastHitTime = Date.timeIntervalSinceReferenceDate
         hitInFlight = true
         let top = NSScreen.screens.first?.frame.maxY ?? 0
@@ -159,7 +159,7 @@ private struct DockHit {
             AXUIElementSetMessagingTimeout(dock, 0.04)
             var element: AXUIElement?
             if AXUIElementCopyElementAtPosition(dock, Float(axPoint.x), Float(axPoint.y), &element) == .success {
-                for _ in 0..<5 {
+                for _ in 0..<4 {
                     guard let current = element else { break }
                     AXUIElementSetMessagingTimeout(current, 0.04)
                     if let value = axAttribute(current, kAXURLAttribute), let frame = axFrame(current) {
@@ -395,8 +395,7 @@ private struct DockPreviewView: View {
             else { footer.padding(.horizontal, 14).padding(.bottom, 12) }
         }.coordinateSpace(name: "panel").onPreferenceChange(CardFramesKey.self, perform: onFrames)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: MacBDesign.corner))
-            .overlay(RoundedRectangle(cornerRadius: MacBDesign.corner).strokeBorder(.white.opacity(0.075)))
-            .preferredColorScheme(.dark)
+            .overlay(RoundedRectangle(cornerRadius: MacBDesign.corner).strokeBorder(MacBDesign.separator, lineWidth: 0.5))
             .task(id: visibleWindows.map(\.id).joined(separator: "|")) {
                 await previewService.show(visibleWindows)
             }
@@ -416,14 +415,14 @@ private struct DockPreviewView: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(windows.first?.appName ?? "Pencereler").font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                Text(summary).font(.system(size: 10)).foregroundStyle(.white.opacity(0.42)).lineLimit(1)
+                Text(summary).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 8)
             Text("\(windows.count)")
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .padding(.horizontal, 7).frame(height: 22)
-                .background(.white.opacity(0.08), in: Capsule())
+                .background(MacBDesign.controlBackground, in: Capsule())
         }
         .padding(.horizontal, 15).padding(.top, 13)
     }
@@ -441,7 +440,7 @@ private struct DockPreviewView: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(.white.opacity(0.34))
+        .foregroundStyle(.tertiary)
     }
 
     private var moreCard: some View {
@@ -453,12 +452,12 @@ private struct DockPreviewView: View {
                 .monospacedDigit()
             Text("daha fazla")
                 .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.42))
+                .foregroundStyle(.secondary)
         }
         .frame(width: preferences.interfaceDensity == .compact ? 74 : 84)
         .frame(height: preferences.interfaceDensity.cardHeight + 45)
-        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.06)))
+        .background(MacBDesign.controlBackground, in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card).strokeBorder(MacBDesign.separator, lineWidth: 0.5))
         .accessibilityLabel("\(hiddenCount) pencere daha var")
     }
 }

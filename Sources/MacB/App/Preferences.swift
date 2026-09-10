@@ -56,10 +56,24 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
     }
 }
 
+enum IslandAppearance: String, CaseIterable, Identifiable {
+    case automatic, pureBlack, liquidGlass
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .automatic: return "Otomatik"
+        case .pureBlack: return "Saf Siyah"
+        case .liquidGlass: return "Liquid Glass"
+        }
+    }
+}
+
 @MainActor final class Preferences: ObservableObject {
     @Published var dockEnabled: Bool { didSet { defaults.set(dockEnabled, forKey: "dockEnabled") } }
     @Published var notchEnabled: Bool { didSet { defaults.set(notchEnabled, forKey: "notchEnabled") } }
     @Published var switcherEnabled: Bool { didSet { defaults.set(switcherEnabled, forKey: "switcherEnabled") } }
+    @Published var windowManagementEnabled: Bool { didSet { defaults.set(windowManagementEnabled, forKey: "windowManagementEnabled") } }
     @Published var compactIndicators: Bool { didSet { defaults.set(compactIndicators, forKey: "compactIndicators") } }
     @Published var animationsEnabled: Bool { didSet { defaults.set(animationsEnabled, forKey: "animationsEnabled") } }
     @Published var smartNotchEnabled: Bool { didSet { defaults.set(smartNotchEnabled, forKey: "smartNotchEnabled") } }
@@ -72,12 +86,14 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
     @Published var fileActivityEnabled: Bool { didSet { defaults.set(fileActivityEnabled, forKey: "fileActivityEnabled") } }
     @Published var protectPrivateTools: Bool { didSet { defaults.set(protectPrivateTools, forKey: "protectPrivateTools") } }
     @Published var interfaceDensity: InterfaceDensity { didSet { defaults.set(interfaceDensity.rawValue, forKey: "interfaceDensity") } }
+    @Published var islandAppearance: IslandAppearance { didSet { defaults.set(islandAppearance.rawValue, forKey: "islandAppearance") } }
     @Published var shortcut: SwitcherShortcut { didSet { defaults.set(shortcut.rawValue, forKey: "shortcut") } }
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         defaults.register(defaults: ["dockEnabled": true, "notchEnabled": true, "switcherEnabled": true,
+                                    "windowManagementEnabled": false,
                                     "compactIndicators": true, "animationsEnabled": true,
                                     "smartNotchEnabled": true, "favoriteWindowsEnabled": true,
                                     "recentFilesEnabled": false, "peekEnabled": true,
@@ -85,10 +101,12 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
                                     "clipboardShelfEnabled": true, "focusModeEnabled": false,
                                     "fileActivityEnabled": false,
                                     "protectPrivateTools": false,
-                                    "interfaceDensity": InterfaceDensity.balanced.rawValue])
+                                    "interfaceDensity": InterfaceDensity.balanced.rawValue,
+                                    "islandAppearance": IslandAppearance.automatic.rawValue])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
         notchEnabled = defaults.bool(forKey: "notchEnabled")
         switcherEnabled = defaults.bool(forKey: "switcherEnabled")
+        windowManagementEnabled = defaults.bool(forKey: "windowManagementEnabled")
         compactIndicators = defaults.bool(forKey: "compactIndicators")
         animationsEnabled = defaults.bool(forKey: "animationsEnabled")
         smartNotchEnabled = defaults.bool(forKey: "smartNotchEnabled")
@@ -101,6 +119,7 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
         fileActivityEnabled = defaults.bool(forKey: "fileActivityEnabled")
         protectPrivateTools = defaults.bool(forKey: "protectPrivateTools")
         interfaceDensity = InterfaceDensity(rawValue: defaults.string(forKey: "interfaceDensity") ?? "") ?? .balanced
+        islandAppearance = IslandAppearance(rawValue: defaults.string(forKey: "islandAppearance") ?? "") ?? .automatic
         let storedShortcut = SwitcherShortcut(rawValue: defaults.string(forKey: "shortcut") ?? "") ?? .commandTab
         let shouldPreferCommandTab = !defaults.bool(forKey: "didPreferCommandTabForSwitcher") && storedShortcut == .optionTab
         shortcut = shouldPreferCommandTab ? .commandTab : storedShortcut

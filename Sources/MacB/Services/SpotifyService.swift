@@ -209,13 +209,13 @@ final class SpotifyService: ObservableObject {
         value.utf8.reduce(0) { ($0 << 8) | FourCharCode($1) }
     }
 
-    nonisolated private static func property(_ name: String, container: NSAppleEventDescriptor = .null()) -> NSAppleEventDescriptor {
+    nonisolated private static func property(_ name: String, container: NSAppleEventDescriptor = .null()) -> NSAppleEventDescriptor? {
         let record = NSAppleEventDescriptor.record()
         record.setDescriptor(NSAppleEventDescriptor(typeCode: code("prop")), forKeyword: code("want"))
         record.setDescriptor(NSAppleEventDescriptor(enumCode: code("prop")), forKeyword: code("form"))
         record.setDescriptor(NSAppleEventDescriptor(typeCode: code(name)), forKeyword: code("seld"))
         record.setDescriptor(container, forKeyword: code("from"))
-        return record.coerce(toDescriptorType: code("obj "))!
+        return record.coerce(toDescriptorType: code("obj "))
     }
 
     nonisolated private static func send(target: NSAppleEventDescriptor, eventClass: FourCharCode,
@@ -243,12 +243,19 @@ final class SpotifyService: ObservableObject {
             func get(_ object: NSAppleEventDescriptor) throws -> NSAppleEventDescriptor {
                 try send(target: target, eventClass: code("core"), eventID: code("getd"), object: object)
             }
-            let state = try get(property("pPlS")).enumCodeValue
+            guard let stateProperty = property("pPlS"), let track = property("pTrk") else {
+                return SpotifySnapshot(error: "Spotify yanıtı okunamadı. Yeniden denenecek.")
+            }
+            let state = try get(stateProperty).enumCodeValue
             guard state != code("kPSS") else { return SpotifySnapshot() }
-            let track = property("pTrk")
-            let title = try get(property("pnam", container: track)).stringValue ?? ""
-            let artist = try get(property("pArt", container: track)).stringValue ?? ""
-            let artwork = try get(property("aUrl", container: track)).stringValue ?? ""
+            guard let titleProperty = property("pnam", container: track),
+                  let artistProperty = property("pArt", container: track),
+                  let artworkProperty = property("aUrl", container: track) else {
+                return SpotifySnapshot(error: "Spotify yanıtı okunamadı. Yeniden denenecek.")
+            }
+            let title = try get(titleProperty).stringValue ?? ""
+            let artist = try get(artistProperty).stringValue ?? ""
+            let artwork = try get(artworkProperty).stringValue ?? ""
             return SpotifySnapshot(title: title, artist: artist, artworkURL: artwork, playing: state == code("kPSP"))
         } catch {
             let number = (error as NSError).code

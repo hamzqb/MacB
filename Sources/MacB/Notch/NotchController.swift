@@ -42,6 +42,9 @@ struct IslandToast: Equatable {
     private let camera: CameraPreviewService
     private let auth: BiometricAuthService
     private let recentTargets: RecentTargetStore
+    private let aiActivity: AIActivityService
+    private let systemMonitor: SystemMonitorService
+    private let keyboardCleaning: KeyboardCleaningService
     private let openSettings: () -> Void
     private let presentation = NotchPresentation()
     private var state = PanelState()
@@ -68,12 +71,15 @@ struct IslandToast: Equatable {
          recentFiles: RecentFileStore, clipboard: ClipboardShelfStore,
          fileActivity: FileActivityStore, tasks: TaskStore,
          camera: CameraPreviewService, auth: BiometricAuthService,
-         recentTargets: RecentTargetStore, openSettings: @escaping () -> Void) {
+         recentTargets: RecentTargetStore, aiActivity: AIActivityService,
+         systemMonitor: SystemMonitorService, keyboardCleaning: KeyboardCleaningService,
+         openSettings: @escaping () -> Void) {
         self.media = media; self.shelf = shelf; self.preferences = preferences
         self.recentFiles = recentFiles; self.clipboard = clipboard
         self.fileActivity = fileActivity
         self.tasks = tasks; self.camera = camera; self.auth = auth
         self.recentTargets = recentTargets; self.openSettings = openSettings
+        self.aiActivity = aiActivity; self.systemMonitor = systemMonitor; self.keyboardCleaning = keyboardCleaning
         super.init()
     }
 
@@ -83,18 +89,22 @@ struct IslandToast: Equatable {
         window.isOpaque = false; window.backgroundColor = .clear; window.hasShadow = false
         window.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        window.hidesOnDeactivate = false; window.isMovable = false; window.delegate = self
+        window.hidesOnDeactivate = false; window.isMovable = false; window.acceptsMouseMovedEvents = true; window.delegate = self
         window.onEscape = { [weak self] in self?.closePanel() }
         let view = NotchView(presentation: presentation, media: media, shelf: shelf,
             preferences: preferences, recentFiles: recentFiles, clipboard: clipboard,
             fileActivity: fileActivity, tasks: tasks, camera: camera, auth: auth,
-            recentTargets: recentTargets,
+            recentTargets: recentTargets, aiActivity: aiActivity, systemMonitor: systemMonitor,
+            keyboardCleaning: keyboardCleaning,
             open: { [weak self] in self?.openPanel() }, close: { [weak self] in self?.closePanel() },
             select: { [weak self] content in self?.select(content) },
             openSettings: { [weak self] in self?.openSettings() },
             cameraAction: { [weak self] in self?.handleCameraAction() },
             notify: { [weak self] symbol, message in self?.showToast(symbol: symbol, message: message) })
         let host = NotchHostingView(rootView: view)
+        host.onPointerChanged = { [weak self] inside in
+            self?.pointerBoundaryChanged(inside: inside)
+        }
         host.onDragChanged = { [weak self] active in self?.setDrag(active, incoming: true) }
         host.onFilesDropped = { [weak self] urls in
             self?.shelf.add(urls: urls)
@@ -139,6 +149,9 @@ struct IslandToast: Equatable {
         camera.$isRunning.removeDuplicates().sink { [weak self] _ in
             DispatchQueue.main.async { self?.render() }
         }.store(in: &subscriptions)
+        aiActivity.$activities.map(\.count).removeDuplicates().sink { [weak self] _ in
+            DispatchQueue.main.async { self?.render() }
+        }.store(in: &subscriptions)
     }
 
     func stop() {
@@ -161,7 +174,9 @@ struct IslandToast: Equatable {
         if panel == nil { start() }
         developmentPreviewLocked = false
         deadlineTask?.cancel()
-        if preferences.smartNotchEnabled && (shelf.items.isEmpty == false || fileActivity.activeCount > 0) {
+        if preferences.smartNotchEnabled && !media.isPlaying && aiActivity.isActive {
+            state.select(.tools)
+        } else if preferences.smartNotchEnabled && (shelf.items.isEmpty == false || fileActivity.activeCount > 0) {
             state.select(.files)
         } else {
             state.open()
@@ -189,6 +204,7 @@ struct IslandToast: Equatable {
     }
     private func select(_ content: NotchContent) {
         state.select(content)
+        if content == .tools { systemMonitor.refresh() }
         if content == .files { shelf.refreshAvailability() }
         if content == .clipboard && preferences.protectPrivateTools && !auth.isAuthenticated {
             auth.authenticate { [weak self] success in
@@ -251,14 +267,25 @@ struct IslandToast: Equatable {
         guard !developmentPreviewLocked else { return }
         guard let panel else { return }
         let inside = panel.frame.contains(NSEvent.mouseLocation)
+        updatePointer(inside: inside, event: event)
+    }
+    private func pointerBoundaryChanged(inside: Bool) {
+        guard !developmentPreviewLocked else { return }
+        updatePointer(inside: inside, event: nil)
+    }
+    private func updatePointer(inside: Bool, event: NSEvent?) {
+        guard let panel else { return }
         let now = ProcessInfo.processInfo.systemUptime
         if inside {
+            // After an explicit close, require one real exit before a new hover can begin.
+            // Keeping pointerInside false prevents a suppressed event from swallowing the next entry deadline.
+            if suppressHoverUntilExit { pointerInside = false; return }
             if !pointerInside, !suppressHoverUntilExit { state.pointerEntered(at: now); scheduleDeadline() }
             else if pointerInside { state.pointerEntered() }
         } else {
             if pointerInside { state.pointerExited(at: now); scheduleDeadline() }
             suppressHoverUntilExit = false
-            if event.type == .leftMouseDown, state.hasKeyboardFocus { panel.resignKey() }
+            if event?.type == .leftMouseDown, state.hasKeyboardFocus { panel.resignKey() }
         }
         pointerInside = inside
     }
@@ -279,13 +306,9 @@ struct IslandToast: Equatable {
         let maxWidth = (display?.frame.width ?? 480) - 24
         switch state.phase {
         case .collapsed:
-            let showMusic = preferences.compactIndicators && media.isPlaying
-            let showFiles = preferences.compactIndicators && !shelf.items.isEmpty
-            let showActivity = preferences.compactIndicators && preferences.fileActivityEnabled && fileActivity.activeCount > 0
-            let extra: CGFloat = (showMusic || showFiles || showActivity) ? 92 : 0
             return NotchLayout(phase: .collapsed, content: state.content,
-                width: min(maxWidth, presentation.cameraWidth > 0 ? presentation.cameraWidth + extra + 12 : max(84, extra + 28)),
-                height: max(28, camera), radius: camera > 0 ? 11 : 14)
+                width: min(maxWidth, presentation.cameraWidth > 0 ? presentation.cameraWidth : 120),
+                height: camera > 0 ? camera : 10, radius: 0)
         case .glance:
             return NotchLayout(phase: .glance, content: .music,
                 width: min(MacBDesign.Island.glanceWidth, maxWidth),
@@ -298,7 +321,15 @@ struct IslandToast: Equatable {
                 bodyHeight = media.isPlaying || media.isRunning ? MacBDesign.Island.mediaBodyHeight : MacBDesign.Island.emptyMediaBodyHeight
             case .files:
                 bodyHeight = hasFileContent ? min(316, 118 + CGFloat(shelf.items.count + recentFiles.items.count) * 36) : MacBDesign.Island.filesEmptyBodyHeight
-            case .clipboard, .tasks:
+            case .clipboard:
+                bodyHeight = clipboard.items.isEmpty
+                    ? MacBDesign.Island.clipboardEmptyBodyHeight
+                    : min(316, 148 + CGFloat(min(4, clipboard.items.count)) * 38)
+            case .tasks:
+                bodyHeight = tasks.items.isEmpty
+                    ? MacBDesign.Island.tasksEmptyBodyHeight
+                    : min(310, 132 + CGFloat(min(4, tasks.items.count)) * 40)
+            case .tools:
                 bodyHeight = MacBDesign.Island.utilityBodyHeight
             }
             let cameraExtra: CGFloat = presentation.cameraPreviewVisible ? 136 : 0
@@ -366,7 +397,7 @@ struct IslandToast: Equatable {
         guard let panel, let screen = display else { return }
         presentation.indicators = preferences.compactIndicators
         let target = targetLayout()
-        media.setPanelVisible(state.isOpen)
+        media.setPanelVisible(state.isOpen && state.content == .music)
         guard target != presentation.layout || immediate else { return }
         animationTimer?.invalidate(); animationTimer = nil
         presentation.previousLayout = presentation.layout
@@ -411,6 +442,8 @@ final class NotchPanel: NSPanel {
 final class NotchHostingView<Content: View>: NSHostingView<Content> {
     var onDragChanged: ((Bool) -> Void)?
     var onFilesDropped: (([URL]) -> Void)?
+    var onPointerChanged: ((Bool) -> Void)?
+    private var pointerTrackingArea: NSTrackingArea?
 
     required init(rootView: Content) {
         super.init(rootView: rootView)
@@ -418,6 +451,20 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
     }
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is unsupported") }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let pointerTrackingArea { removeTrackingArea(pointerTrackingArea) }
+        let tracking = NSTrackingArea(rect: bounds,
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
+            owner: self, userInfo: nil)
+        addTrackingArea(tracking)
+        pointerTrackingArea = tracking
+    }
+
+    override func mouseEntered(with event: NSEvent) { onPointerChanged?(true) }
+    override func mouseExited(with event: NSEvent) { onPointerChanged?(false) }
+    override func mouseMoved(with event: NSEvent) { onPointerChanged?(true) }
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         guard sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) else { return [] }

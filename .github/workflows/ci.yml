@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build
+      - name: Core scenarios
+        run: ./scripts/test.sh
+      - name: XCTest
+        run: swift test
+      - name: Package smoke test
+        run: |
+          MACB_APP_DIR="$RUNNER_TEMP/MacB.app" ./scripts/build.sh release
+          "$RUNNER_TEMP/MacB.app/Contents/MacOS/MacB" --smoke-test

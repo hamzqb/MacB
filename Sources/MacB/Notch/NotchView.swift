@@ -14,6 +14,9 @@ struct NotchView: View {
     @ObservedObject var camera: CameraPreviewService
     @ObservedObject var auth: BiometricAuthService
     @ObservedObject var recentTargets: RecentTargetStore
+    @ObservedObject var aiActivity: AIActivityService
+    @ObservedObject var systemMonitor: SystemMonitorService
+    @ObservedObject var keyboardCleaning: KeyboardCleaningService
     var open: () -> Void
     var close: () -> Void
     var select: (NotchContent) -> Void
@@ -21,6 +24,7 @@ struct NotchView: View {
     var cameraAction: () -> Void
     var notify: (String, String) -> Void
     @State private var newTask = ""
+    @State private var clipboardQuery = ""
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -41,17 +45,38 @@ struct NotchView: View {
         }
         .frame(width: presentation.width, height: presentation.height, alignment: .top)
         .clipShape(islandShape)
-        .overlay(islandShape.strokeBorder(presentation.isDropTarget ? MacBDesign.accent.opacity(0.8) : .white.opacity(0.045), lineWidth: presentation.isDropTarget ? 1.5 : 0.5))
+        .overlay(islandShape.strokeBorder(presentation.isDropTarget ? MacBDesign.accent.opacity(0.8) : surfaceStroke,
+            lineWidth: presentation.isDropTarget ? 1.5 : (presentation.layout.phase == .collapsed ? 0 : 0.5)))
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .onExitCommand(perform: close)
     }
 
-    private var islandSurface: some View {
-        ZStack {
+    @ViewBuilder private var islandSurface: some View {
+        if presentation.layout.phase == .collapsed {
+            Color.clear
+        } else if usesGlassSurface {
+            Rectangle().fill(.ultraThinMaterial)
+            ZStack {
+                Color.black.opacity(0.42)
+                LinearGradient(colors: [MacBDesign.Island.glassHighlight, .clear, .black.opacity(0.28)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            }
+        } else {
             Color.black
-            LinearGradient(colors: [.white.opacity(0.055), .clear, .black.opacity(0.2)], startPoint: .top, endPoint: .bottom)
         }
+    }
+
+    private var usesGlassSurface: Bool {
+        switch preferences.islandAppearance {
+        case .pureBlack: return false
+        case .liquidGlass: return true
+        case .automatic: return presentation.layout.phase != .collapsed
+        }
+    }
+
+    private var surfaceStroke: Color {
+        if presentation.layout.phase == .collapsed { return .clear }
+        return usesGlassSurface ? MacBDesign.Island.glassStroke : .white.opacity(0.04)
     }
 
     private var islandShape: UnevenRoundedRectangle {
@@ -80,6 +105,7 @@ struct NotchView: View {
                     case .files: filesContent
                     case .clipboard: clipboardContent
                     case .tasks: tasksContent
+                    case .tools: toolsContent
                     }
                 }
                 .padding(.horizontal, MacBDesign.Island.horizontalPadding)
@@ -90,25 +116,21 @@ struct NotchView: View {
 
     private var compact: some View {
         Button(action: open) {
-            HStack(spacing: 0) {
-                if presentation.indicators && media.isPlaying { cover(size: 20, radius: 6).frame(width: 38) }
-                Color.clear.frame(width: max(24, presentation.cameraWidth))
-                if presentation.indicators && (!shelf.items.isEmpty || fileActivity.activeCount > 0) {
-                    Text("\(max(shelf.items.count, fileActivity.activeCount))")
-                        .font(.system(size: 10, weight: .semibold, design: .rounded)).monospacedDigit()
-                        .frame(width: 20, height: 20).background(.white.opacity(0.14), in: RoundedRectangle(cornerRadius: 6)).frame(width: 38)
-                }
-            }.frame(maxWidth: .infinity).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityLabel("MacB panelini aç")
+            Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
+        }.buttonStyle(.plain).accessibilityHidden(true)
     }
 
     private var glance: some View {
         Button(action: open) {
             HStack(spacing: 12) {
-                cover(size: 42, radius: 10)
+                if !media.isPlaying, let activity = aiActivity.activities.first {
+                    Image(systemName: activity.kind.symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(.orange)
+                        .symbolEffect(.bounce, value: aiActivity.activities.count).frame(width: 42, height: 42)
+                        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                } else { cover(size: 42, radius: 10) }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(media.isPlaying ? mediaTitle : "Sessiz").font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    if media.isPlaying { Text(mediaSubtitle).font(.system(size: 10)).foregroundStyle(.white.opacity(0.45)).lineLimit(1) }
+                    Text(glanceTitle).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    Text(glanceSubtitle).font(.system(size: 10)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
                 }.frame(maxWidth: .infinity, alignment: .leading)
                 if media.isPlaying {
                     playbackButton(media.isPlaying ? "pause.fill" : "play.fill", label: media.isPlaying ? "Duraklat" : "Oynat", size: 34, action: media.playPause)
@@ -119,15 +141,34 @@ struct NotchView: View {
         }.buttonStyle(.plain).accessibilityLabel(media.isPlaying ? "\(mediaTitle), ayrıntıları aç" : "Medya yok, paneli aç")
     }
 
+    private var glanceTitle: String {
+        if media.isPlaying { return mediaTitle }
+        if let activity = aiActivity.activities.first { return "\(activity.kind.rawValue) açık" }
+        return emptyTitle
+    }
+
+    private var glanceSubtitle: String {
+        if media.isPlaying { return mediaSubtitle }
+        if let activity = aiActivity.activities.first { return "\(activity.source) · \(activity.elapsedText)" }
+        return emptySubtitle
+    }
+
     private func tabs(_ selected: NotchContent) -> some View {
-        HStack(spacing: 4) {
-            tab("Medya", "play.fill", .music, selected)
-            tab("Dosyalar", "tray.fill", .files, selected)
-            tab("Pano", "doc.on.clipboard", .clipboard, selected)
-            tab("İşler", "checkmark.circle", .tasks, selected)
-            Spacer(minLength: 4)
-            iconButton(presentation.cameraPreviewVisible ? "camera.fill" : "camera", label: "Kamera", action: cameraAction)
-            iconButton("gearshape", label: "Ayarlar", action: openSettings)
+        HStack(spacing: 8) {
+            HStack(spacing: 2) {
+                tab("Medya", "play.fill", .music, selected)
+                tab("Dosyalar", "tray.fill", .files, selected)
+                tab("Pano", "doc.on.clipboard", .clipboard, selected)
+                tab("İşler", "checkmark.circle", .tasks, selected)
+                tab("", "gauge.with.dots.needle.33percent", .tools, selected)
+            }
+            .padding(3)
+            .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            Spacer(minLength: 2)
+            HStack(spacing: 4) {
+                iconButton(presentation.cameraPreviewVisible ? "camera.fill" : "camera", label: "Kamera", action: cameraAction)
+                iconButton("gearshape", label: "Ayarlar", action: openSettings)
+            }
         }.frame(height: MacBDesign.Island.tabHeight)
     }
 
@@ -135,11 +176,13 @@ struct NotchView: View {
         Button { select(section) } label: {
             HStack(spacing: 5) {
                 Image(systemName: symbol).font(.system(size: 9, weight: .semibold))
-                Text(title).font(.system(size: 10, weight: .semibold))
-            }.padding(.horizontal, 8).frame(height: 27)
+                if !title.isEmpty { Text(title).font(.system(size: 10, weight: .semibold)) }
+            }.padding(.horizontal, 7).frame(height: 26)
                 .foregroundStyle(.white.opacity(selected == section ? 0.94 : 0.42))
-                .background(selected == section ? .white.opacity(0.11) : .clear, in: Capsule())
-        }.buttonStyle(.plain).accessibilityAddTraits(selected == section ? .isSelected : [])
+                .background(selected == section ? .white.opacity(0.12) : .clear,
+                            in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }.buttonStyle(.plain).accessibilityLabel(title.isEmpty ? "Araçlar" : title)
+            .accessibilityAddTraits(selected == section ? .isSelected : [])
     }
 
     private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
@@ -165,8 +208,8 @@ struct NotchView: View {
             HStack(spacing: 12) {
                 cover(size: 48, radius: 13)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Sessiz").font(.system(size: 15, weight: .semibold))
-                    Text("Medya oynatınca burada görünür.").font(.system(size: 10)).foregroundStyle(.white.opacity(0.42))
+                    Text(emptyTitle).font(.system(size: 15, weight: .semibold))
+                    Text(emptySubtitle).font(.system(size: 10)).foregroundStyle(.white.opacity(0.42)).lineLimit(1)
                 }
                 Spacer()
                 Image(systemName: "waveform").foregroundStyle(.white.opacity(0.25))
@@ -176,12 +219,27 @@ struct NotchView: View {
         }
     }
 
+    private var emptyTitle: String {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 5..<12: return "Günaydın"
+        case 12..<18: return "İyi günler"
+        default: return "İyi akşamlar"
+        }
+    }
+
+    private var emptySubtitle: String {
+        if fileActivity.activeCount > 0 { return "\(fileActivity.activeCount) dosya hazırlanıyor" }
+        if !tasks.items.isEmpty { return "\(tasks.items.count) iş elinin altında" }
+        if !shelf.items.isEmpty { return "\(shelf.items.count) dosya rafta" }
+        return "Her şey elinin altında."
+    }
+
     @ViewBuilder private var mediaControls: some View {
         if media.isPlaying {
             HStack(spacing: 16) {
-                playbackButton("backward.fill", label: "Önceki", size: 32, action: media.previousTrack)
+                if media.source != .browser { playbackButton("backward.fill", label: "Önceki", size: 32, action: media.previousTrack) }
                 playbackButton("pause.fill", label: "Duraklat", size: 40, prominent: true, action: media.playPause)
-                playbackButton("forward.fill", label: "Sonraki", size: 32, action: media.nextTrack)
+                if media.source != .browser { playbackButton("forward.fill", label: "Sonraki", size: 32, action: media.nextTrack) }
             }.frame(maxWidth: .infinity)
         } else if media.isRunning && !media.isAuthorized {
             Button("Bağlan", action: media.requestAuthorization).buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
@@ -250,13 +308,20 @@ struct NotchView: View {
         if preferences.protectPrivateTools && !auth.isAuthenticated {
             lockedContent(title: auth.isAuthenticating ? "Doğrulanıyor" : "Pano kilitli", symbol: "lock.fill") { select(.clipboard) }
         } else if clipboard.items.isEmpty {
-            compactEmpty("Pano boş", symbol: "doc.on.clipboard", detail: "Kopyaladıkların burada görünür.")
+            compactEmpty("Pano boş", symbol: "doc.on.clipboard", detail: "Kopyaladıkların burada.")
         } else {
             VStack(spacing: 6) {
+                HStack(spacing: 7) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.35))
+                    TextField("Panoda ara…", text: $clipboardQuery).textFieldStyle(.plain).font(.system(size: 11))
+                    if !clipboardQuery.isEmpty {
+                        Button { clipboardQuery = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain)
+                    }
+                }.padding(.horizontal, 10).frame(height: 32).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 6) {
                         if !clipboard.favorites.isEmpty { sectionLabel("Sık kullanılanlar") }
-                        ForEach(clipboard.items.sorted { $0.isFavorite && !$1.isFavorite }) { item in clipboardRow(item) }
+                        ForEach(clipboard.search(clipboardQuery).sorted { $0.isFavorite && !$1.isFavorite }) { item in clipboardRow(item) }
                     }
                 }.frame(maxHeight: 218).scrollIndicators(.hidden)
                 if let error = clipboard.errorMessage { Text(error).font(.system(size: 10)).foregroundStyle(.orange).lineLimit(1) }
@@ -266,7 +331,12 @@ struct NotchView: View {
 
     private func clipboardRow(_ item: ClipboardShelfItem) -> some View {
         HStack(spacing: 7) {
-            Image(systemName: item.isFavorite ? "star.fill" : "text.quote").frame(width: 18).foregroundStyle(item.isFavorite ? .yellow.opacity(0.8) : .white.opacity(0.38))
+            Group {
+                if item.kind == .image, let data = item.imageData, let image = NSImage(data: data) {
+                    Image(nsImage: image).resizable().scaledToFill()
+                } else { Image(systemName: item.isFavorite ? "star.fill" : item.kind.symbol) }
+            }.frame(width: 18, height: 18).clipShape(RoundedRectangle(cornerRadius: 4))
+                .foregroundStyle(item.isFavorite ? .yellow.opacity(0.8) : .white.opacity(0.38))
             Text(item.text.replacingOccurrences(of: "\n", with: " ")).font(.system(size: 11)).lineLimit(1)
             Spacer()
             rowButton("doc.on.doc", "Kopyala") { clipboard.copy(item); notify("checkmark", "Kopyalandı") }
@@ -289,6 +359,10 @@ struct NotchView: View {
             }
             if let error = tasks.errorMessage { Text(error).font(.system(size: 10)).foregroundStyle(.orange).lineLimit(1) }
         }
+    }
+
+    private var toolsContent: some View {
+        ProductivityView(aiActivity: aiActivity, systemMonitor: systemMonitor, keyboardCleaning: keyboardCleaning)
     }
 
     private func taskRow(_ item: LocalTaskItem) -> some View {
@@ -314,13 +388,14 @@ struct NotchView: View {
 
     private func compactEmpty(_ title: String, symbol: String, detail: String) -> some View {
         HStack(spacing: 11) {
-            Image(systemName: symbol).font(.system(size: 16, weight: .medium)).frame(width: 34, height: 34).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+            Image(systemName: symbol).font(.system(size: 15, weight: .medium)).frame(width: 32, height: 32)
+                .background(.white.opacity(0.065), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 12, weight: .semibold))
                 Text(detail).font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
             }
             Spacer()
-        }.padding(10).background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
+        }.padding(10).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func lockedContent(title: String, symbol: String, action: @escaping () -> Void) -> some View {

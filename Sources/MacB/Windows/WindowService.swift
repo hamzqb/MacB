@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Combine
+import MacBCore
 
 struct WindowRecord: Identifiable {
     let id: String
@@ -13,6 +14,9 @@ struct WindowRecord: Identifiable {
     let isMinimized: Bool
     let canClose: Bool
     let canMinimize: Bool
+    var bundleIdentifier: String? = nil
+    var isMain: Bool = false
+    var isFocused: Bool = false
     var captureAmbiguous: Bool = false
 }
 
@@ -36,11 +40,25 @@ func axFrame(_ element: AXUIElement) -> CGRect? {
     private let queue = DispatchQueue(label: "com.macb.windows", qos: .userInitiated)
     private var refreshGeneration = 0
     private var identities: [pid_t: [(AXUIElement, String)]] = [:]
+    private var refreshInProgress = false
+    private var activeRefreshPID: pid_t?
 
     func refresh(pid: pid_t? = nil) async {
         guard AXIsProcessTrusted() else {
             windows = []; errorMessage = "Pencereler için Erişilebilirlik iznini açın."; return
         }
+        if refreshInProgress {
+            let activePID = activeRefreshPID
+            while refreshInProgress {
+                do { try await Task.sleep(for: .milliseconds(40)) } catch { return }
+            }
+            // A full scan satisfies every scoped request; an identical scoped scan
+            // also makes another AX traversal unnecessary.
+            if activePID == nil || activePID == pid { return }
+        }
+        refreshInProgress = true
+        activeRefreshPID = pid
+        defer { refreshInProgress = false; activeRefreshPID = nil }
         refreshGeneration += 1
         let generation = refreshGeneration
         let apps = NSWorkspace.shared.runningApplications.filter {
@@ -59,28 +77,52 @@ func axFrame(_ element: AXUIElement) -> CGRect? {
                         let title = axAttribute(element, kAXTitleAttribute) as? String ?? ""
                         let frame = axFrame(element) ?? .zero
                         let minimized = axAttribute(element, kAXMinimizedAttribute) as? Bool ?? false
+                        let isMain = axAttribute(element, kAXMainAttribute) as? Bool ?? false
+                        let isFocused = axAttribute(element, kAXFocusedAttribute) as? Bool ?? false
                         var settable: DarwinBoolean = false
                         let minimize = AXUIElementIsAttributeSettable(element, kAXMinimizedAttribute as CFString, &settable) == .success && settable.boolValue
                         let close = axAttribute(element, kAXCloseButtonAttribute) != nil
-                        result.append(WindowRecord(id: "", title: title.isEmpty ? (app.localizedName ?? "Pencere") : title,
+                        var record = WindowRecord(id: "", title: title.isEmpty ? (app.localizedName ?? "Pencere") : title,
                             appName: app.localizedName ?? "Uygulama", appIcon: app.icon, pid: app.processIdentifier,
-                            element: element, frame: frame, isMinimized: minimized, canClose: close, canMinimize: minimize))
+                            element: element, frame: frame, isMinimized: minimized, canClose: close, canMinimize: minimize)
+                        record.bundleIdentifier = app.bundleIdentifier
+                        record.isMain = isMain
+                        record.isFocused = isFocused
+                        result.append(record)
                     }
                 }
                 continuation.resume(returning: result)
             }
         }
         guard generation == refreshGeneration else { return }
-        let records = discovered.map { record -> WindowRecord in
+        let byProcess = Dictionary(grouping: discovered, by: \.pid)
+        let userFacing = discovered.filter { record in
+            let peers = (byProcess[record.pid] ?? []).map {
+                WindowVisibilityCandidate(title: $0.title, bundleIdentifier: $0.bundleIdentifier,
+                                          isMain: $0.isMain, isFocused: $0.isFocused)
+            }
+            return WindowVisibilityPolicy.shouldKeep(
+                WindowVisibilityCandidate(title: record.title, bundleIdentifier: record.bundleIdentifier,
+                                          isMain: record.isMain, isFocused: record.isFocused),
+                among: peers)
+        }
+        let records = userFacing.map { record -> WindowRecord in
             let previous = identities[record.pid]?.first { CFEqual($0.0, record.element) }?.1
             let id = previous ?? UUID().uuidString
             var identified = WindowRecord(id: id, title: record.title, appName: record.appName, appIcon: record.appIcon, pid: record.pid,
                 element: record.element, frame: record.frame, isMinimized: record.isMinimized, canClose: record.canClose, canMinimize: record.canMinimize)
-            identified.captureAmbiguous = discovered.filter { peer in
+            identified.bundleIdentifier = record.bundleIdentifier
+            identified.isMain = record.isMain
+            identified.isFocused = record.isFocused
+            let geometricPeers = userFacing.filter { peer in
                 peer.pid == record.pid && abs(peer.frame.minX - record.frame.minX) <= 2 &&
                 abs(peer.frame.minY - record.frame.minY) <= 2 && abs(peer.frame.width - record.frame.width) <= 2 &&
                 abs(peer.frame.height - record.frame.height) <= 2
-            }.count > 1
+            }
+            identified.captureAmbiguous = geometricPeers.contains { peer in
+                guard !CFEqual(peer.element, record.element) else { return false }
+                return record.title.isEmpty || peer.title.isEmpty || peer.title == record.title
+            }
             return identified
         }
         if let pid {

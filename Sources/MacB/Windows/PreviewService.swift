@@ -74,8 +74,8 @@ private final class PreviewOutput: NSObject, SCStreamOutput, SCStreamDelegate {
                 guard let id = WindowMatcher.uniqueMatch(pid: window.pid, title: window.title, frame: window.frame, candidates: descriptors),
                       let candidate = content.windows.first(where: { $0.windowID == id }) else { continue }
                 let configuration = SCStreamConfiguration()
-                configuration.width = 488
-                configuration.height = max(1, min(400, Int(488 * window.frame.height / max(window.frame.width, 1))))
+                configuration.width = 800
+                configuration.height = max(1, min(500, Int(800 * window.frame.height / max(window.frame.width, 1))))
                 configuration.minimumFrameInterval = CMTime(value: 1, timescale: 8)
                 configuration.queueDepth = 3
                 configuration.capturesAudio = false

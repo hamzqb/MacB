@@ -13,12 +13,16 @@ private final class SwitcherPanel: NSPanel {
     @Published var selectedID: String?
     @Published var isLoading = false
     @Published var message: String?
-    var pageCapacity = 4
     var selectedWindow: WindowRecord? { windows.first { $0.id == selectedID } }
+    var selectedIndex: Int { windows.firstIndex { $0.id == selectedID } ?? 0 }
     var visibleWindows: [WindowRecord] {
-        let index = windows.firstIndex { $0.id == selectedID } ?? 0
-        let start = (index / pageCapacity) * pageCapacity
-        return Array(windows.dropFirst(start).prefix(pageCapacity))
+        let capacity = 4
+        let start = min(max(0, selectedIndex - 1), max(0, windows.count - capacity))
+        return Array(windows.dropFirst(start).prefix(capacity))
+    }
+    var previewWindows: [WindowRecord] {
+        guard let selectedWindow else { return [] }
+        return [selectedWindow] + visibleWindows.filter { $0.id != selectedWindow.id }
     }
 }
 
@@ -38,6 +42,7 @@ private final class SwitcherPanel: NSPanel {
     private var initialApplication: NSRunningApplication?
     private var generation = 0
     private var commitWhenLoaded = false
+    private var pendingAdvances = 0
     private var requiredFlags: NSEvent.ModifierFlags = [.option]
     private var recentIDs: [String] = []
     private var shouldAnimate: Bool { (UserDefaults.standard.object(forKey: "animationsEnabled") as? Bool ?? true) && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
@@ -63,6 +68,7 @@ private final class SwitcherPanel: NSPanel {
         let token = generation
         requiredFlags = shortcut.requiredFlags
         commitWhenLoaded = false
+        pendingAdvances = backwards ? -1 : 1
         initialApplication = NSWorkspace.shared.frontmostApplication
         model.isLoading = true
         model.windows = []
@@ -76,26 +82,48 @@ private final class SwitcherPanel: NSPanel {
             guard self.isVisible, self.generation == token else { return }
             self.model.isLoading = false
             self.update(self.windowService.windows)
-            if self.model.windows.count > 1 { self.advance(backwards: backwards) }
+            let pending = self.pendingAdvances
+            self.pendingAdvances = 0
+            if !self.model.windows.isEmpty {
+                for _ in 0..<abs(pending) { self.advance(backwards: pending < 0) }
+            }
             if self.commitWhenLoaded { self.commit() }
+        }
+    }
+
+    func showDevelopmentPreview() {
+        guard !isVisible else { return }
+        onWillOpen?()
+        isVisible = true
+        generation += 1
+        let token = generation
+        initialApplication = NSWorkspace.shared.frontmostApplication
+        model.isLoading = true
+        model.windows = []
+        model.message = nil
+        selection = WindowSelection()
+        present()
+        Task { [weak self] in
+            guard let self else { return }
+            await self.windowService.refresh()
+            guard self.isVisible, self.generation == token else { return }
+            self.model.isLoading = false
+            self.update(self.windowService.windows)
+            if self.model.windows.count > 1 { self.advance(backwards: false) }
         }
     }
 
     private func update(_ records: [WindowRecord]) {
         let ranks = Dictionary(uniqueKeysWithValues: recentIDs.enumerated().map { ($1, $0) })
         let ordered = records.enumerated().sorted {
+            let leftIsCurrent = $0.element.pid == initialApplication?.processIdentifier
+            let rightIsCurrent = $1.element.pid == initialApplication?.processIdentifier
+            if leftIsCurrent != rightIsCurrent { return leftIsCurrent }
             if preferences.favoriteWindowsEnabled {
                 let leftFavorite = favorites.isFavorite($0.element)
                 let rightFavorite = favorites.isFavorite($1.element)
                 if leftFavorite != rightFavorite { return leftFavorite }
             }
-            if preferences.groupedWindowsEnabled {
-                let appCompare = $0.element.appName.localizedCaseInsensitiveCompare($1.element.appName)
-                if appCompare != .orderedSame { return appCompare == .orderedAscending }
-            }
-            let leftIsCurrent = $0.element.pid == initialApplication?.processIdentifier
-            let rightIsCurrent = $1.element.pid == initialApplication?.processIdentifier
-            if leftIsCurrent != rightIsCurrent { return leftIsCurrent }
             let left = ranks[$0.element.id] ?? (1000 + $0.offset)
             let right = ranks[$1.element.id] ?? (1000 + $1.offset)
             return left < right
@@ -108,13 +136,17 @@ private final class SwitcherPanel: NSPanel {
     }
 
     private func advance(backwards: Bool) {
+        if model.isLoading {
+            pendingAdvances += backwards ? -1 : 1
+            return
+        }
         selection.advance(backwards: backwards)
         model.selectedID = selection.selectedID
         updatePreviews()
     }
 
     private func updatePreviews() {
-        let records = model.visibleWindows
+        let records = model.previewWindows
         let token = generation
         Task { [weak self] in
             guard let self, self.isVisible, token == self.generation else { return }
@@ -125,9 +157,8 @@ private final class SwitcherPanel: NSPanel {
     private func present() {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
-        let width = min(1080, screen.visibleFrame.width - 40)
-        model.pageCapacity = max(1, min(4, Int((width - 28) / (preferences.interfaceDensity.cardWidth + 12))))
-        let size = NSSize(width: width, height: 432)
+        let width = min(680, screen.visibleFrame.width - 40)
+        let size = NSSize(width: width, height: min(190, screen.visibleFrame.height - 40))
         let panel = SwitcherPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -135,13 +166,9 @@ private final class SwitcherPanel: NSPanel {
         panel.level = .popUpMenu
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: SwitcherView(model: model, previews: previews, preferences: preferences, favorites: favorites, onChoose: { [weak self] window in
+        panel.contentView = NSHostingView(rootView: SwitcherView(model: model, previews: previews, onChoose: { [weak self] window in
             self?.selection.select(window.id)
             self?.commit()
-        }, onMinimize: { [weak self] window in
-            self?.windowService.minimize(window)
-        }, onClose: { [weak self] window in
-            self?.windowService.close(window)
         }))
         panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.midX - width / 2, y: screen.visibleFrame.midY - size.height / 2))
         self.panel = panel
@@ -207,6 +234,7 @@ private final class SwitcherPanel: NSPanel {
         guard isVisible else { return }
         isVisible = false
         generation += 1
+        pendingAdvances = 0
         flagsTimer?.invalidate(); flagsTimer = nil
         refreshTimer?.invalidate(); refreshTimer = nil
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
@@ -232,129 +260,123 @@ private final class SwitcherPanel: NSPanel {
 private struct SwitcherView: View {
     @ObservedObject var model: SwitcherModel
     @ObservedObject var previews: PreviewService
-    @ObservedObject var preferences: Preferences
-    @ObservedObject var favorites: FavoriteWindowStore
     var onChoose: (WindowRecord) -> Void
-    var onMinimize: (WindowRecord) -> Void
-    var onClose: (WindowRecord) -> Void
+    @AppStorage("animationsEnabled") private var animationsEnabled = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("Pencereler").font(.system(size: 15, weight: .semibold))
-                Text("\(model.windows.count)").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-                if preferences.groupedWindowsEnabled {
-                    Text(groupedSummary).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                if let selected = model.windows.firstIndex(where: { $0.id == model.selectedID }), !model.windows.isEmpty {
-                    Text("\(selected + 1) / \(model.windows.count)").font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
-                }
-            }.padding(.horizontal, 4)
+        VStack(spacing: 9) {
             if model.isLoading {
-                HStack { Spacer(); ProgressView("Pencereler yükleniyor…"); Spacer() }.frame(maxHeight: .infinity)
+                ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let message = model.message {
-                VStack(spacing: 10) {
-                    Image(systemName: "macwindow").font(.system(size: 28)).foregroundStyle(.secondary)
-                    Text(message).font(.system(size: 13)).multilineTextAlignment(.center)
-                    Text("Erişilebilirlik iznini MacB ayarlarından kontrol edebilirsin.").font(.system(size: 11)).foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                if let selectedWindow = model.selectedWindow {
-                    SelectedWindowPreviewView(window: selectedWindow, previews: previews)
-                        .transition(.opacity.combined(with: .scale(scale: 0.985)))
-                }
-                HStack(spacing: 12) {
+                Label(message, systemImage: "macwindow")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let selected = model.selectedWindow {
+                selectionHeader(selected)
+                HStack(spacing: 9) {
                     ForEach(model.visibleWindows) { window in
-                        WindowCardView(window: window, previewService: previews, isSelected: window.id == model.selectedID,
-                                       isFavorite: favorites.isFavorite(window),
-                                       onSelect: { onChoose(window) }, onMinimize: { onMinimize(window) }, onClose: { onClose(window) },
-                                       onToggleFavorite: { favorites.toggle(window) })
-                            .accessibilityAddTraits(window.id == model.selectedID ? .isSelected : [])
+                        SwitcherWindowCard(window: window, selected: window.id == model.selectedID,
+                            position: (model.windows.firstIndex { $0.id == window.id } ?? 0) + 1,
+                            total: model.windows.count, previews: previews) {
+                            onChoose(window)
+                        }
                     }
-                    Spacer(minLength: 0)
                 }
-                .frame(maxWidth: .infinity)
-                HStack(spacing: 16) {
-                    keyboardHint("⇥", "Sonraki")
-                    keyboardHint("⇧ ⇥", "Önceki")
-                    Spacer()
-                    keyboardHint("esc", "Vazgeç")
-                }.padding(.horizontal, 4)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(18)
+        .padding(13)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: MacBDesign.corner + 4))
-        .overlay(RoundedRectangle(cornerRadius: MacBDesign.corner + 4).strokeBorder(.white.opacity(0.09)))
-        .environment(\.colorScheme, .dark)
+        .background {
+            if reduceTransparency {
+                RoundedRectangle(cornerRadius: MacBDesign.Radius.panel).fill(MacBDesign.surface)
+            } else {
+                RoundedRectangle(cornerRadius: MacBDesign.Radius.panel).fill(.regularMaterial)
+            }
+        }
+        .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.panel).strokeBorder(MacBDesign.separator, lineWidth: 0.5))
+        .animation(animationsEnabled && !reduceMotion ? .easeOut(duration: 0.13) : nil, value: model.selectedID)
     }
 
-    private func keyboardHint(_ key: String, _ label: String) -> some View {
-        HStack(spacing: 5) {
-            Text(key).font(.system(size: 10, weight: .medium)).padding(.horizontal, 5).padding(.vertical, 3)
-                .background(.white.opacity(0.065), in: RoundedRectangle(cornerRadius: 4))
-            Text(label).font(.system(size: 10))
-        }.foregroundStyle(.secondary).accessibilityElement(children: .combine)
+    private func selectionHeader(_ window: WindowRecord) -> some View {
+        HStack(spacing: 8) {
+            if let icon = window.appIcon {
+                Image(nsImage: icon).resizable().frame(width: 20, height: 20).accessibilityHidden(true)
+            }
+            Text(window.appName).font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
+            if !titlesMatch(window.appName, window.title) {
+                Text(window.title).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Text("\(model.selectedIndex + 1) / \(model.windows.count)")
+                .font(.system(size: 9, weight: .semibold, design: .rounded)).monospacedDigit()
+                .foregroundStyle(.tertiary)
+        }
+        .frame(height: 22)
+        .padding(.horizontal, 2)
     }
 
-    private var groupedSummary: String {
-        let count = Set(model.windows.map(\.appName)).count
-        return "\(count) uygulama"
+    private func titlesMatch(_ left: String, _ right: String) -> Bool {
+        left.compare(right, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
     }
-
 }
 
-private struct SelectedWindowPreviewView: View {
+private struct SwitcherWindowCard: View {
     let window: WindowRecord
+    let selected: Bool
+    let position: Int
+    let total: Int
     @ObservedObject var previews: PreviewService
+    let action: () -> Void
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            if let image = previews.images[window.id] {
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.black.opacity(0.22))
-            } else {
-                WindowPreviewPlaceholder(window: window)
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 6) {
+                ZStack(alignment: .bottomLeading) {
+                    if let image = previews.images[window.id] {
+                        Image(nsImage: image).resizable().scaledToFit()
+                    } else {
+                        WindowPreviewPlaceholder(window: window, compact: true)
+                    }
+                    LinearGradient(colors: [.clear, .black.opacity(0.42)], startPoint: .center, endPoint: .bottom)
+                        .allowsHitTesting(false)
+                    if let icon = window.appIcon {
+                        Image(nsImage: icon).resizable().frame(width: 20, height: 20)
+                            .shadow(color: .black.opacity(0.5), radius: 3, y: 1).padding(7).accessibilityHidden(true)
+                    }
+                    if window.isMinimized || previews.staleIDs.contains(window.id) {
+                        HStack {
+                            Spacer()
+                            Image(systemName: window.isMinimized ? "minus.circle.fill" : "clock.fill")
+                                .font(.system(size: 10)).padding(7)
+                        }.foregroundStyle(.white.opacity(0.78))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(MacBDesign.controlBackground)
+                .clipShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.control))
+
+                Text(window.title)
+                    .font(.system(size: 10.5, weight: selected ? .semibold : .medium))
+                    .foregroundStyle(selected ? .primary : .secondary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 2)
             }
-            LinearGradient(colors: [.clear, .black.opacity(0.58)], startPoint: .center, endPoint: .bottom)
-                .allowsHitTesting(false)
-            HStack(spacing: 10) {
-                if let icon = window.appIcon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .frame(width: 28, height: 28)
-                        .accessibilityHidden(true)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(window.appName)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .lineLimit(1)
-                    Text(window.title)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                }
-                Spacer()
-                if window.isMinimized || previews.staleIDs.contains(window.id) {
-                    Text(window.isMinimized ? "Küçültülmüş" : "Son görüntü")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.78))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 5)
-                        .background(.white.opacity(0.09), in: Capsule())
-                }
-            }
-            .padding(14)
+            .padding(6)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(selected ? MacBDesign.selectedBackground.opacity(0.55) : MacBDesign.controlBackground.opacity(0.45),
+                        in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
+            .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card)
+                .strokeBorder(selected ? MacBDesign.focusRing : MacBDesign.separator, lineWidth: selected ? 2 : 0.5))
+            .contentShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
         }
-        .frame(height: 190)
-        .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(MacBDesign.accent.opacity(0.42), lineWidth: 1))
-        .accessibilityLabel("\(window.appName), \(window.title), seçili pencere önizlemesi")
+        .buttonStyle(.plain)
+        .help("\(window.appName) — \(window.title)")
+        .accessibilityLabel("\(window.appName), \(window.title), \(position) / \(total)")
+        .accessibilityHint(selected ? "Seçili pencere" : "Bu pencereye geç")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
