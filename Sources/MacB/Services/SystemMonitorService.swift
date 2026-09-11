@@ -17,19 +17,45 @@ struct SystemSnapshot: Equatable {
 /// A read-only system overview. It intentionally does not access SMC or control fans.
 @MainActor final class SystemMonitorService: ObservableObject {
     @Published private(set) var snapshot = SystemSnapshot()
+    /// The last readings, oldest first, for the widget's running line.
+    ///
+    /// A number tells you the load right now; the line tells you whether it has
+    /// been like that all along, which is the question people actually have.
+    @Published private(set) var cpuHistory: [Double] = []
+    @Published private(set) var memoryHistory: [Double] = []
+
+    static let historyLength = 32
+
     private var timer: Timer?
+    private var interval: TimeInterval = 8
     private var previousTicks: (used: UInt64, total: UInt64)?
 
     func start() {
         guard timer == nil else { return }
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
-        timer?.tolerance = 1.5
+        schedule()
     }
 
     func stop() { timer?.invalidate(); timer = nil }
+
+    /// Samples every couple of seconds while the panel is open and backs off to
+    /// every eight when it is not. A line that only moves once a minute is not a
+    /// line, and polling that fast with nothing on screen is waste.
+    func setFastSampling(_ fast: Bool) {
+        let wanted: TimeInterval = fast ? 2 : 8
+        guard wanted != interval else { return }
+        interval = wanted
+        guard timer != nil else { return }
+        schedule()
+    }
+
+    private func schedule() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
+        }
+        timer?.tolerance = interval / 5
+    }
 
     func refresh() {
         let ticks = Self.cpuTicks()
@@ -41,6 +67,13 @@ struct SystemSnapshot: Equatable {
         }
         previousTicks = ticks
         snapshot = next
+        append(&cpuHistory, next.cpuUsage / 100)
+        append(&memoryHistory, next.totalMemory == 0 ? 0 : Double(next.usedMemory) / Double(next.totalMemory))
+    }
+
+    private func append(_ series: inout [Double], _ value: Double) {
+        series.append(min(1, max(0, value)))
+        if series.count > Self.historyLength { series.removeFirst(series.count - Self.historyLength) }
     }
 
     private nonisolated static func cpuTicks() -> (used: UInt64, total: UInt64) {

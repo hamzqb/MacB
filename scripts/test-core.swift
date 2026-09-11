@@ -759,6 +759,55 @@ struct CoreTestRunner {
                 try expect(CacheSweepRules.group(forCacheName: "SomeThing", default: .logs) == .logs,
                            "An unknown folder ignored the caller's fallback")
             }),
+            ("ProcessRanking: a helper is credited to the application it belongs to", {
+                let helper = "/Applications/Google Chrome.app/Contents/Frameworks/Chrome Framework.framework/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)"
+                try expect(ProcessRanking.bundlePath(forExecutablePath: helper) == "/Applications/Google Chrome.app",
+                           "The innermost helper bundle won over the application")
+                try expect(ProcessRanking.groupKey(forExecutablePath: helper, name: "Google Chrome H") == "Google Chrome",
+                           "A helper was listed on its own")
+                try expect(ProcessRanking.bundlePath(forExecutablePath: "/usr/libexec/fileproviderd") == nil,
+                           "A daemon was given a bundle")
+                try expect(ProcessRanking.groupKey(forExecutablePath: "/usr/libexec/com.apple.someverylongdaemon",
+                                                   name: "com.apple.somev") == "com.apple.someverylongdaemon",
+                           "The truncated kernel name won over the path")
+                try expect(ProcessRanking.groupKey(forExecutablePath: "", name: "kernel_task") == "kernel_task",
+                           "A process with no path lost its name")
+            }),
+            ("ProcessRanking: memory is summed and processor time is a rate", {
+                let chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+                let helper = "/Applications/Google Chrome.app/Contents/Helpers/Renderer.app/Contents/MacOS/Renderer"
+                let samples = [
+                    ProcessSample(pid: 1, path: chrome, name: "Google Chrome",
+                                  residentBytes: 400_000_000, cpuTimeNanos: 3_000_000_000),
+                    ProcessSample(pid: 2, path: helper, name: "Renderer",
+                                  residentBytes: 600_000_000, cpuTimeNanos: 2_000_000_000)
+                ]
+                let usage = ProcessRanking.usage(current: samples,
+                                                 previous: [1: 2_000_000_000, 2: 2_000_000_000],
+                                                 elapsed: 2)
+                guard let group = usage.first, usage.count == 1 else {
+                    throw TestFailure(description: "Helpers were not folded into the application")
+                }
+                try expect(group.memoryBytes == 1_000_000_000, "Memory was not summed")
+                try expect(group.processCount == 2, "The process count was wrong")
+                try expect(abs(group.cpuPercent - 50) < 0.01, "One core-second over two seconds was not half a core")
+                try expect(group.leadPID == 2, "The heaviest process was not the one named")
+                let fresh = ProcessRanking.usage(current: [samples[0]], previous: [:], elapsed: 2)
+                try expect(fresh.first?.cpuPercent == 0,
+                           "A process seen once reported its whole lifetime as recent work")
+            }),
+            ("ProcessRanking: the two orderings answer two different questions", {
+                let hungry = ProcessUsage(name: "Hungry", memoryBytes: 900, cpuPercent: 1,
+                                          processCount: 1, leadPID: 1)
+                let busy = ProcessUsage(name: "Busy", memoryBytes: 100, cpuPercent: 90,
+                                        processCount: 1, leadPID: 2)
+                try expect(ProcessRanking.topByMemory([busy, hungry], limit: 2).first?.name == "Hungry",
+                           "The memory list was not ordered by memory")
+                try expect(ProcessRanking.topByCPU([hungry, busy], limit: 2).first?.name == "Busy",
+                           "The processor list was not ordered by processor")
+                try expect(ProcessRanking.topByCPU([busy, hungry], limit: 0).isEmpty,
+                           "A limit of zero still returned rows")
+            }),
             ("FaceEmbedding: a template is the normalised mean, not the loudest sample", {
                 let quiet: [Float] = [1, 0, 0]
                 let loud: [Float] = [0, 900, 0]

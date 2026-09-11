@@ -41,6 +41,7 @@ struct SettingsView: View {
     @ObservedObject var utilities: UtilityCoordinator
     @ObservedObject var aiActivity: AIActivityService
     @ObservedObject var systemMonitor: SystemMonitorService
+    @ObservedObject var processes: ProcessMonitorService
     @ObservedObject var keyboardCleaning: KeyboardCleaningService
     @ObservedObject var updates: UpdateService
     @ObservedObject var widgets: IslandLayoutStore
@@ -52,6 +53,7 @@ struct SettingsView: View {
     @AppStorage("settingsPage") private var selectedPage: SettingsPage = .general
     @State private var showRemovalConfirmation = false
     @State private var showCacheConfirmation = false
+    @State private var processSort: ProcessSort = .memory
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -238,6 +240,29 @@ struct SettingsView: View {
                     }
                     .padding(12)
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            section("Kaynak kullanımı") {
+                Text("Belleği ve işlemciyi en çok kim kullanıyor. Yardımcı süreçler kendi uygulamalarının altında toplanır.")
+                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Picker("", selection: $processSort) {
+                    Text("Bellek").tag(ProcessSort.memory)
+                    Text("İşlemci").tag(ProcessSort.cpu)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 220)
+                VStack(spacing: 0) {
+                    ForEach(processSort == .memory ? processes.byMemory : processes.byCPU) { usage in
+                        processRow(usage)
+                    }
+                }
+                .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                HStack(spacing: 9) {
+                    Button("Yenile", action: processes.refresh)
+                    Text("Her 6 saniyede bir kendiliğinden yenilenir.")
+                        .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
                 }
             }
             section("Önbellek temizliği") {
@@ -621,6 +646,38 @@ struct SettingsView: View {
 
     private static let cacheAnchor = "cache-review"
 
+    private func processRow(_ usage: ProcessUsage) -> some View {
+        HStack(spacing: 9) {
+            if let icon = processes.icon(for: usage) {
+                Image(nsImage: icon).resizable().frame(width: 18, height: 18)
+            } else {
+                Image(systemName: "gearshape").font(.system(size: 12))
+                    .foregroundStyle(MacBDesign.muted).frame(width: 18)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(usage.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                if usage.processCount > 1 {
+                    Text("\(usage.processCount) süreç")
+                        .font(.system(size: 10)).foregroundStyle(MacBDesign.muted)
+                }
+            }
+            Spacer(minLength: 8)
+            Text("\(usage.cpuPercent, specifier: "%.1f")%")
+                .font(.system(size: 11)).monospacedDigit()
+                .foregroundStyle(MacBDesign.muted)
+                .frame(width: 52, alignment: .trailing)
+            Text(ByteCountFormatter.string(fromByteCount: Int64(usage.memoryBytes), countStyle: .memory))
+                .font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                .frame(width: 76, alignment: .trailing)
+            // Only a real application is ever asked to quit, and it is asked the
+            // way the Dock asks: unsaved work still gets to object.
+            Button("Kapat") { processes.quit(usage) }
+                .disabled(!processes.canQuit(usage))
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 7)
+    }
+
     private var cacheHeader: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Geri kazanılabilir alan").font(.system(size: 13, weight: .semibold))
@@ -979,4 +1036,9 @@ struct SettingsView: View {
             .foregroundStyle(warning ? Color(nsColor: .systemOrange) : MacBDesign.muted)
             .fixedSize(horizontal: false, vertical: true)
     }
+}
+
+/// Which column the resource list is ordered by.
+enum ProcessSort: String, CaseIterable {
+    case memory, cpu
 }

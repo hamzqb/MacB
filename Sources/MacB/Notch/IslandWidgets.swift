@@ -10,6 +10,7 @@ struct IslandWidgetStrip: View {
     @ObservedObject var clipboard: ClipboardShelfStore
     @ObservedObject var aiActivity: AIActivityService
     @ObservedObject var systemMonitor: SystemMonitorService
+    @ObservedObject var processes: ProcessMonitorService
     @ObservedObject var recentFiles: RecentFileStore
     @ObservedObject var tasks: TaskStore
     @ObservedObject var launcher: AppLauncherStore
@@ -42,27 +43,57 @@ struct IslandWidgetStrip: View {
             ForEach(Array(store.rows(columns: columns).enumerated()), id: \.offset) { _, row in
                 HStack(spacing: IslandGeometry.gap) {
                     ForEach(row.widgets) { widget in
-                        widgetBody(widget)
-                            .environment(\.islandWidgetSpan, widget.size.columns)
-                            // While editing, the card is a thing being arranged
-                            // rather than a thing being used: its own button
-                            // would otherwise swallow the size and remove taps
-                            // that sit on top of it.
-                            .allowsHitTesting(!store.isEditing)
-                            .frame(width: IslandGeometry.widgetWidth(columnWidth: columnWidth, span: widget.size.columns),
-                                   height: IslandGeometry.widgetHeight)
-                            .clipShape(RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous))
-                            .overlay(editingOverlay(widget))
-                            .opacity(dragging == widget.id ? 0.4 : 1)
-                            .onDrag {
-                                dragging = widget.id
-                                return NSItemProvider(object: widget.id.uuidString as NSString)
-                            }
-                            .onDrop(of: [.text], delegate: WidgetDropDelegate(target: widget, store: store, dragging: $dragging))
+                        widgetCard(widget)
                     }
                     Spacer(minLength: 0)
                 }
             }
+        }
+    }
+
+    /// One card in the strip.
+    ///
+    /// Rearranging is attached only while editing. A SwiftUI drag gesture claims
+    /// the press before any button inside the view can act on it, so a card that
+    /// is always draggable is a card whose own controls never fire: play, pause
+    /// and skip all looked dead for exactly this reason.
+    @ViewBuilder private func widgetCard(_ widget: IslandWidget) -> some View {
+        let card = widgetBody(widget)
+            .environment(\.islandWidgetSpan, widget.size.columns)
+            // While editing, the card is a thing being arranged rather than a
+            // thing being used: its own button would otherwise swallow the size
+            // and remove taps that sit on top of it.
+            .allowsHitTesting(!store.isEditing)
+            .frame(width: IslandGeometry.widgetWidth(columnWidth: columnWidth, span: widget.size.columns),
+                   height: IslandGeometry.widgetHeight)
+            .clipShape(RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous))
+            // Depth, applied in one place so every widget reads as the same
+            // material: a light fall from the top edge and a rim that is bright
+            // where light would land and dark where it would not.
+            .overlay {
+                RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
+                    .fill(LinearGradient(colors: [.white.opacity(0.07), .clear],
+                                         startPoint: .top, endPoint: .center))
+                    .allowsHitTesting(false)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.04)],
+                                                 startPoint: .top, endPoint: .bottom),
+                                  lineWidth: 0.8)
+                    .allowsHitTesting(false)
+            }
+            .overlay(editingOverlay(widget))
+            .opacity(dragging == widget.id ? 0.4 : 1)
+        if store.isEditing {
+            card
+                .onDrag {
+                    dragging = widget.id
+                    return NSItemProvider(object: widget.id.uuidString as NSString)
+                }
+                .onDrop(of: [.text], delegate: WidgetDropDelegate(target: widget, store: store, dragging: $dragging))
+        } else {
+            card
         }
     }
 
@@ -83,6 +114,7 @@ struct IslandWidgetStrip: View {
         case .shelf: ShelfWidget(shelf: shelf, open: { select(.files) })
         case .notes: NotesWidget(note: note)
         case .worldClock: WorldClockWidget(preferences: preferences)
+        case .topProcesses: TopProcessesWidget(processes: processes)
         }
     }
 
@@ -236,104 +268,117 @@ struct WidgetCard<Content: View>: View {
     }
 }
 
+/// The card for whatever is playing.
+///
+/// Every style shows the cover, the track and a transport that works. The four
+/// styles differ in how the cover is used — as the whole card, as a frosted
+/// backdrop, as a tile or as a record — and never in whether the controls exist.
 struct MediaWidget: View {
     @ObservedObject var media: MediaService
     let style: MediaWidgetStyle
     var notify: (String, String) -> Void
+    @Environment(\.islandWidgetSpan) private var span
 
     private var isLive: Bool { media.isPlaying || media.isRunning }
+    /// The browser exposes play and pause through the page, and nothing else:
+    /// offering skip buttons that cannot work is worse than not offering them.
+    private var hasSkip: Bool { media.source != .browser }
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                if let artwork = media.artwork, style != .compact && style != .record {
-                    Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
-                    LinearGradient(colors: [.black.opacity(style == .glass ? 0.68 : 0.5), .black.opacity(0.1), .black.opacity(0.82)],
-                                   startPoint: .top, endPoint: .bottom)
-                } else {
-                    MacBDesign.IslandToken.widgetFill
-                }
-                if isLive {
-                    if proxy.size.width < 205 { compactPlaying }
-                    else if style == .record { recordPlaying }
-                    else { playing }
-                } else { idle }
+                // A cover scaled to fill is larger than the card, and a ZStack
+                // sizes itself to its biggest child. Pinning both layers to the
+                // measured card keeps the text where it was drawn instead of
+                // centring it on the artwork and clipping it away.
+                background
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+                content(width: proxy.size.width)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
             }
         }
     }
 
-    private var compactPlaying: some View {
+    @ViewBuilder private func content(width: CGFloat) -> some View {
+        if !isLive { idle }
+        else if width < 210 { compact }
+        else if style == .record { record }
+        else { full }
+    }
+
+    // MARK: - Background
+
+    @ViewBuilder private var background: some View {
+        switch style {
+        case .artwork:
+            if let artwork = media.artwork, isLive {
+                Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
+                // The cover is the card, so the text needs its own ground: a
+                // soft band at the top for the artist and a deeper one at the
+                // bottom where the transport sits.
+                LinearGradient(stops: [.init(color: .black.opacity(0.55), location: 0),
+                                       .init(color: .black.opacity(0.15), location: 0.42),
+                                       .init(color: .black.opacity(0.88), location: 1)],
+                               startPoint: .top, endPoint: .bottom)
+            } else {
+                MacBDesign.IslandToken.widgetFill
+            }
+        case .glass:
+            if let artwork = media.artwork, isLive {
+                Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
+                    .blur(radius: 34, opaque: true)
+                    .overlay(Color.black.opacity(0.42))
+            } else {
+                MacBDesign.IslandToken.widgetFill
+            }
+        case .compact, .record:
+            MacBDesign.IslandToken.widgetFill
+        }
+    }
+
+    // MARK: - Layouts
+
+    /// One unit wide. The track on top, the transport under it.
+    ///
+    /// Side by side there is no room for three buttons next to a cover and two
+    /// lines of text, and skip is the control people reach for most.
+    private var compact: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(media.source.title)
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(MacBDesign.IslandToken.secondaryText)
-                .lineLimit(1)
-            Spacer(minLength: 5)
-            HStack(alignment: .bottom, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(media.title.isEmpty ? media.source.title : media.title)
-                        .font(.system(size: 14, weight: .bold)).lineLimit(1)
-                    if !media.artist.isEmpty {
-                        Text(media.artist).font(.system(size: 10))
-                            .foregroundStyle(MacBDesign.IslandToken.secondaryText).lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 0)
-                Button(action: media.playPause) {
-                    Image(systemName: media.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .frame(width: 28, height: 28)
-                        .background(.white.opacity(0.16), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(media.isPlaying ? "Duraklat" : "Oynat")
-            }
-        }
-        .padding(14)
-    }
-
-    private var recordPlaying: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                Circle().fill(Color.black)
-                ForEach([0.72, 0.48], id: \.self) { scale in
-                    Circle().stroke(.white.opacity(0.14), lineWidth: 1).scaleEffect(scale)
-                }
-                if let artwork = media.artwork {
-                    Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
-                        .clipShape(Circle()).padding(19)
-                } else { Circle().fill(.orange).padding(24) }
-            }
-            .aspectRatio(1, contentMode: .fit)
-            VStack(alignment: .leading, spacing: 5) {
-                Text(media.title).font(.system(size: 14, weight: .bold)).lineLimit(2)
-                Text(media.artist.isEmpty ? media.source.title : media.artist)
-                    .font(.system(size: 10)).foregroundStyle(MacBDesign.IslandToken.secondaryText).lineLimit(1)
-                Spacer(minLength: 0)
-                HStack(spacing: 18) {
-                    control("backward.fill", "Önceki", size: 10, action: media.previousTrack)
-                    control(media.isPlaying ? "pause.fill" : "play.fill", "Oynat veya duraklat", size: 13, action: media.playPause)
-                    control("forward.fill", "Sonraki", size: 10, action: media.nextTrack)
-                }
-            }
-            .padding(.vertical, 13)
-        }
-        .padding(12)
-    }
-
-    private var playing: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 8) {
+            HStack(spacing: 7) {
+                // With the cover already filling the card, a second copy of it
+                // is just a smaller hole in the artwork.
+                if style != .artwork { cover(size: 26, radius: 6) }
                 VStack(alignment: .leading, spacing: 0) {
+                    Text(media.title.isEmpty ? media.source.title : media.title)
+                        .font(.system(size: 11, weight: .bold))
+                        .lineLimit(1).minimumScaleFactor(0.8)
                     Text(media.artist.isEmpty ? media.source.title : media.artist)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 9))
+                        .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                }
+                Spacer(minLength: 0)
+            }
+            Spacer(minLength: 2)
+            transport(glyph: 10, diameter: 24, spacing: 9)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+    }
+
+    private var full: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                if style != .artwork { cover(size: 38, radius: 9) }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(media.title.isEmpty ? media.source.title : media.title)
+                        .font(.system(size: 14, weight: .bold))
+                        .lineLimit(1).minimumScaleFactor(0.85)
+                    Text(media.artist.isEmpty ? media.source.title : media.artist)
+                        .font(.system(size: 10))
+                        .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         .lineLimit(1)
-                    if !media.artist.isEmpty {
-                        Text(media.source.title)
-                            .font(.system(size: 9))
-                            .foregroundStyle(MacBDesign.IslandToken.secondaryText)
-                            .lineLimit(1)
-                    }
                 }
                 Spacer(minLength: 0)
                 Image(systemName: media.source.symbol)
@@ -341,27 +386,32 @@ struct MediaWidget: View {
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                     .accessibilityHidden(true)
             }
-            Spacer(minLength: 2)
-            Text(media.title.isEmpty ? media.source.title : media.title)
-                .font(.system(size: 15, weight: .bold))
-                .lineLimit(1)
-            if media.duration > 0 { progress } else { Spacer().frame(height: 5) }
-            HStack(spacing: 22) {
-                Spacer(minLength: 0)
-                if media.source != .browser {
-                    control("backward.fill", "Önceki", size: 11, action: media.previousTrack)
-                }
-                control(media.isPlaying ? "pause.fill" : "play.fill",
-                        media.isPlaying ? "Duraklat" : "Oynat", size: 14, action: media.playPause)
-                if media.source != .browser {
-                    control("forward.fill", "Sonraki", size: 11, action: media.nextTrack)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.top, 6)
+            Spacer(minLength: 4)
+            if media.duration > 0 { progress }
+            transport(glyph: 12, diameter: 30, spacing: 20)
+                .padding(.top, media.duration > 0 ? 5 : 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    private var record: some View {
+        HStack(spacing: 12) {
+            vinyl
+            VStack(alignment: .leading, spacing: 3) {
+                Text(media.title.isEmpty ? media.source.title : media.title)
+                    .font(.system(size: 13, weight: .bold))
+                    .lineLimit(1).minimumScaleFactor(0.85)
+                Text(media.artist.isEmpty ? media.source.title : media.artist)
+                    .font(.system(size: 10))
+                    .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                transport(glyph: 11, diameter: 28, spacing: 16, alignment: .leading)
+            }
+            .padding(.vertical, 12)
+        }
+        .padding(.horizontal, 12)
     }
 
     /// Nothing is playing. A quiet single line beats an empty transport that does nothing.
@@ -379,18 +429,101 @@ struct MediaWidget: View {
         .padding(14)
     }
 
-    /// Elapsed and remaining sit above the line, the way a player prints them,
-    /// so the bar itself stays the widest uninterrupted element in the card.
+    // MARK: - Pieces
+
+    /// The cover, or a placeholder that still reads as a cover rather than a hole.
+    @ViewBuilder private func cover(size: CGFloat, radius: CGFloat) -> some View {
+        Group {
+            if let artwork = media.artwork {
+                Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                ZStack {
+                    MacBDesign.IslandToken.widgetActiveFill
+                    Image(systemName: media.source.symbol)
+                        .font(.system(size: size * 0.4, weight: .semibold))
+                        .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .strokeBorder(.white.opacity(0.14), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
+        .accessibilityHidden(true)
+    }
+
+    /// The record style turns the cover into the label of a spinning disc. It
+    /// only spins while something is actually playing, so a paused track reads
+    /// as paused without looking at the button.
+    private var vinyl: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !media.isPlaying)) { context in
+            let angle = media.isPlaying
+                ? Angle(degrees: context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 6) * 60)
+                : .zero
+            ZStack {
+                Circle().fill(Color.black)
+                ForEach([0.74, 0.52], id: \.self) { scale in
+                    Circle().stroke(.white.opacity(0.13), lineWidth: 1).scaleEffect(scale)
+                }
+                Group {
+                    if let artwork = media.artwork {
+                        Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
+                    } else {
+                        MacBDesign.IslandToken.accent
+                    }
+                }
+                .clipShape(Circle())
+                .padding(20)
+                .rotationEffect(angle)
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .accessibilityHidden(true)
+    }
+
+    private func transport(glyph: CGFloat, diameter: CGFloat, spacing: CGFloat,
+                           alignment: HorizontalAlignment = .center) -> some View {
+        HStack(spacing: spacing) {
+            if alignment == .center { Spacer(minLength: 0) }
+            if hasSkip { control("backward.fill", "Önceki", size: glyph, action: media.previousTrack) }
+            playButton(diameter: diameter, glyph: glyph + 1)
+            if hasSkip { control("forward.fill", "Sonraki", size: glyph, action: media.nextTrack) }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func playButton(diameter: CGFloat, glyph: CGFloat) -> some View {
+        Button(action: media.playPause) {
+            Image(systemName: media.isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: glyph, weight: .bold))
+                .foregroundStyle(MacBDesign.IslandToken.primaryText)
+                .frame(width: diameter, height: diameter)
+                // The button sits on album art as often as on black, so it
+                // carries its own contrast rather than borrowing the card's.
+                .background(.black.opacity(0.38), in: Circle())
+                .background(.white.opacity(0.22), in: Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 0.5))
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(media.isPlaying ? "Duraklat" : "Oynat")
+    }
+
+    /// The bar alone at narrow widths; the times join it once there is room,
+    /// because a clipped timestamp is worse than no timestamp.
     private var progress: some View {
         VStack(spacing: 3) {
-            HStack {
-                Text(TimerService.format(media.position))
-                Spacer(minLength: 6)
-                Text("-" + TimerService.format(max(0, media.duration - media.position)))
+            if span >= 3 {
+                HStack {
+                    Text(TimerService.format(media.position))
+                    Spacer(minLength: 6)
+                    Text("-" + TimerService.format(max(0, media.duration - media.position)))
+                }
+                .font(.system(size: 9))
+                .monospacedDigit()
+                .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             }
-            .font(.system(size: 9))
-            .monospacedDigit()
-            .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.white.opacity(0.25))
@@ -400,7 +533,6 @@ struct MediaWidget: View {
             }
             .frame(height: 2)
         }
-        .padding(.top, 5)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(TimerService.format(media.position)) geçti, \(TimerService.format(max(0, media.duration - media.position))) kaldı")
     }
@@ -408,7 +540,12 @@ struct MediaWidget: View {
     private func control(_ symbol: String, _ label: String, size: CGFloat,
                          action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: size, weight: .semibold))
+            Image(systemName: symbol)
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(MacBDesign.IslandToken.primaryText)
+                .shadow(color: .black.opacity(0.5), radius: 2)
+                .frame(width: size + 10, height: size + 10)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .help(label)
@@ -697,14 +834,21 @@ struct AssistantWidget: View {
 
 struct SystemStatsWidget: View {
     @ObservedObject var monitor: SystemMonitorService
+    @Environment(\.islandWidgetSpan) private var span
 
     var body: some View {
         WidgetCard {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 5) {
                 WidgetCaption("Sistem")
                 row("CPU", "\(Int(monitor.snapshot.cpuUsage))%")
+                Sparkline(values: monitor.cpuHistory, tint: MacBDesign.IslandToken.accent)
+                    .frame(height: span >= 2 ? 16 : 12)
                 row("RAM", ratio(monitor.snapshot.usedMemory, monitor.snapshot.totalMemory))
-                if let battery = monitor.snapshot.batteryPercent {
+                if span >= 2 {
+                    Sparkline(values: monitor.memoryHistory, tint: Color(nsColor: .systemTeal))
+                        .frame(height: 16)
+                }
+                if let battery = monitor.snapshot.batteryPercent, span >= 2 {
                     row("Pil", "\(Int(battery))%")
                 }
                 Spacer(minLength: 0)
@@ -826,5 +970,118 @@ struct RecentFilesWidget: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Son dosyalar")
+    }
+}
+
+/// What is actually costing the machine something.
+///
+/// Helpers are folded back into their application, because "Chrome, 2,9 GB,
+/// twenty processes" is a sentence somebody can act on and twenty rows of
+/// "Google Chrome Helper" is not.
+struct TopProcessesWidget: View {
+    @ObservedObject var processes: ProcessMonitorService
+    @Environment(\.islandWidgetSpan) private var span
+
+    private var rows: Int { span >= 4 ? 4 : (span >= 2 ? 3 : 2) }
+
+    var body: some View {
+        WidgetCard {
+            VStack(alignment: .leading, spacing: 0) {
+                WidgetCaption("Kaynak", trailing: span >= 2 ? "RAM" : nil)
+                Spacer(minLength: 3)
+                if processes.byMemory.isEmpty {
+                    Text("Ölçülüyor…")
+                        .font(.system(size: 11))
+                        .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
+                    Spacer(minLength: 0)
+                } else {
+                    VStack(spacing: 3) {
+                        ForEach(processes.byMemory.prefix(rows)) { usage in
+                            row(usage)
+                        }
+                    }
+                }
+            }
+        }
+        .accessibilityLabel("En çok bellek kullananlar")
+    }
+
+    private func row(_ usage: ProcessUsage) -> some View {
+        HStack(spacing: 6) {
+            if let icon = processes.icon(for: usage) {
+                Image(nsImage: icon).resizable().frame(width: 13, height: 13)
+            } else {
+                Image(systemName: "gearshape")
+                    .font(.system(size: 9))
+                    .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
+                    .frame(width: 13)
+            }
+            Text(usage.name)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(MacBDesign.IslandToken.primaryText)
+                .lineLimit(1).minimumScaleFactor(0.8)
+            Spacer(minLength: 4)
+            if span >= 4, usage.cpuPercent >= 1 {
+                Text("\(Int(usage.cpuPercent))%")
+                    .font(.system(size: 10)).monospacedDigit()
+                    .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+            }
+            Text(ByteCountFormatter.string(fromByteCount: Int64(usage.memoryBytes), countStyle: .memory))
+                .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                .foregroundStyle(MacBDesign.IslandToken.primaryText)
+        }
+    }
+}
+
+/// A running line of recent readings, filled underneath.
+///
+/// No axes, no grid and no numbers: the value is already printed next to it, so
+/// the line only has to answer whether this is new or whether it has been like
+/// this for a while.
+struct Sparkline: View {
+    let values: [Double]
+    let tint: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            let points = positions(in: proxy.size)
+            ZStack {
+                if points.count >= 2 {
+                    // The fill first, so the stroke sits crisply on top of it.
+                    path(points, closingIn: proxy.size)
+                        .fill(LinearGradient(colors: [tint.opacity(0.35), tint.opacity(0.02)],
+                                             startPoint: .top, endPoint: .bottom))
+                    path(points, closingIn: nil)
+                        .stroke(tint, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+                } else {
+                    Capsule().fill(.white.opacity(0.08)).frame(height: 1.4)
+                        .frame(maxHeight: .infinity, alignment: .center)
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func positions(in size: CGSize) -> [CGPoint] {
+        guard values.count >= 2, size.width > 0, size.height > 0 else { return [] }
+        let step = size.width / CGFloat(values.count - 1)
+        // The line is always read against a full scale, so a quiet machine draws
+        // a flat line near the bottom rather than a dramatic one rescaled to noise.
+        return values.enumerated().map { index, value in
+            CGPoint(x: CGFloat(index) * step,
+                    y: size.height - CGFloat(min(1, max(0, value))) * size.height)
+        }
+    }
+
+    private func path(_ points: [CGPoint], closingIn size: CGSize?) -> Path {
+        var path = Path()
+        path.move(to: points[0])
+        for point in points.dropFirst() { path.addLine(to: point) }
+        if let size {
+            path.addLine(to: CGPoint(x: points[points.count - 1].x, y: size.height))
+            path.addLine(to: CGPoint(x: points[0].x, y: size.height))
+            path.closeSubpath()
+        }
+        return path
     }
 }

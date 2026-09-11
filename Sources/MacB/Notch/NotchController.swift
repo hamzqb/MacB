@@ -47,6 +47,7 @@ struct IslandToast: Equatable {
     private let recentTargets: RecentTargetStore
     private let aiActivity: AIActivityService
     private let systemMonitor: SystemMonitorService
+    private let processes: ProcessMonitorService
     private let keyboardCleaning: KeyboardCleaningService
     private let timer: TimerService
     private let widgets: IslandLayoutStore
@@ -83,7 +84,8 @@ struct IslandToast: Equatable {
          fileActivity: FileActivityStore, tasks: TaskStore,
          camera: CameraPreviewService, auth: BiometricAuthService,
          recentTargets: RecentTargetStore, aiActivity: AIActivityService,
-         systemMonitor: SystemMonitorService, keyboardCleaning: KeyboardCleaningService,
+         systemMonitor: SystemMonitorService, processes: ProcessMonitorService,
+         keyboardCleaning: KeyboardCleaningService,
          timer: TimerService, widgets: IslandLayoutStore, launcher: AppLauncherStore,
          background: IslandBackgroundStore, weather: WeatherService, note: QuickNoteStore,
          faceUnlock: FaceUnlockService,
@@ -94,7 +96,8 @@ struct IslandToast: Equatable {
         self.fileActivity = fileActivity
         self.tasks = tasks; self.camera = camera; self.auth = auth
         self.recentTargets = recentTargets; self.openSettings = openSettings
-        self.aiActivity = aiActivity; self.systemMonitor = systemMonitor; self.keyboardCleaning = keyboardCleaning
+        self.aiActivity = aiActivity; self.systemMonitor = systemMonitor
+        self.processes = processes; self.keyboardCleaning = keyboardCleaning
         self.timer = timer; self.widgets = widgets; self.launcher = launcher; self.background = background; self.weather = weather; self.note = note
         self.faceUnlock = faceUnlock
         self.systemEvents = systemEvents
@@ -113,6 +116,7 @@ struct IslandToast: Equatable {
             preferences: preferences, recentFiles: recentFiles, clipboard: clipboard,
             fileActivity: fileActivity, tasks: tasks, camera: camera, auth: auth,
             recentTargets: recentTargets, aiActivity: aiActivity, systemMonitor: systemMonitor,
+            processes: processes,
             keyboardCleaning: keyboardCleaning, timer: timer, widgets: widgets, launcher: launcher, background: background, weather: weather, note: note,
             faceUnlock: faceUnlock,
             open: { [weak self] in self?.openPanel() }, close: { [weak self] in self?.closePanel() },
@@ -589,6 +593,7 @@ struct IslandToast: Equatable {
         panel.ignoresMouseEvents = target.phase == .collapsed && collapsedIndicatorWidth() == 0
             && presentation.cameraHeight == 0
         media.setPanelVisible(state.isOpen && (state.content == .home || state.phase == .peek))
+        systemMonitor.setFastSampling(state.isOpen && state.content == .home)
         weather.setPanelVisible(state.isOpen && state.content == .home && widgets.isActive(.weather))
         guard target != presentation.layout || immediate else { return }
         animationTimer?.invalidate(); animationTimer = nil

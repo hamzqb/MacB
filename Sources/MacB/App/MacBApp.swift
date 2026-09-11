@@ -44,6 +44,48 @@ import MacBCore
             while !finished.isSet, RunLoop.current.run(mode: .default, before: .distantFuture) {}
             return
         }
+        // Reports what the media services can actually see and control, so a
+        // transport button that does nothing can be told apart from a missing
+        // Automation grant without guessing.
+        if CommandLine.arguments.contains("--media-probe") {
+            let spotify = SpotifyService()
+            let music = AppleMusicService()
+            let browser = BrowserMediaService()
+            let media = MediaService(spotify: spotify, appleMusic: music, browser: browser)
+            media.start()
+            media.setPanelVisible(true)
+            let deadline = Date().addingTimeInterval(5)
+            while Date() < deadline, RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2)) {}
+            print("source: \(media.source)  playing: \(media.isPlaying)  running: \(media.isRunning)")
+            print("title: \(media.title)  artist: \(media.artist)  artwork: \(media.artwork != nil)")
+            print("spotify authorized: \(spotify.isAuthorized)  error: \(spotify.errorMessage ?? "—")")
+            print("music authorized: \(music.isAuthorized)  error: \(music.errorMessage ?? "—")")
+            if CommandLine.arguments.contains("--toggle") {
+                media.playPause()
+                let until = Date().addingTimeInterval(3)
+                while Date() < until, RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2)) {}
+                print("after toggle — playing: \(media.isPlaying)  error: \(spotify.errorMessage ?? "—")")
+            }
+            return
+        }
+        if CommandLine.arguments.contains("--top-processes") {
+            let monitor = ProcessMonitorService()
+            monitor.refresh()
+            let deadline = Date().addingTimeInterval(4)
+            while Date() < deadline, RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2)) {}
+            monitor.refresh()
+            let second = Date().addingTimeInterval(3)
+            while Date() < second, RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2)) {}
+            print("— bellek —")
+            for item in monitor.byMemory {
+                print("  \(ByteCountFormatter.string(fromByteCount: Int64(item.memoryBytes), countStyle: .memory))\t\(item.cpuPercent)%\t\(item.name) (\(item.processCount))")
+            }
+            print("— işlemci —")
+            for item in monitor.byCPU {
+                print("  \(item.cpuPercent)%\t\(ByteCountFormatter.string(fromByteCount: Int64(item.memoryBytes), countStyle: .memory))\t\(item.name) (\(item.processCount))")
+            }
+            return
+        }
         if CommandLine.arguments.contains("--scan-caches") {
             let items = CacheSweepService().scan()
             let total = items.reduce(Int64(0)) { $0 + $1.size }
@@ -106,6 +148,7 @@ private final class Flag: @unchecked Sendable {
     private lazy var windowLayout = WindowLayoutService(preferences: preferences)
     private let aiActivity = AIActivityService()
     private let systemMonitor = SystemMonitorService()
+    private let processes = ProcessMonitorService()
     private let keyboardCleaning = KeyboardCleaningService()
     private let utilities = UtilityCoordinator()
     private let islandTimer = TimerService()
@@ -126,6 +169,7 @@ private final class Flag: @unchecked Sendable {
                                             fileActivity: fileActivity, tasks: tasks, camera: camera,
                                             auth: biometricAuth, recentTargets: recentTargets,
                                             aiActivity: aiActivity, systemMonitor: systemMonitor,
+                                            processes: processes,
                                             keyboardCleaning: keyboardCleaning,
                                             timer: islandTimer, widgets: widgetLayout, launcher: launcher,
                                             background: islandBackground, weather: weather,
@@ -186,6 +230,7 @@ private final class Flag: @unchecked Sendable {
         media.start()
         aiActivity.start()
         systemMonitor.start()
+        processes.start()
         applyPreferences()
         updates.$state.removeDuplicates().sink { [weak self] state in
             self?.refreshUpdateMenu(for: state)
@@ -210,8 +255,11 @@ private final class Flag: @unchecked Sendable {
         } else if CommandLine.arguments.contains("--preview-library") {
             widgetLayout.isEditing = true
             notch.showDevelopmentPreview(phase: .expanded, content: .home)
+        } else if CommandLine.arguments.contains("--preview-processes") {
+            UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
+            showSettings()
         } else if CommandLine.arguments.contains("--preview-widgets") {
-            for kind in [IslandWidgetKind.battery, .storage, .shelf, .notes, .worldClock] {
+            for kind in [IslandWidgetKind.battery, .storage, .shelf, .notes, .worldClock, .topProcesses] {
                 guard let widget = widgetLayout.layout.widgets.first(where: { $0.kind == kind }) else { continue }
                 widgetLayout.add(id: widget.id)
             }
@@ -357,7 +405,8 @@ private final class Flag: @unchecked Sendable {
     private func refreshSettingsContent() {
         settingsWindow?.contentView = NSHostingView(rootView: SettingsView(preferences: preferences, permissions: permissions,
             spotify: spotify, appleMusic: appleMusic, browserMedia: browserMedia, camera: camera, shelf: shelf, hotKey: hotKey,
-            utilities: utilities, aiActivity: aiActivity, systemMonitor: systemMonitor, keyboardCleaning: keyboardCleaning,
+            utilities: utilities, aiActivity: aiActivity, systemMonitor: systemMonitor,
+            processes: processes, keyboardCleaning: keyboardCleaning,
             updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher,
             openPanel: { [weak self] in self?.openNotch() }))
@@ -437,6 +486,7 @@ private final class Flag: @unchecked Sendable {
         windowLayout.stop()
         aiActivity.stop()
         systemMonitor.stop()
+        processes.stop()
         keyboardCleaning.stop()
         recentFiles.stop()
         clipboardShelf.stop()
@@ -453,6 +503,7 @@ private final class Flag: @unchecked Sendable {
         media.start()
         aiActivity.start()
         systemMonitor.start()
+        processes.start()
         applyPreferences()
     }
 
@@ -468,6 +519,7 @@ private final class Flag: @unchecked Sendable {
         media.stop()
         aiActivity.stop()
         systemMonitor.stop()
+        processes.stop()
         keyboardCleaning.stop()
         recentFiles.stop()
         clipboardShelf.stop()

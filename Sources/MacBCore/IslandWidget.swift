@@ -43,6 +43,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
     case shelf
     case notes
     case worldClock
+    case topProcesses
 
     /// The name the library, the settings list and VoiceOver all read from, so a
     /// widget cannot end up called three different things in three places.
@@ -63,6 +64,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
         case .shelf: return "Raf"
         case .notes: return "Not"
         case .worldClock: return "Dünya saati"
+        case .topProcesses: return "Kaynak kullanımı"
         }
     }
 
@@ -83,6 +85,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
         case .shelf: return "Sürükleyip bıraktıkların"
         case .notes: return "Aklına geleni hemen yaz"
         case .worldClock: return "İkinci bir şehrin saati"
+        case .topProcesses: return "En çok RAM ve işlemci yiyenler"
         }
     }
 
@@ -103,6 +106,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
         case .shelf: return "tray.full.fill"
         case .notes: return "note.text"
         case .worldClock: return "globe"
+        case .topProcesses: return "chart.bar.xaxis"
         }
     }
 
@@ -110,7 +114,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
         switch self {
         case .media, .timer, .clipboard: return .essentials
         case .assistantActivity, .quickLaunch, .tasks, .recentFiles, .shelf: return .work
-        case .systemStats, .battery, .storage: return .system
+        case .systemStats, .battery, .storage, .topProcesses: return .system
         case .calendar, .weather, .notes, .worldClock: return .life
         }
     }
@@ -124,6 +128,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
             return .medium
         case .systemStats, .weather, .recentFiles, .battery, .storage, .worldClock:
             return .small
+        case .topProcesses: return .medium
         }
     }
 
@@ -132,14 +137,15 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
         switch self {
         case .media, .timer, .clipboard, .systemStats, .assistantActivity: return true
         case .calendar, .weather, .quickLaunch, .tasks, .recentFiles,
-             .battery, .storage, .shelf, .notes, .worldClock: return false
+             .battery, .storage, .shelf, .notes, .worldClock, .topProcesses: return false
         }
     }
 
     /// A widget whose data source must not run while the panel is hidden.
     public var pollsWhileVisible: Bool {
         switch self {
-        case .weather, .calendar, .systemStats, .assistantActivity, .battery, .storage, .worldClock:
+        case .weather, .calendar, .systemStats, .assistantActivity, .battery, .storage,
+             .worldClock, .topProcesses:
             return true
         case .media, .timer, .clipboard, .quickLaunch, .tasks, .recentFiles, .shelf, .notes:
             return false

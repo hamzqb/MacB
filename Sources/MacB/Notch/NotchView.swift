@@ -16,6 +16,7 @@ struct NotchView: View {
     @ObservedObject var recentTargets: RecentTargetStore
     @ObservedObject var aiActivity: AIActivityService
     @ObservedObject var systemMonitor: SystemMonitorService
+    @ObservedObject var processes: ProcessMonitorService
     @ObservedObject var keyboardCleaning: KeyboardCleaningService
     @ObservedObject var timer: TimerService
     @ObservedObject var widgets: IslandLayoutStore
@@ -155,7 +156,7 @@ struct NotchView: View {
             case .home:
                 IslandWidgetStrip(store: widgets, media: media, timer: timer, clipboard: clipboard,
                                   aiActivity: aiActivity, systemMonitor: systemMonitor,
-                                  recentFiles: recentFiles, tasks: tasks, launcher: launcher,
+                                  processes: processes, recentFiles: recentFiles, tasks: tasks, launcher: launcher,
                                   weather: weather, shelf: shelf, note: note,
                                   preferences: preferences, width: layout.width, select: select,
                                   openSettings: openSettings, notify: notify)
@@ -202,11 +203,54 @@ struct NotchView: View {
                 }
                 .padding(.horizontal, 10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .bottom) { statusLine }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(collapsedIndicators.map { "\($0.label) \($0.value)" }.joined(separator: ", "))
         }
+    }
+
+    /// A hairline along the bottom of the closed island, filled as far as
+    /// whatever is counting has got.
+    ///
+    /// One thing at a time, and the most urgent wins: a timer running out beats
+    /// a battery filling, which beats a song playing. Nothing to count, no line.
+    @ViewBuilder private var statusLine: some View {
+        if let status = collapsedStatus {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.10))
+                    Capsule().fill(status.tint)
+                        .frame(width: proxy.size.width * min(1, max(0, status.fraction)))
+                }
+            }
+            .frame(height: 2)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 2)
+            .animation(.easeOut(duration: 0.25), value: status.fraction)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+
+    private struct CollapsedStatus {
+        let fraction: Double
+        let tint: Color
+    }
+
+    private var collapsedStatus: CollapsedStatus? {
+        if timer.isActive {
+            return CollapsedStatus(fraction: timer.progress, tint: MacBDesign.IslandToken.accent)
+        }
+        if systemMonitor.snapshot.isCharging, let battery = systemMonitor.snapshot.batteryPercent {
+            return CollapsedStatus(fraction: battery / 100, tint: Color(nsColor: .systemGreen))
+        }
+        if media.isPlaying, media.duration > 0 {
+            return CollapsedStatus(fraction: media.position / media.duration,
+                                   tint: MacBDesign.IslandToken.primaryText.opacity(0.8))
+        }
+        return nil
     }
 
     private struct CollapsedIndicator {
