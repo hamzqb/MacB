@@ -33,6 +33,13 @@ rm -rf "$app_dir"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$binary_dir/MacB" "$app_dir/Contents/MacOS/MacB"
 cp Resources/Info.plist "$app_dir/Contents/Info.plist"
+# The build number is the commit count, so every build of a new commit reports a
+# number nobody had to remember to raise. A dirty or gitless tree keeps whatever
+# the checked-in plist says, rather than inventing a number.
+if build_number="$(git rev-list --count HEAD 2>/dev/null)" && [[ -n "$build_number" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build_number" \
+        "$app_dir/Contents/Info.plist" >/dev/null
+fi
 swift scripts/generate-icon.swift "$project_dir/.build/MacB.iconset"
 iconutil -c icns "$project_dir/.build/MacB.iconset" -o "$app_dir/Contents/Resources/AppIcon.icns"
 # Finder/File Provider metadata on generated bundles prevents local signing.

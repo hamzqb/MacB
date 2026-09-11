@@ -16,8 +16,7 @@ import MacBCore
 /// everything down if the hinge stops reporting, so a stalled sensor can never
 /// leave somebody with a screen they cannot see through.
 @MainActor final class LidBlurOverlay {
-    private var pane: NSWindow?
-    private var dim: NSView?
+    private var panes: [NSWindow] = []
     private var screen: NSScreen?
     private var watchdog: Timer?
     private var lastProgress: Double = 0
@@ -26,17 +25,17 @@ import MacBCore
     /// Long enough for a slow, deliberate close; short enough to be a blink.
     private static let stallTimeout: TimeInterval = 8
 
-    var isVisible: Bool { pane != nil }
+    var isVisible: Bool { !panes.isEmpty }
 
     /// Follows the hinge. Zero takes everything down.
     func apply(progress: Double) {
         guard progress > 0.001 else { return hide() }
         guard let screen = Self.builtInScreen() else { return hide() }
-        if pane == nil || self.screen != screen { build(on: screen) }
+        if panes.isEmpty || self.screen != screen { build(on: screen) }
 
-        pane?.alphaValue = LidScreenBlur.blurAlpha(progress: progress)
-        dim?.layer?.backgroundColor = NSColor.black
-            .withAlphaComponent(LidScreenBlur.dimAlpha(progress: progress)).cgColor
+        for (index, pane) in panes.enumerated() {
+            pane.alphaValue = LidScreenBlur.layerAlpha(index, progress: progress)
+        }
 
         if abs(progress - lastProgress) > 0.001 { armWatchdog() }
         lastProgress = progress
@@ -44,8 +43,8 @@ import MacBCore
 
     func hide() {
         watchdog?.invalidate(); watchdog = nil
-        pane?.orderOut(nil)
-        pane = nil; dim = nil; screen = nil; lastProgress = 0
+        for pane in panes { pane.orderOut(nil) }
+        panes = []; screen = nil; lastProgress = 0
     }
 
     // MARK: - Panes
@@ -53,20 +52,19 @@ import MacBCore
     private func build(on screen: NSScreen) {
         hide()
         self.screen = screen
-        let window = Self.makePane(on: screen)
-        window.alphaValue = 0
-        window.orderFront(nil)
-        pane = window
-
-        // The dim sits on top of the blur rather than behind it, so it darkens
-        // the finished picture instead of being blurred away to nothing.
-        if let content = window.contentView {
-            let shade = NSView(frame: content.bounds)
-            shade.autoresizingMask = [.width, .height]
-            shade.wantsLayer = true
-            shade.layer?.backgroundColor = NSColor.clear.cgColor
-            content.addSubview(shade)
-            dim = shade
+        var previous: NSWindow?
+        for _ in 0..<LidScreenBlur.layerCount {
+            let window = Self.makePane(on: screen)
+            window.alphaValue = 0
+            // Ordered explicitly rather than by luck: a pane only deepens the
+            // blur if it sits above the one it is meant to be blurring.
+            if let previous {
+                window.order(.above, relativeTo: previous.windowNumber)
+            } else {
+                window.orderFront(nil)
+            }
+            previous = window
+            panes.append(window)
         }
     }
 

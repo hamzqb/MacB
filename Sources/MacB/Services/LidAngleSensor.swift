@@ -33,8 +33,11 @@ final class LidAngleSensor {
         for candidate in candidates {
             guard IOHIDDeviceOpen(candidate, 0) == kIOReturnSuccess else { continue }
             device = candidate
-            if let angle = read() {
-                diagnostic = "Menteşe sensörü bağlı: \(Int(angle))°"
+            if read() != nil {
+                // Deliberately no angle here: this string is built once, and a
+                // number from the moment the app launched would sit in the
+                // settings window disagreeing with the live reading beside it.
+                diagnostic = "Menteşe sensörü bağlı."
                 return
             }
             IOHIDDeviceClose(candidate, 0)

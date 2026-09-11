@@ -83,27 +83,47 @@ final class LidFoldTests: XCTestCase {
     // MARK: - Screen blur
 
     func testTheScreenIsUntouchedUntilTheFoldStarts() {
-        XCTAssertEqual(LidScreenBlur.blurAlpha(progress: 0), 0)
-        XCTAssertEqual(LidScreenBlur.dimAlpha(progress: 0), 0)
+        for index in 0..<LidScreenBlur.layerCount {
+            XCTAssertEqual(LidScreenBlur.layerAlpha(index, progress: 0), 0)
+        }
+        XCTAssertEqual(LidScreenBlur.strength(progress: 0), 0)
     }
 
-    func testTheScreenIsFullyBlurredBeforeTheLidFinishes() {
-        XCTAssertEqual(LidScreenBlur.blurAlpha(progress: 0.92), 1)
-        XCTAssertEqual(LidScreenBlur.blurAlpha(progress: 1), 1)
-        XCTAssertEqual(LidScreenBlur.dimAlpha(progress: 1), LidScreenBlur.maximumDim, accuracy: 0.0001)
+    func testEveryPaneHasArrivedBeforeTheLidShuts() {
+        for index in 0..<LidScreenBlur.layerCount {
+            XCTAssertEqual(LidScreenBlur.layerAlpha(index, progress: 0.95), 1)
+        }
+        XCTAssertEqual(LidScreenBlur.strength(progress: 1), 1)
     }
 
-    func testTheBlurOnlyEverDeepensAndFrontLoadsWhatIsSeen() {
+    func testTheBlurOnlyEverDeepens() {
         var previous = -1.0
         for step in 0...100 {
-            let alpha = LidScreenBlur.blurAlpha(progress: Double(step) / 100)
-            XCTAssertGreaterThanOrEqual(alpha, previous)
-            previous = alpha
+            let strength = LidScreenBlur.strength(progress: Double(step) / 100)
+            XCTAssertGreaterThanOrEqual(strength, previous)
+            previous = strength
         }
-        // Half the fold has to look like more than half the blur, or the screen
-        // appears untouched until the last moment and then snaps.
-        XCTAssertGreaterThan(LidScreenBlur.blurAlpha(progress: 0.5), 0.6)
-        XCTAssertGreaterThan(LidScreenBlur.blurAlpha(progress: 0.25), 0.4)
+    }
+
+    func testEveryStretchOfTheFoldHasAPaneArrivingInIt() {
+        // A stretch with no pane moving is a stretch where the screen looks
+        // frozen while the lid keeps coming down.
+        for step in 0..<19 {
+            let low = Double(step) / 20, high = Double(step + 1) / 20
+            XCTAssertGreaterThan(LidScreenBlur.strength(progress: high),
+                                 LidScreenBlur.strength(progress: low),
+                                 "Nothing happened between \(low) and \(high)")
+        }
+    }
+
+    func testPanesArriveOneAfterAnotherSoTheRadiusStepsUp() {
+        // The first pane is fully in before the second has gone far, or the two
+        // would simply fade in together and add opacity instead of radius.
+        XCTAssertEqual(LidScreenBlur.layerAlpha(0, progress: 0.4), 1)
+        XCTAssertLessThan(LidScreenBlur.layerAlpha(1, progress: 0.4), 0.5)
+        XCTAssertEqual(LidScreenBlur.layerAlpha(2, progress: 0.4), 0)
+        XCTAssertEqual(LidScreenBlur.layerAlpha(-1, progress: 1), 0)
+        XCTAssertEqual(LidScreenBlur.layerAlpha(LidScreenBlur.layerCount, progress: 1), 0)
     }
 
     func testAHandWrittenLineReplacesTheGreetingWithoutLosingTheDetail() {

@@ -846,7 +846,7 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(lid.isAvailable
-                     ? "\(lid.diagnostic)\(lid.angle.map { String(format: "  ·  şu an %.0f°", $0) } ?? "")"
+                     ? "\(lid.diagnostic)\(lid.angle.map { String(format: "  Şu an %.0f°.", $0) } ?? "")"
                      : lid.diagnostic)
                     .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
                 if !lid.isAvailable {

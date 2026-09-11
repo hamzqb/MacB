@@ -787,26 +787,37 @@ struct CoreTestRunner {
                            "The lowest starting angle had no room to animate")
             }),
             ("LidScreenBlur: the screen is untouched until the fold starts", {
-                try expect(LidScreenBlur.blurAlpha(progress: 0) == 0, "The blur started early")
-                try expect(LidScreenBlur.dimAlpha(progress: 0) == 0, "The screen was already dimmed")
+                for index in 0..<LidScreenBlur.layerCount {
+                    try expect(LidScreenBlur.layerAlpha(index, progress: 0) == 0, "A pane was already up")
+                }
+                try expect(LidScreenBlur.strength(progress: 0) == 0, "The blur started early")
             }),
-            ("LidScreenBlur: the screen is fully blurred before the lid finishes", {
-                try expect(LidScreenBlur.blurAlpha(progress: 0.92) == 1, "The blur never reached full")
-                try expect(LidScreenBlur.blurAlpha(progress: 1) == 1, "The blur overshot")
-                try expect(abs(LidScreenBlur.dimAlpha(progress: 1) - LidScreenBlur.maximumDim) < 0.0001,
-                           "The dim missed its limit")
+            ("LidScreenBlur: every pane has arrived before the lid shuts", {
+                for index in 0..<LidScreenBlur.layerCount {
+                    try expect(LidScreenBlur.layerAlpha(index, progress: 0.95) == 1, "A pane never arrived")
+                }
+                try expect(LidScreenBlur.strength(progress: 1) == 1, "The blur never reached full")
             }),
-            ("LidScreenBlur: the blur only deepens, and front-loads what is seen", {
+            ("LidScreenBlur: the blur only ever deepens, in every stretch of the fold", {
                 var previous = -1.0
                 for step in 0...100 {
-                    let alpha = LidScreenBlur.blurAlpha(progress: Double(step) / 100)
-                    try expect(alpha >= previous, "The blur went backwards")
-                    previous = alpha
+                    let strength = LidScreenBlur.strength(progress: Double(step) / 100)
+                    try expect(strength >= previous, "The blur went backwards")
+                    previous = strength
                 }
-                try expect(LidScreenBlur.blurAlpha(progress: 0.5) > 0.6,
-                           "Half the fold did not look like half the blur")
-                try expect(LidScreenBlur.blurAlpha(progress: 0.25) > 0.4,
-                           "The blur was invisible for the first quarter")
+                for step in 0..<19 {
+                    let low = Double(step) / 20, high = Double(step + 1) / 20
+                    try expect(LidScreenBlur.strength(progress: high) > LidScreenBlur.strength(progress: low),
+                               "The screen looked frozen for a stretch of the fold")
+                }
+            }),
+            ("LidScreenBlur: panes arrive one after another so the radius steps up", {
+                try expect(LidScreenBlur.layerAlpha(0, progress: 0.4) == 1, "The first pane lagged")
+                try expect(LidScreenBlur.layerAlpha(1, progress: 0.4) < 0.5, "The second pane came too early")
+                try expect(LidScreenBlur.layerAlpha(2, progress: 0.4) == 0, "The last pane came too early")
+                try expect(LidScreenBlur.layerAlpha(-1, progress: 1) == 0, "A pane that does not exist arrived")
+                try expect(LidScreenBlur.layerAlpha(LidScreenBlur.layerCount, progress: 1) == 0,
+                           "A pane past the end arrived")
             }),
             ("IslandEvent: a hand-written line replaces the greeting, detail intact", {
                 let event = IslandEvent.welcome(hour: 2, time: "09:14", batteryPercent: 78, custom: "Hoş geldin")

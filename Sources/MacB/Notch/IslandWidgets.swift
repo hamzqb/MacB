@@ -290,12 +290,24 @@ struct WidgetCard<Content: View>: View {
             .background(cardSurface)
     }
 
-    /// Flat fill, deliberately.
+    /// Real glass where the system has it, a flat fill where it does not.
     ///
-    /// Glass behind a card renders the card's own text through the glass, which
-    /// smears it into the panel. The panel is the sheet; the cards sit on it.
-    private var cardSurface: some View {
-        isActive ? MacBDesign.IslandToken.widgetActiveFill : MacBDesign.IslandToken.widgetFill
+    /// Clear glass rather than regular: regular frosts, and a frosted card on a
+    /// frosted panel is two sheets of fog with nothing to see through. Clear
+    /// refracts instead, so the card takes an edge and a highlight from whatever
+    /// the panel is showing and the text on it stays sharp.
+    ///
+    /// The glass goes behind the content rather than around it. Wrapping the
+    /// card in it pulls the card's own text into the material and smears it.
+    @ViewBuilder private var cardSurface: some View {
+        if usesGlass, #available(macOS 26.0, *) {
+            Color.clear.glassEffect(
+                Glass.clear.tint(.white.opacity(isActive ? 0.12 : 0.06)).interactive(),
+                in: RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius,
+                                     style: .continuous))
+        } else {
+            isActive ? MacBDesign.IslandToken.widgetActiveFill : MacBDesign.IslandToken.widgetFill
+        }
     }
 }
 
