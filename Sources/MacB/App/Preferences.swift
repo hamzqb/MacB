@@ -57,17 +57,47 @@ enum InterfaceDensity: String, CaseIterable, Identifiable {
 }
 
 enum IslandAppearance: String, CaseIterable, Identifiable {
-    case automatic, pureBlack, liquidGlass
+    case pureBlack, liquidGlass, blackGlass, customImage
 
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .automatic: return "Otomatik"
-        case .pureBlack: return "Saf Siyah"
+        case .pureBlack: return "Siyah"
         case .liquidGlass: return "Liquid Glass"
+        case .blackGlass: return "Siyah Cam"
+        case .customImage: return "Görsel"
+        }
+    }
+
+    var usesMaterial: Bool { self == .liquidGlass || self == .blackGlass }
+}
+
+enum MediaWidgetStyle: String, CaseIterable, Identifiable {
+    case artwork, glass, compact, record
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .artwork: return "Kapak"
+        case .glass: return "Cam"
+        case .compact: return "Kompakt"
+        case .record: return "Plak"
         }
     }
 }
+
+enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
+    case system, bold, color, horizon
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .system: return "Sistem"
+        case .bold: return "Büyük"
+        case .color: return "Renkli"
+        case .horizon: return "Ufuk"
+        }
+    }
+}
+
 
 @MainActor final class Preferences: ObservableObject {
     @Published var dockEnabled: Bool { didSet { defaults.set(dockEnabled, forKey: "dockEnabled") } }
@@ -87,6 +117,13 @@ enum IslandAppearance: String, CaseIterable, Identifiable {
     @Published var protectPrivateTools: Bool { didSet { defaults.set(protectPrivateTools, forKey: "protectPrivateTools") } }
     @Published var interfaceDensity: InterfaceDensity { didSet { defaults.set(interfaceDensity.rawValue, forKey: "interfaceDensity") } }
     @Published var islandAppearance: IslandAppearance { didSet { defaults.set(islandAppearance.rawValue, forKey: "islandAppearance") } }
+    @Published var islandEventsEnabled: Bool { didSet { defaults.set(islandEventsEnabled, forKey: "islandEventsEnabled") } }
+    @Published var hidesSystemVolumeHUD: Bool { didSet { defaults.set(hidesSystemVolumeHUD, forKey: "hidesSystemVolumeHUD") } }
+    @Published var mediaWidgetStyle: MediaWidgetStyle { didSet { defaults.set(mediaWidgetStyle.rawValue, forKey: "mediaWidgetStyle") } }
+    @Published var weatherWidgetStyle: WeatherWidgetStyle { didSet { defaults.set(weatherWidgetStyle.rawValue, forKey: "weatherWidgetStyle") } }
+    /// The city the world-clock widget shows next to local time. An identifier
+    /// rather than an offset, so the widget follows daylight saving on its own.
+    @Published var secondaryTimeZone: String { didSet { defaults.set(secondaryTimeZone, forKey: "secondaryTimeZone") } }
     @Published var shortcut: SwitcherShortcut { didSet { defaults.set(shortcut.rawValue, forKey: "shortcut") } }
     private let defaults: UserDefaults
 
@@ -102,7 +139,10 @@ enum IslandAppearance: String, CaseIterable, Identifiable {
                                     "fileActivityEnabled": false,
                                     "protectPrivateTools": false,
                                     "interfaceDensity": InterfaceDensity.balanced.rawValue,
-                                    "islandAppearance": IslandAppearance.automatic.rawValue])
+                                    "islandAppearance": IslandAppearance.pureBlack.rawValue,
+                                    "islandEventsEnabled": true,
+                                    "hidesSystemVolumeHUD": false,
+                                    "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
         notchEnabled = defaults.bool(forKey: "notchEnabled")
         switcherEnabled = defaults.bool(forKey: "switcherEnabled")
@@ -119,7 +159,13 @@ enum IslandAppearance: String, CaseIterable, Identifiable {
         fileActivityEnabled = defaults.bool(forKey: "fileActivityEnabled")
         protectPrivateTools = defaults.bool(forKey: "protectPrivateTools")
         interfaceDensity = InterfaceDensity(rawValue: defaults.string(forKey: "interfaceDensity") ?? "") ?? .balanced
-        islandAppearance = IslandAppearance(rawValue: defaults.string(forKey: "islandAppearance") ?? "") ?? .automatic
+        islandAppearance = IslandAppearance(rawValue: defaults.string(forKey: "islandAppearance") ?? "") ?? .pureBlack
+        islandEventsEnabled = defaults.bool(forKey: "islandEventsEnabled")
+        hidesSystemVolumeHUD = defaults.bool(forKey: "hidesSystemVolumeHUD")
+        let storedZone = defaults.string(forKey: "secondaryTimeZone") ?? "America/New_York"
+        secondaryTimeZone = TimeZone(identifier: storedZone) == nil ? "America/New_York" : storedZone
+        mediaWidgetStyle = MediaWidgetStyle(rawValue: defaults.string(forKey: "mediaWidgetStyle") ?? "") ?? .artwork
+        weatherWidgetStyle = WeatherWidgetStyle(rawValue: defaults.string(forKey: "weatherWidgetStyle") ?? "") ?? .system
         let storedShortcut = SwitcherShortcut(rawValue: defaults.string(forKey: "shortcut") ?? "") ?? .commandTab
         let shouldPreferCommandTab = !defaults.bool(forKey: "didPreferCommandTabForSwitcher") && storedShortcut == .optionTab
         shortcut = shouldPreferCommandTab ? .commandTab : storedShortcut

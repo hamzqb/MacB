@@ -71,7 +71,7 @@ private final class PreviewOutput: NSObject, SCStreamOutput, SCStreamDelegate {
             var started = 0
             for window in visible where !window.isMinimized && !window.captureAmbiguous {
                 guard generation == currentGeneration else { return }
-                guard let id = WindowMatcher.uniqueMatch(pid: window.pid, title: window.title, frame: window.frame, candidates: descriptors),
+                guard let id = window.windowID ?? WindowMatcher.uniqueMatch(pid: window.pid, title: window.title, frame: window.frame, candidates: descriptors),
                       let candidate = content.windows.first(where: { $0.windowID == id }) else { continue }
                 let configuration = SCStreamConfiguration()
                 configuration.width = 800

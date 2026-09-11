@@ -1,12 +1,23 @@
 import Foundation
 
-public enum NotchPhase: String, Equatable { case collapsed, glance, expanded }
-public enum NotchContent: String, Equatable { case music, files, clipboard, tasks, tools }
+public enum NotchPhase: String, Equatable { case collapsed, peek, expanded }
+
+/// Sections reachable from the icon navigation, in display order.
+public enum NotchContent: String, Equatable, CaseIterable {
+    case home
+    case apps
+    case files
+    case clipboard
+    case timer
+
+    /// The section a drop or an explicit close returns to.
+    public static let `default` = NotchContent.home
+}
 
 /// Interaction policy is independent of rendering and of animation progress.
 public struct PanelState: Equatable {
     public private(set) var phase: NotchPhase = .collapsed
-    public private(set) var content: NotchContent = .music
+    public private(set) var content: NotchContent = .default
     public var isOpen: Bool { phase != .collapsed }
     public private(set) var isDragging = false
     public private(set) var hasKeyboardFocus = false
@@ -15,7 +26,7 @@ public struct PanelState: Equatable {
     public init() {}
 
     public mutating func open() { phase = .expanded; closeDeadline = nil; hoverDeadline = nil }
-    public mutating func glance() { if phase == .collapsed { phase = .glance }; closeDeadline = nil; hoverDeadline = nil }
+    public mutating func peek() { if phase == .collapsed { phase = .peek }; closeDeadline = nil; hoverDeadline = nil }
     public mutating func select(_ content: NotchContent) { self.content = content; open() }
     public mutating func setDragging(_ value: Bool) {
         isDragging = value
@@ -34,12 +45,12 @@ public struct PanelState: Equatable {
         if phase == .collapsed, hoverDeadline == nil, let now { hoverDeadline = now + 0.18 }
     }
     public mutating func tick(at now: TimeInterval) {
-        if let deadline = hoverDeadline, now >= deadline { glance() }
+        if let deadline = hoverDeadline, now >= deadline { peek() }
         guard !isDragging, !hasKeyboardFocus, let deadline = closeDeadline, now >= deadline else { return }
         close()
     }
     public mutating func close() {
-        phase = .collapsed; content = .music
+        phase = .collapsed; content = .default
         isDragging = false; hasKeyboardFocus = false
         closeDeadline = nil; hoverDeadline = nil
     }

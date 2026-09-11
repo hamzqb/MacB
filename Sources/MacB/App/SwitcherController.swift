@@ -3,9 +3,20 @@ import SwiftUI
 import Combine
 import MacBCore
 
+private func switcherTitlesMatch(_ left: String, _ right: String) -> Bool {
+    left.compare(right, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+}
+
 private final class SwitcherPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+}
+
+private struct DesktopWindowSection: Identifiable {
+    let id: String
+    let title: String
+    let isCurrent: Bool
+    let windows: [WindowRecord]
 }
 
 @MainActor final class SwitcherModel: ObservableObject {
@@ -15,14 +26,37 @@ private final class SwitcherPanel: NSPanel {
     @Published var message: String?
     var selectedWindow: WindowRecord? { windows.first { $0.id == selectedID } }
     var selectedIndex: Int { windows.firstIndex { $0.id == selectedID } ?? 0 }
-    var visibleWindows: [WindowRecord] {
-        let capacity = 4
-        let start = min(max(0, selectedIndex - 1), max(0, windows.count - capacity))
-        return Array(windows.dropFirst(start).prefix(capacity))
+    fileprivate var desktopSections: [DesktopWindowSection] {
+        let indexed = Dictionary(grouping: windows.compactMap { window -> (Int, WindowRecord)? in
+            window.desktopIndex.map { ($0, window) }
+        }, by: { $0.0 })
+        var result = indexed.keys.sorted().map { index in
+            let records = indexed[index, default: []].map(\.1)
+            return DesktopWindowSection(id: "desktop-\(index)", title: "Masaüstü \(index)",
+                isCurrent: records.contains { $0.desktopLocation == .current }, windows: records)
+        }
+        let unassigned = windows.filter { $0.desktopIndex == nil }
+        if !unassigned.isEmpty {
+            result.append(DesktopWindowSection(id: "desktop-current-fallback", title: "Bu Masaüstü",
+                isCurrent: true, windows: unassigned))
+        }
+        return result.sorted {
+            if $0.isCurrent != $1.isCurrent { return $0.isCurrent }
+            return $0.id.localizedStandardCompare($1.id) == .orderedAscending
+        }
     }
     var previewWindows: [WindowRecord] {
         guard let selectedWindow else { return [] }
-        return [selectedWindow] + visibleWindows.filter { $0.id != selectedWindow.id }
+        let sameDesktop = windows.filter { candidate in
+            guard candidate.id != selectedWindow.id else { return false }
+            if let selectedIndex = selectedWindow.desktopIndex { return candidate.desktopIndex == selectedIndex }
+            return candidate.desktopIndex == nil && candidate.desktopLocation == selectedWindow.desktopLocation
+        }
+        let sameDesktopIDs = Set(sameDesktop.map(\.id))
+        let remaining = windows.filter { candidate in
+            candidate.id != selectedWindow.id && !sameDesktopIDs.contains(candidate.id)
+        }
+        return Array(([selectedWindow] + sameDesktop + remaining).prefix(4))
     }
 }
 
@@ -116,6 +150,12 @@ private final class SwitcherPanel: NSPanel {
     private func update(_ records: [WindowRecord]) {
         let ranks = Dictionary(uniqueKeysWithValues: recentIDs.enumerated().map { ($1, $0) })
         let ordered = records.enumerated().sorted {
+            let leftIsOtherDesktop = $0.element.desktopLocation == .other
+            let rightIsOtherDesktop = $1.element.desktopLocation == .other
+            if leftIsOtherDesktop != rightIsOtherDesktop { return !leftIsOtherDesktop }
+            let leftDesktop = $0.element.desktopIndex ?? Int.max
+            let rightDesktop = $1.element.desktopIndex ?? Int.max
+            if leftDesktop != rightDesktop { return leftDesktop < rightDesktop }
             let leftIsCurrent = $0.element.pid == initialApplication?.processIdentifier
             let rightIsCurrent = $1.element.pid == initialApplication?.processIdentifier
             if leftIsCurrent != rightIsCurrent { return leftIsCurrent }
@@ -157,8 +197,8 @@ private final class SwitcherPanel: NSPanel {
     private func present() {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
-        let width = min(680, screen.visibleFrame.width - 40)
-        let size = NSSize(width: width, height: min(190, screen.visibleFrame.height - 40))
+        let width = min(780, screen.visibleFrame.width - 40)
+        let size = NSSize(width: width, height: min(300, screen.visibleFrame.height - 40))
         let panel = SwitcherPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -266,7 +306,7 @@ private struct SwitcherView: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: 10) {
             if model.isLoading {
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let message = model.message {
@@ -276,19 +316,17 @@ private struct SwitcherView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let selected = model.selectedWindow {
                 selectionHeader(selected)
-                HStack(spacing: 9) {
-                    ForEach(model.visibleWindows) { window in
-                        SwitcherWindowCard(window: window, selected: window.id == model.selectedID,
-                            position: (model.windows.firstIndex { $0.id == window.id } ?? 0) + 1,
-                            total: model.windows.count, previews: previews) {
-                            onChoose(window)
-                        }
+                HStack(spacing: 12) {
+                    SwitcherSelectedPreview(window: selected, previews: previews) {
+                        onChoose(selected)
                     }
+                    desktopRail
+                        .frame(width: 246)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(13)
+        .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
             if reduceTransparency {
@@ -301,13 +339,89 @@ private struct SwitcherView: View {
         .animation(animationsEnabled && !reduceMotion ? .easeOut(duration: 0.13) : nil, value: model.selectedID)
     }
 
+    private var desktopRail: some View {
+        ScrollViewReader { proxy in
+            VStack(spacing: 7) {
+                if model.desktopSections.count > 1 {
+                    HStack(spacing: 5) {
+                        ForEach(model.desktopSections) { section in
+                            Button {
+                                if animationsEnabled && !reduceMotion {
+                                    withAnimation(.easeOut(duration: 0.16)) { proxy.scrollTo(section.id, anchor: .top) }
+                                } else {
+                                    proxy.scrollTo(section.id, anchor: .top)
+                                }
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: section.isCurrent ? "rectangle.fill" : "rectangle")
+                                    Text(section.title)
+                                    Text("\(section.windows.count)").monospacedDigit().foregroundStyle(.secondary)
+                                }
+                                .font(.system(size: 8.5, weight: .semibold))
+                                .padding(.horizontal, 7).padding(.vertical, 5)
+                                .background(section.isCurrent ? MacBDesign.selectedBackground.opacity(0.42) : Color.primary.opacity(0.055),
+                                            in: Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(spacing: 9) {
+                        ForEach(Array(model.desktopSections.enumerated()), id: \.element.id) { index, section in
+                            if index > 0 { Divider().opacity(0.55) }
+                            windowSection(title: section.title,
+                                          systemImage: section.isCurrent ? "rectangle" : "square.stack.3d.up",
+                                          windows: section.windows)
+                                .id(section.id)
+                        }
+                    }
+                }
+                .onChange(of: model.selectedID) { _, selectedID in
+                    guard let selectedID else { return }
+                    if animationsEnabled && !reduceMotion {
+                        withAnimation(.easeOut(duration: 0.13)) { proxy.scrollTo(selectedID, anchor: .center) }
+                    } else {
+                        proxy.scrollTo(selectedID, anchor: .center)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func windowSection(title: String, systemImage: String, windows: [WindowRecord]) -> some View {
+        if !windows.isEmpty {
+            VStack(spacing: 6) {
+                HStack(spacing: 5) {
+                    Image(systemName: systemImage).font(.system(size: 9, weight: .semibold))
+                    Text(title).font(.system(size: 9.5, weight: .semibold))
+                    Spacer(minLength: 4)
+                    Text("\(windows.count)")
+                        .font(.system(size: 8.5, weight: .semibold, design: .rounded)).monospacedDigit()
+                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .background(Color.primary.opacity(0.07), in: Capsule())
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+                ForEach(windows) { window in
+                    SwitcherWindowCard(window: window, selected: window.id == model.selectedID,
+                        position: (model.windows.firstIndex { $0.id == window.id } ?? 0) + 1,
+                        total: model.windows.count, previews: previews) {
+                        onChoose(window)
+                    }
+                    .id(window.id)
+                }
+            }
+        }
+    }
+
     private func selectionHeader(_ window: WindowRecord) -> some View {
         HStack(spacing: 8) {
             if let icon = window.appIcon {
                 Image(nsImage: icon).resizable().frame(width: 20, height: 20).accessibilityHidden(true)
             }
-            Text(window.appName).font(.system(size: 12, weight: .semibold)).foregroundStyle(.primary)
-            if !titlesMatch(window.appName, window.title) {
+            Text(window.appName).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
+            if !switcherTitlesMatch(window.appName, window.title) {
                 Text(window.title).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 8)
@@ -315,12 +429,52 @@ private struct SwitcherView: View {
                 .font(.system(size: 9, weight: .semibold, design: .rounded)).monospacedDigit()
                 .foregroundStyle(.tertiary)
         }
-        .frame(height: 22)
+        .frame(height: 24)
         .padding(.horizontal, 2)
     }
 
-    private func titlesMatch(_ left: String, _ right: String) -> Bool {
-        left.compare(right, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+}
+
+private struct SwitcherSelectedPreview: View {
+    let window: WindowRecord
+    @ObservedObject var previews: PreviewService
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack(alignment: .bottomLeading) {
+                Color.black.opacity(0.58)
+                if let image = previews.images[window.id] {
+                    Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    WindowPreviewPlaceholder(window: window, compact: false)
+                }
+                LinearGradient(colors: [.clear, .black.opacity(0.62)], startPoint: .center, endPoint: .bottom)
+                    .allowsHitTesting(false)
+                HStack(spacing: 8) {
+                    if let icon = window.appIcon {
+                        Image(nsImage: icon).resizable().frame(width: 22, height: 22)
+                    }
+                    Text(window.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                    Spacer(minLength: 0)
+                    if window.isMinimized {
+                        Label("Küçültülmüş", systemImage: "minus.circle.fill")
+                            .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+                    }
+                    if window.desktopLocation == .other {
+                        Label(window.desktopName ?? "Diğer masaüstü", systemImage: "square.stack.3d.up.fill")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.82))
+                    }
+                }
+                .padding(10)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
+                .strokeBorder(MacBDesign.separator, lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(window.appName), \(window.title), seçili pencereye geç")
     }
 }
 
@@ -334,47 +488,43 @@ private struct SwitcherWindowCard: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                ZStack(alignment: .bottomLeading) {
+            HStack(spacing: 10) {
+                ZStack {
                     if let image = previews.images[window.id] {
-                        Image(nsImage: image).resizable().scaledToFit()
+                        Image(nsImage: image).resizable().scaledToFill()
+                    } else if let icon = window.appIcon {
+                        Image(nsImage: icon).resizable().scaledToFit().padding(9)
                     } else {
-                        WindowPreviewPlaceholder(window: window, compact: true)
-                    }
-                    LinearGradient(colors: [.clear, .black.opacity(0.42)], startPoint: .center, endPoint: .bottom)
-                        .allowsHitTesting(false)
-                    if let icon = window.appIcon {
-                        Image(nsImage: icon).resizable().frame(width: 20, height: 20)
-                            .shadow(color: .black.opacity(0.5), radius: 3, y: 1).padding(7).accessibilityHidden(true)
-                    }
-                    if window.isMinimized || previews.staleIDs.contains(window.id) {
-                        HStack {
-                            Spacer()
-                            Image(systemName: window.isMinimized ? "minus.circle.fill" : "clock.fill")
-                                .font(.system(size: 10)).padding(7)
-                        }.foregroundStyle(.white.opacity(0.78))
+                        Image(systemName: "macwindow").foregroundStyle(.secondary)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(MacBDesign.controlBackground)
-                .clipShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.control))
-
-                Text(window.title)
-                    .font(.system(size: 10.5, weight: selected ? .semibold : .medium))
-                    .foregroundStyle(selected ? .primary : .secondary)
-                    .lineLimit(1)
-                    .padding(.horizontal, 2)
+                .frame(width: 56, height: 40)
+                .background(Color.black.opacity(0.35))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(window.title)
+                        .font(.system(size: 11, weight: selected ? .semibold : .medium))
+                        .foregroundStyle(.primary).lineLimit(1)
+                    if !switcherTitlesMatch(window.appName, window.title) {
+                        Text(window.appName)
+                            .font(.system(size: 9.5)).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+                if selected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12)).foregroundStyle(MacBDesign.accent)
+                }
             }
-            .padding(6)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(selected ? MacBDesign.selectedBackground.opacity(0.55) : MacBDesign.controlBackground.opacity(0.45),
-                        in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
+            .padding(7)
+            .frame(height: 54)
+            .background(selected ? MacBDesign.selectedBackground.opacity(0.48) : Color.primary.opacity(0.035),
+                        in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card)
-                .strokeBorder(selected ? MacBDesign.focusRing : MacBDesign.separator, lineWidth: selected ? 2 : 0.5))
+                .strokeBorder(selected ? MacBDesign.focusRing : .clear, lineWidth: selected ? 1.5 : 0))
             .contentShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
         }
         .buttonStyle(.plain)
-        .help("\(window.appName) — \(window.title)")
         .accessibilityLabel("\(window.appName), \(window.title), \(position) / \(total)")
         .accessibilityHint(selected ? "Seçili pencere" : "Bu pencereye geç")
         .accessibilityAddTraits(selected ? .isSelected : [])

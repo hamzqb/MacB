@@ -2,17 +2,17 @@ import XCTest
 @testable import MacBCore
 
 final class PanelStateTests: XCTestCase {
-    func testHoverWaits180MillisecondsAndOpensOnlyGlance() {
+    func testHoverWaits180MillisecondsAndOpensOnlyPeek() {
         var state = PanelState()
         state.pointerEntered(at: 0)
         state.pointerEntered(at: 0.1)
         state.tick(at: 0.179)
         XCTAssertEqual(state.phase, .collapsed)
         state.tick(at: 0.18)
-        XCTAssertEqual(state.phase, .glance)
-        XCTAssertEqual(state.content, .music)
+        XCTAssertEqual(state.phase, .peek)
+        XCTAssertEqual(state.content, .home)
         state.tick(at: 10)
-        XCTAssertEqual(state.phase, .glance)
+        XCTAssertEqual(state.phase, .peek)
     }
 
     func testRapidExitCancelsHoverAndReentryStartsFreshDelay() {
@@ -25,10 +25,10 @@ final class PanelStateTests: XCTestCase {
         state.tick(at: 0.42)
         XCTAssertEqual(state.phase, .collapsed)
         state.tick(at: 0.44)
-        XCTAssertEqual(state.phase, .glance)
+        XCTAssertEqual(state.phase, .peek)
         state.pointerExited(at: 1)
         state.tick(at: 1.29)
-        XCTAssertEqual(state.phase, .glance)
+        XCTAssertEqual(state.phase, .peek)
         state.tick(at: 1.31)
         XCTAssertEqual(state.phase, .collapsed)
     }
@@ -41,7 +41,7 @@ final class PanelStateTests: XCTestCase {
         XCTAssertEqual(state.phase, .expanded)
         XCTAssertNil(state.hoverDeadline)
         state.select(.files)
-        state.glance()
+        state.peek()
         XCTAssertEqual(state.phase, .expanded)
         XCTAssertEqual(state.content, .files)
     }
@@ -51,7 +51,7 @@ final class PanelStateTests: XCTestCase {
         state.pointerEntered(at: 0)
         state.setDragging(true)
         XCTAssertEqual(state.phase, .expanded)
-        XCTAssertEqual(state.content, .music)
+        XCTAssertEqual(state.content, .home)
         XCTAssertNil(state.hoverDeadline)
         state.setKeyboardFocus(true)
         state.pointerExited(at: 0.1)
@@ -105,7 +105,7 @@ final class PanelStateTests: XCTestCase {
     }
 
     func testUtilityContentsOpenAndCloseCleanly() {
-        for content in [NotchContent.clipboard, .tasks] {
+        for content in [NotchContent.clipboard, .timer] {
             var state = PanelState()
             state.select(content)
             XCTAssertEqual(state.phase, .expanded)

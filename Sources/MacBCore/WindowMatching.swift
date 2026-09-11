@@ -1,7 +1,7 @@
 import Foundation
 import CoreGraphics
 
-public struct WindowDescriptor: Equatable {
+public struct WindowDescriptor: Equatable, Sendable {
     public let id: UInt32
     public let pid: Int32
     public let title: String

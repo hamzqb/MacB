@@ -1,5 +1,6 @@
 .build/
 dist/
+.codex-backups/
 .DS_Store
 .swiftpm/
 *.xcuserstate

@@ -1,15 +1,18 @@
 import AppKit
+import MacBCore
 import SwiftUI
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case general = "Genel", windows = "Pencereler", tools = "Araçlar", appearance = "Görünüm", permissions = "İzinler"
+    case general = "Genel", windows = "Pencereler", widgets = "Widget'lar", tools = "Araçlar", appearance = "Görünüm", privacy = "Gizlilik", permissions = "İzinler"
     var id: String { rawValue }
     var icon: String {
         switch self {
         case .general: return "slider.horizontal.3"
         case .windows: return "rectangle.split.2x1"
+        case .widgets: return "square.grid.2x2"
         case .tools: return "wrench.and.screwdriver"
         case .appearance: return "circle.lefthalf.filled"
+        case .privacy: return "faceid"
         case .permissions: return "hand.raised"
         }
     }
@@ -17,8 +20,10 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         switch self {
         case .general: return "MacB, çalışma şekline uyum sağlasın."
         case .windows: return "Pencerelerini daha az uğraşla yerleştir."
+        case .widgets: return "Island'da ne göründüğüne ve hangi sırada durduğuna sen karar ver."
         case .tools: return "Günlük işlerin için güvenli, yerel yardımcılar."
         case .appearance: return "Küçük ayrıntılar, daha sakin bir masaüstü."
+        case .privacy: return "Özel alanlarını neyin açacağına sen karar ver."
         case .permissions: return "Hangi özelliklerin erişimi olacağı senin elinde."
         }
     }
@@ -38,6 +43,11 @@ struct SettingsView: View {
     @ObservedObject var systemMonitor: SystemMonitorService
     @ObservedObject var keyboardCleaning: KeyboardCleaningService
     @ObservedObject var updates: UpdateService
+    @ObservedObject var widgets: IslandLayoutStore
+    @ObservedObject var background: IslandBackgroundStore
+    @ObservedObject var weather: WeatherService
+    @ObservedObject var faceUnlock: FaceUnlockService
+    @ObservedObject var launcher: AppLauncherStore
     var openPanel: () -> Void
     @AppStorage("settingsPage") private var selectedPage: SettingsPage = .general
     @State private var showRemovalConfirmation = false
@@ -46,7 +56,6 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             sidebar
-            Divider().opacity(0.55)
             ScrollView {
                 VStack(alignment: .leading, spacing: MacBDesign.contentSpacing) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -62,8 +71,10 @@ struct SettingsView: View {
                     switch selectedPage {
                     case .general: generalPage
                     case .windows: windowsPage
+                    case .widgets: widgetsPage
                     case .tools: toolsPage
                     case .appearance: appearancePage
+                    case .privacy: PrivacySettingsView(faceUnlock: faceUnlock)
                     case .permissions: permissionsPage
                     }
                     Spacer(minLength: 0)
@@ -88,7 +99,7 @@ struct SettingsView: View {
     }
 
     private var windowsPage: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: 22) {
             section("Pencere yönetimi") {
                 settingToggle("Pencere kısayolları", detail: "Etkin pencereyi ekranın yarısına, köşesine veya başka ekrana taşı.",
                               isOn: $preferences.windowManagementEnabled)
@@ -97,8 +108,7 @@ struct SettingsView: View {
                 }
             }
             if preferences.windowManagementEnabled {
-                Divider().opacity(0.55)
-                section("Temel yerleşimler") {
+                    section("Temel yerleşimler") {
                     shortcutRow("Sol yarı", symbol: "rectangle.lefthalf.filled", keys: "⌃⌥←")
                     rowDivider
                     shortcutRow("Sağ yarı", symbol: "rectangle.righthalf.filled", keys: "⌃⌥→")
@@ -111,8 +121,7 @@ struct SettingsView: View {
                     rowDivider
                     shortcutRow("Ortala", symbol: "rectangle.center.inset.filled", keys: "⌃⌥C")
                 }
-                Divider().opacity(0.55)
-                section("Köşeler ve ekranlar") {
+                    section("Köşeler ve ekranlar") {
                     shortcutRow("Sol üst / Sağ üst", symbol: "rectangle.split.2x1", keys: "⌃⌥U  /  ⌃⌥I")
                     rowDivider
                     shortcutRow("Sol alt / Sağ alt", symbol: "rectangle.split.2x1", keys: "⌃⌥J  /  ⌃⌥K")
@@ -126,36 +135,42 @@ struct SettingsView: View {
     }
 
     private var toolsPage: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: 22) {
             section("Claude ve Codex") {
-                if aiActivity.activities.isEmpty {
+                if aiActivity.statuses.isEmpty {
                     message("Açık masaüstü veya terminal oturumu bulunmadı.")
                 } else {
-                    ForEach(aiActivity.activities.prefix(5)) { activity in
+                    ForEach(aiActivity.statuses.prefix(5)) { status in
                         HStack(spacing: 10) {
-                            Image(systemName: activity.kind.symbol).foregroundStyle(MacBDesign.accent).frame(width: 22)
+                            Image(systemName: status.kind.symbol).foregroundStyle(MacBDesign.accent).frame(width: 22)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(activity.kind.rawValue).font(.system(size: 13, weight: .medium))
-                                Text("\(activity.source) · \(activity.elapsedText)").font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                                Text(status.kind.rawValue).font(.system(size: 13, weight: .medium))
+                                // The badge already says it is running, so the line
+                                // below carries only what the badge cannot: where it
+                                // is running and how much allowance is left.
+                                Text([status.source, status.usage?.compactText].compactMap { $0 }.joined(separator: " · "))
+                                    .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
                             }
-                            Spacer()
-                            Circle().fill(Color.green).frame(width: 7, height: 7).accessibilityLabel("Çalışıyor")
+                            Spacer(minLength: 8)
+                            if status.isRunning { runningBadge }
                         }
                     }
                 }
             }
-            Divider().opacity(0.55)
             section("Sistem") {
                 HStack(spacing: 10) {
-                    systemMetric("CPU", "\(Int(systemMonitor.snapshot.cpuUsage))%")
-                    systemMetric("RAM", percentage(systemMonitor.snapshot.usedMemory, systemMonitor.snapshot.totalMemory))
-                    systemMetric("Disk", percentage(UInt64(max(0, systemMonitor.snapshot.totalDisk - systemMonitor.snapshot.availableDisk)), UInt64(max(0, systemMonitor.snapshot.totalDisk))))
-                    systemMetric("Pil", systemMonitor.snapshot.batteryPercent.map { "\(Int($0))%" } ?? "—")
+                    systemMetric("CPU", "\(Int(systemMonitor.snapshot.cpuUsage))%",
+                                 fraction: systemMonitor.snapshot.cpuUsage / 100)
+                    systemMetric("RAM", percentage(systemMonitor.snapshot.usedMemory, systemMonitor.snapshot.totalMemory),
+                                 fraction: fraction(systemMonitor.snapshot.usedMemory, systemMonitor.snapshot.totalMemory))
+                    systemMetric("Disk", percentage(UInt64(max(0, systemMonitor.snapshot.totalDisk - systemMonitor.snapshot.availableDisk)), UInt64(max(0, systemMonitor.snapshot.totalDisk))),
+                                 fraction: fraction(UInt64(max(0, systemMonitor.snapshot.totalDisk - systemMonitor.snapshot.availableDisk)), UInt64(max(0, systemMonitor.snapshot.totalDisk))))
+                    systemMetric("Pil", systemMonitor.snapshot.batteryPercent.map { "\(Int($0))%" } ?? "—",
+                                 fraction: systemMonitor.snapshot.batteryPercent.map { $0 / 100 })
                 }
                 Label(thermalText, systemImage: "thermometer.medium")
                     .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
             }
-            Divider().opacity(0.55)
             section("Klavye temizleme") {
                 Text("Klavye girişini geçici olarak durdurur. Fare çalışır; üç kez Esc acil çıkıştır.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
@@ -171,7 +186,6 @@ struct SettingsView: View {
                 }
                 if let error = keyboardCleaning.errorMessage { message(error, warning: true) }
             }
-            Divider().opacity(0.55)
             section("Arşiv") {
                 Text("Dosyaları MacB içinde ZIP olarak sıkıştır veya güvenli biçimde çıkar.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
@@ -180,11 +194,17 @@ struct SettingsView: View {
                     Button("ZIP çıkar…", action: utilities.extractArchive)
                 }
             }
-            Divider().opacity(0.55)
             section("Uygulama kaldırma") {
                 Text("Uygulamayı ve ilişkili kullanıcı kalıntılarını önce gösterir, sonra Çöp Sepeti’ne taşır.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
-                Button("Uygulama seç…", action: utilities.inspectApplication)
+                Button("Uygulama seç…") {
+                    Task {
+                        if faceUnlock.settings.guards(.uninstaller) && !faceUnlock.isUnlocked(.uninstaller) {
+                            guard await faceUnlock.requestAccess(to: .uninstaller) else { return }
+                        }
+                        utilities.inspectApplication()
+                    }
+                }
                 if !utilities.removalCandidates.isEmpty {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("\(utilities.selectedApplicationName) · \(utilities.removalCandidates.count) öğe · \(ByteCountFormatter.string(fromByteCount: utilities.removalSize, countStyle: .file))")
@@ -200,7 +220,6 @@ struct SettingsView: View {
                     }.padding(12).background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
-            Divider().opacity(0.55)
             section("MacWhisper") {
                 Text(utilities.macWhisperInstalled ? "Ses veya video dosyasını MacWhisper’a gönder." : "MacWhisper kurulu değil.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
@@ -262,7 +281,7 @@ struct SettingsView: View {
     }
 
     private var generalPage: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: 22) {
             section("Çalışma alanı") {
                 settingToggle("Dock önizlemeleri", detail: "Bir simgenin üzerinde bekle, istediğin pencereye geç.", isOn: $preferences.dockEnabled)
                 rowDivider
@@ -283,7 +302,6 @@ struct SettingsView: View {
                 }
                 if let shortcutError = hotKey.registrationError { message(shortcutError, warning: true) }
             }
-            Divider().opacity(0.55)
             section("Akıllı akış") {
                 settingToggle("Akıllı Notch", detail: "Panel açılırken müzik, raf ve indirme durumuna göre doğru bölümü öne çıkar.", isOn: $preferences.smartNotchEnabled)
                 rowDivider
@@ -293,7 +311,6 @@ struct SettingsView: View {
                 rowDivider
                 settingToggle("Odak modu", detail: "Seçtiğin pencere öne gelirken diğer uygulamaları gizle.", isOn: $preferences.focusModeEnabled)
             }
-            Divider().opacity(0.55)
             section("Dosya rafı") {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(shelf.items.isEmpty ? "Dosyaların için küçük bir yer." : "\(shelf.items.count) öğe elinin altında.")
@@ -312,7 +329,6 @@ struct SettingsView: View {
                 }
                 if let error = shelf.errorMessage { message(error, warning: true) }
             }
-            Divider().opacity(0.55)
             section("Güncellemeler") {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 4) {
@@ -348,12 +364,196 @@ struct SettingsView: View {
         }
     }
 
+    private var widgetsPage: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            section("Şeritte (\(widgets.layout.enabledWidgets.count))") {
+                if widgets.layout.enabledWidgets.isEmpty {
+                    Text("Şerit boş. Aşağıdaki kütüphaneden widget ekle.")
+                        .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                } else {
+                    ForEach(Array(widgets.layout.enabledWidgets.enumerated()), id: \.element.id) { index, widget in
+                        if index > 0 { rowDivider }
+                        activeWidgetRow(widget, index: index,
+                                        count: widgets.layout.enabledWidgets.count)
+                    }
+                }
+            }
+            ForEach(libraryGroups) { group in
+                section("\(group.category.title) kütüphanesi") {
+                    ForEach(Array(group.widgets.enumerated()), id: \.element.id) { index, widget in
+                        if index > 0 { rowDivider }
+                        libraryWidgetRow(widget)
+                    }
+                }
+            }
+            if widgets.isActive(.worldClock) {
+                section("Dünya saati") {
+                    Picker("Şehir", selection: $preferences.secondaryTimeZone) {
+                        ForEach(WorldClockWidget.choices, id: \.identifier) { choice in
+                            Text(choice.name).tag(choice.identifier)
+                        }
+                    }
+                    .frame(maxWidth: 320)
+                    Text("Widget yerel saatin yanında bu şehri gösterir. Kartın üstünde sağ tıklayarak da değiştirebilirsin.")
+                        .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            section("Hava durumu") {
+                Picker("Kart stili", selection: $preferences.weatherWidgetStyle) {
+                    ForEach(WeatherWidgetStyle.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                HStack(spacing: 10) {
+                    TextField("Şehir", text: Binding(
+                        get: { weather.placeQuery },
+                        set: { weather.placeQuery = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 240)
+                    .accessibilityLabel("Hava durumu şehri")
+                    if weather.isLoading { ProgressView().controlSize(.small) }
+                    Spacer()
+                }
+                Text("Şehir adı Open-Meteo üzerinden çözülür. Konum izni istenmez, sorgu yalnızca panel açıkken ve en fazla 15 dakikada bir yapılır.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let error = weather.errorMessage {
+                    Text(error).font(.system(size: 11)).foregroundStyle(.orange)
+                }
+            }
+            section("Medya görünümü") {
+                Picker("Kart stili", selection: $preferences.mediaWidgetStyle) {
+                    ForEach(MediaWidgetStyle.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+            }
+            HStack {
+                Text("Şeride sığmayan widget'lar alt satıra iner, hiçbiri kırpılmaz.")
+                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                Spacer()
+                Button("Varsayılana dön", action: widgets.reset)
+            }
+        }
+    }
+
+    /// A widget already on the strip: order, width and a way off the strip.
+    private func activeWidgetRow(_ widget: IslandWidget, index: Int, count: Int) -> some View {
+        HStack(spacing: 12) {
+            widgetGlyph(widget.kind, isActive: true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(widget.kind.title).font(.system(size: 13, weight: .medium))
+                Text(widget.kind.summary).font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+            }
+            Spacer()
+            Picker("", selection: Binding(
+                get: { widget.size },
+                set: { widgets.resize(id: widget.id, to: $0) }
+            )) {
+                ForEach(IslandWidgetSize.allCases, id: \.rawValue) { size in
+                    Text(sizeTitle(size)).tag(size)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: 180)
+            .accessibilityLabel("\(widget.kind.title) boyutu")
+            VStack(spacing: 2) {
+                stepButton("chevron.up", label: "Yukarı taşı", enabled: index > 0) {
+                    widgets.moveVisible(id: widget.id, by: -1)
+                }
+                stepButton("chevron.down", label: "Aşağı taşı", enabled: index < count - 1) {
+                    widgets.moveVisible(id: widget.id, by: 1)
+                }
+            }
+            Button("Çıkar") { widgets.setEnabled(id: widget.id, false) }
+                .accessibilityLabel("\(widget.kind.title) widget'ını çıkar")
+        }
+        .padding(.vertical, 4)
+    }
+
+    /// A widget the strip does not have yet. One button, and it lands at the end.
+    private func libraryWidgetRow(_ widget: IslandWidget) -> some View {
+        HStack(spacing: 12) {
+            widgetGlyph(widget.kind, isActive: widget.isEnabled)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(widget.kind.title).font(.system(size: 13, weight: .medium))
+                Text(widget.kind.summary).font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+            }
+            Spacer()
+            if widget.isEnabled {
+                Label("Şeritte", systemImage: "checkmark")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(MacBDesign.accent)
+            } else {
+                Button("Ekle") { widgets.add(id: widget.id) }
+                    .accessibilityLabel("\(widget.kind.title) widget'ını ekle")
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func widgetGlyph(_ kind: IslandWidgetKind, isActive: Bool) -> some View {
+        Image(systemName: kind.symbol)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(isActive ? MacBDesign.accent : MacBDesign.muted)
+            .frame(width: 26, height: 26)
+            .background(MacBDesign.cardFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private var libraryGroups: [IslandWidgetGroup] { widgets.layout.groups }
+
+    private func stepButton(_ symbol: String, label: String, enabled: Bool,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol).font(.system(size: 9, weight: .bold)) }
+            .buttonStyle(.borderless)
+            .disabled(!enabled)
+            .help(label)
+            .accessibilityLabel(label)
+    }
+
+    private func sizeTitle(_ size: IslandWidgetSize) -> String {
+        switch size {
+        case .small: return "Küçük"
+        case .medium: return "Orta"
+        case .wide: return "Geniş"
+        }
+    }
+
     private var appearancePage: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: 22) {
+            section("Anlık bildirimler") {
+                settingToggle("Sistem değişikliklerini göster",
+                              detail: "Sesi değiştirince, şarkı geçince ya da şarj takılınca island kısa süre açılıp gösterir.",
+                              isOn: $preferences.islandEventsEnabled)
+                rowDivider
+                settingToggle("Ses göstergesini MacB devralsın",
+                              detail: "Mac'in kendi hoparlörlerinde macOS'un panelini duraklatır, yerini island alır. Parlaklık ve Caps Lock da aynı panelden geldiği için onlar da görünmez olur. AirPods gibi Bluetooth çıkışlarda macOS paneli Control Center'dan çiziyor ve durdurulamıyor; orada MacB kenara çekilir. İki gösterge birden hiçbir zaman çıkmaz. MacB kapanınca her şey eski haline döner.",
+                              isOn: $preferences.hidesSystemVolumeHUD)
+                    .disabled(!preferences.islandEventsEnabled)
+            }
             section("Island yüzeyi") {
                 Picker("Island yüzeyi", selection: $preferences.islandAppearance) {
                     ForEach(IslandAppearance.allCases) { Text($0.title).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("Island yüzeyi")
+                if preferences.islandAppearance == .customImage {
+                    HStack(spacing: 10) {
+                        Text(background.name ?? "Henüz bir görsel seçilmedi.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(MacBDesign.muted)
+                            .lineLimit(1)
+                        Spacer()
+                        Button("Görsel seç…", action: background.choose)
+                        if background.hasImage {
+                            Button("Kaldır", role: .destructive, action: background.clear)
+                        }
+                    }
+                    .padding(.top, 8)
+                    if let error = background.errorMessage {
+                        Text(error).font(.system(size: 11)).foregroundStyle(.orange)
+                    }
+                }
             }
             section("Panel davranışı") {
                 settingToggle("Küçük göstergeler", detail: "Panel kapalıyken oynatma durumunu ve raftaki öğe sayısını göster.", isOn: $preferences.compactIndicators)
@@ -361,6 +561,18 @@ struct SettingsView: View {
                 settingToggle("Yumuşak geçişler", detail: "Paneller açılırken ve kapanırken kısa animasyonlar kullan.", isOn: $preferences.animationsEnabled)
                 rowDivider
                 settingToggle("Pencere peek modu", detail: "Kartta bekleyince pencerenin ekrandaki yerini hafifçe vurgula.", isOn: $preferences.peekEnabled)
+            }
+            section("Hızlı erişim") {
+                Text("Island'daki Uygulamalar bölümünde yalnızca buraya eklediklerin görünür. MacB kurulu uygulamaları taramaz.")
+                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Button("Uygulama veya klasör ekle…", action: launcher.choose)
+                    Spacer()
+                    Text("\(launcher.items.count) öğe")
+                        .font(.system(size: 11))
+                        .foregroundStyle(MacBDesign.muted)
+                }
             }
             section("Raf yardımcıları") {
                 settingToggle("Son dosyalar", detail: "Downloads, Desktop ve Documents içinden son dosyaları öner. macOS klasör erişimi isteyebilir.", isOn: $preferences.recentFilesEnabled)
@@ -405,23 +617,12 @@ struct SettingsView: View {
             permissionRow("Giriş izleme", detail: "⌘ Tab pencere seçicisini çalıştırmak için.",
                           granted: permissions.inputMonitoring, action: permissions.requestInputMonitoring)
             rowDivider
-            permissionRow("Spotify otomasyonu", detail: "Parça bilgisini okumak ve oynatma kontrollerini kullanmak için.",
-                          granted: spotify.isAuthorized,
-                          actionTitle: spotify.isRunning ? "İzin ver" : "Spotify’ı aç",
-                          action: spotify.isRunning ? spotify.requestAuthorization : spotify.openSpotify)
-            if let error = spotify.errorMessage { message(error, warning: true) }
-            rowDivider
-            permissionRow("Apple Music otomasyonu", detail: "Apple Music parça bilgisini okumak ve oynatma kontrollerini kullanmak için.",
-                          granted: appleMusic.isAuthorized,
-                          actionTitle: appleMusic.isRunning ? "İzin ver" : "Apple Music’i aç",
-                          action: appleMusic.isRunning ? appleMusic.requestAuthorization : appleMusic.openAppleMusic)
-            if let error = appleMusic.errorMessage { message(error, warning: true) }
-            rowDivider
-            permissionRow("Tarayıcı medyası", detail: "Safari ve Chromium sekmelerinde yalnız gerçekten oynayan medyayı bulmak için.",
-                          granted: browserMedia.isAuthorized,
-                          actionTitle: browserMedia.isRunning ? "İzin ver" : "Tarayıcıyı aç",
-                          action: browserMedia.isRunning ? browserMedia.requestAuthorization : openDefaultBrowser)
-            if let error = browserMedia.errorMessage { message(error, warning: true) }
+            permissionRow("Medya denetimi", detail: mediaPermissionDetail,
+                          granted: mediaPermissionGranted,
+                          actionTitle: "Bağlantıları hazırla", action: prepareMediaAccess)
+            if let error = [spotify.errorMessage, appleMusic.errorMessage, browserMedia.errorMessage].compactMap({ $0 }).first {
+                message(error, warning: true)
+            }
             rowDivider
             permissionRow("Kamera", detail: "Canlı önizleme yalnız sen kamera düğmesine bastığında çalışır.",
                           granted: camera.isAuthorized, actionTitle: "İzin ver", action: camera.requestAuthorization)
@@ -435,15 +636,52 @@ struct SettingsView: View {
 
     private var rowDivider: some View { Divider().opacity(0.45) }
 
-    private func systemMetric(_ title: String, _ value: String) -> some View {
-        VStack(spacing: 3) {
-            Text(value).font(.system(size: 14, weight: .semibold, design: .rounded)).monospacedDigit()
-            Text(title).font(.system(size: 10)).foregroundStyle(MacBDesign.muted)
-        }.frame(maxWidth: .infinity).frame(height: 52).background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 11))
+    private var runningBadge: some View {
+        Text("çalışıyor")
+            .font(.system(size: 10, weight: .medium))
+            .foregroundStyle(Color(nsColor: .systemGreen))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Color(nsColor: .systemGreen).opacity(0.14), in: Capsule())
+            .accessibilityLabel("Çalışıyor")
+    }
+
+    /// A number alone says little. The bar gives it a scale, and the colour
+    /// turns only when the resource is genuinely nearly spent.
+    private func systemMetric(_ title: String, _ value: String, fraction: Double?) -> some View {
+        let level = fraction ?? 0
+        let tint: Color = level >= 0.85 ? Color(nsColor: .systemRed) : MacBDesign.accent
+        return VStack(spacing: 5) {
+            Text(value)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+            Text(title)
+                .font(.system(size: 10))
+                .foregroundStyle(MacBDesign.muted)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.08))
+                    Capsule().fill(tint)
+                        .frame(width: proxy.size.width * min(1, max(0, level)))
+                }
+            }
+            .frame(height: 3)
+            .opacity(fraction == nil ? 0 : 1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(title) \(value)")
     }
 
     private func percentage(_ used: UInt64, _ total: UInt64) -> String {
         total > 0 ? "\(Int(Double(used) / Double(total) * 100))%" : "—"
+    }
+
+    private func fraction(_ used: UInt64, _ total: UInt64) -> Double? {
+        total > 0 ? Double(used) / Double(total) : nil
     }
 
     private var thermalText: String {
@@ -461,10 +699,39 @@ struct SettingsView: View {
         NSWorkspace.shared.open(url)
     }
 
+    private var mediaPermissionGranted: Bool {
+        (!spotify.isRunning || spotify.isAuthorized) &&
+        (!appleMusic.isRunning || appleMusic.isAuthorized) &&
+        (!browserMedia.isRunning || browserMedia.isAuthorized)
+    }
+
+    private var mediaPermissionDetail: String {
+        "Spotify, Apple Music ve tarayıcıdaki etkin oynatıcıyı tek medya alanında gösterir. macOS yalnız kullandığın kaynak için kendi onayını gösterebilir."
+    }
+
+    private func prepareMediaAccess() {
+        if spotify.isRunning && !spotify.isAuthorized { spotify.requestAuthorization() }
+        if appleMusic.isRunning && !appleMusic.isAuthorized { appleMusic.requestAuthorization() }
+        if browserMedia.isRunning && !browserMedia.isAuthorized { browserMedia.requestAuthorization() }
+        if !spotify.isRunning && !appleMusic.isRunning && !browserMedia.isRunning { openDefaultBrowser() }
+    }
+
+    /// A settings group: heading outside, content inside a card.
+    ///
+    /// The card is what separates one group from the next, so the page no longer
+    /// needs a divider between every section and stops reading as one long list.
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text(title).font(.system(size: 14, weight: .semibold)).accessibilityAddTraits(.isHeader)
-            VStack(alignment: .leading, spacing: 16, content: content)
+        VStack(alignment: .leading, spacing: 9) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(MacBDesign.muted)
+                .accessibilityAddTraits(.isHeader)
+            VStack(alignment: .leading, spacing: 14, content: content)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .background(MacBDesign.cardFill, in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
+                    .strokeBorder(MacBDesign.cardStroke))
         }
     }
 

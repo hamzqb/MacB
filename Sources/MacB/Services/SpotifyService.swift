@@ -8,6 +8,8 @@ private struct SpotifySnapshot {
     var artist = ""
     var artworkURL = ""
     var playing = false
+    var position: Double = 0
+    var duration: Double = 0
     var error: String?
     var denied = false
 }
@@ -34,6 +36,8 @@ final class SpotifyService: ObservableObject {
     @Published var isRunning = false
     @Published var isAuthorized = false
     @Published var errorMessage: String?
+    @Published var position: Double = 0
+    @Published var duration: Double = 0
 
     private let queue = DispatchQueue(label: "MacB.Spotify", qos: .utility)
     private var observers: [NSObjectProtocol] = []
@@ -131,6 +135,8 @@ final class SpotifyService: ObservableObject {
             isPlaying = false
             trackTitle = ""
             artist = ""
+            position = 0
+            duration = 0
             artwork = nil
             artworkKey = ""
             artworkTask?.cancel()
@@ -183,6 +189,8 @@ final class SpotifyService: ObservableObject {
                     self.trackTitle = snapshot.title
                     self.artist = snapshot.artist
                     self.isPlaying = snapshot.playing
+                    self.position = snapshot.position
+                    self.duration = snapshot.duration
                     self.updateArtwork(snapshot.artworkURL, trackKey: snapshot.title + "\n" + snapshot.artist)
                 } else {
                     self.isPlaying = false
@@ -191,6 +199,8 @@ final class SpotifyService: ObservableObject {
                     self.artwork = nil
                     self.trackTitle = ""
                     self.artist = ""
+                    self.position = 0
+                    self.duration = 0
                 }
                 if !self.pendingCommands.isEmpty {
                     let next = self.pendingCommands.removeFirst()
@@ -250,18 +260,29 @@ final class SpotifyService: ObservableObject {
             guard state != code("kPSS") else { return SpotifySnapshot() }
             guard let titleProperty = property("pnam", container: track),
                   let artistProperty = property("pArt", container: track),
-                  let artworkProperty = property("aUrl", container: track) else {
+                  let artworkProperty = property("aUrl", container: track),
+                  let positionProperty = property("pPos"),
+                  let durationProperty = property("pDur", container: track) else {
                 return SpotifySnapshot(error: "Spotify yanıtı okunamadı. Yeniden denenecek.")
             }
             let title = try get(titleProperty).stringValue ?? ""
             let artist = try get(artistProperty).stringValue ?? ""
             let artwork = try get(artworkProperty).stringValue ?? ""
-            return SpotifySnapshot(title: title, artist: artist, artworkURL: artwork, playing: state == code("kPSP"))
+            let position = getNumber(try get(positionProperty))
+            let durationMilliseconds = getNumber(try get(durationProperty))
+            return SpotifySnapshot(title: title, artist: artist, artworkURL: artwork,
+                                   playing: state == code("kPSP"), position: position,
+                                   duration: durationMilliseconds / 1000)
         } catch {
             let number = (error as NSError).code
             if number == -1743 { return SpotifySnapshot(error: "Spotify otomasyon izni kaldırıldı.", denied: true) }
             return SpotifySnapshot(error: number == -1712 ? "Spotify zamanında yanıt vermedi. Yeniden denenecek." : "Spotify şu anda yanıt vermiyor. Yeniden denenecek.")
         }
+    }
+
+    nonisolated private static func getNumber(_ descriptor: NSAppleEventDescriptor) -> Double {
+        if let value = descriptor.stringValue, let number = Double(value) { return number }
+        return Double(descriptor.int32Value)
     }
 
     private func updateArtwork(_ value: String, trackKey: String) {

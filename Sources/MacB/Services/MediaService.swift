@@ -29,6 +29,9 @@ final class MediaService: ObservableObject {
     @Published private(set) var artist = ""
     @Published private(set) var artwork: NSImage?
     @Published private(set) var isPlaying = false
+    /// Playback position and length in seconds. Zero means the source does not report them.
+    @Published private(set) var position: Double = 0
+    @Published private(set) var duration: Double = 0
     @Published private(set) var isRunning = false
     @Published private(set) var isAuthorized = false
     @Published private(set) var errorMessage: String?
@@ -126,6 +129,8 @@ final class MediaService: ObservableObject {
             isRunning = false
             isAuthorized = true
             errorMessage = nil
+            position = 0
+            duration = 0
         case .spotify:
             title = spotify.trackTitle
             artist = spotify.artist
@@ -134,6 +139,8 @@ final class MediaService: ObservableObject {
             isRunning = spotify.isRunning
             isAuthorized = spotify.isAuthorized
             errorMessage = spotify.errorMessage
+            position = spotify.position
+            duration = spotify.duration
         case .appleMusic:
             title = appleMusic.trackTitle
             artist = appleMusic.artist
@@ -142,6 +149,8 @@ final class MediaService: ObservableObject {
             isRunning = appleMusic.isRunning
             isAuthorized = appleMusic.isAuthorized
             errorMessage = appleMusic.errorMessage
+            position = appleMusic.position
+            duration = appleMusic.duration
         case .browser:
             title = browser.title
             artist = browser.sourceName
@@ -150,6 +159,8 @@ final class MediaService: ObservableObject {
             isRunning = browser.isRunning
             isAuthorized = browser.isAuthorized
             errorMessage = browser.errorMessage
+            position = browser.position
+            duration = browser.duration
         }
     }
 
@@ -157,6 +168,18 @@ final class MediaService: ObservableObject {
         if spotify.isPlaying { return .spotify }
         if appleMusic.isPlaying { return .appleMusic }
         if browser.isPlaying { return .browser }
+        // Pausing must not make the current track disappear. Keep the selected
+        // source while it still exposes a real media item, then fall back to
+        // another paused source with metadata.
+        switch source {
+        case .spotify where spotify.isRunning && !spotify.trackTitle.isEmpty: return .spotify
+        case .appleMusic where appleMusic.isRunning && !appleMusic.trackTitle.isEmpty: return .appleMusic
+        case .browser where browser.isRunning && !browser.title.isEmpty: return .browser
+        default: break
+        }
+        if spotify.isRunning && !spotify.trackTitle.isEmpty { return .spotify }
+        if appleMusic.isRunning && !appleMusic.trackTitle.isEmpty { return .appleMusic }
+        if browser.isRunning && !browser.title.isEmpty { return .browser }
         return .none
     }
 }

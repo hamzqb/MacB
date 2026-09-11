@@ -47,6 +47,16 @@ import MacBCore
     private let systemMonitor = SystemMonitorService()
     private let keyboardCleaning = KeyboardCleaningService()
     private let utilities = UtilityCoordinator()
+    private let islandTimer = TimerService()
+    private let launcher = AppLauncherStore()
+    private let islandBackground = IslandBackgroundStore()
+    private let weather = WeatherService()
+    private lazy var faceUnlock = FaceUnlockService(biometrics: biometricAuth)
+    private let systemEvents = SystemEventService()
+    private let widgetLayout = IslandLayoutStore(
+        directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("MacB"))
+    private let quickNote = QuickNoteStore()
     private let updates = UpdateService()
     private lazy var dock = DockController(windowService: windows, previewService: previews, preferences: preferences,
                                            favorites: favorites, recentTargets: recentTargets)
@@ -56,6 +66,11 @@ import MacBCore
                                             auth: biometricAuth, recentTargets: recentTargets,
                                             aiActivity: aiActivity, systemMonitor: systemMonitor,
                                             keyboardCleaning: keyboardCleaning,
+                                            timer: islandTimer, widgets: widgetLayout, launcher: launcher,
+                                            background: islandBackground, weather: weather,
+                                            note: quickNote,
+                                            faceUnlock: faceUnlock,
+                                            systemEvents: systemEvents,
                                             openSettings: { [weak self] in self?.showSettings() })
     private lazy var switcher = SwitcherController(windowService: windows, previewService: previews,
                                                    preferences: preferences, favorites: favorites)
@@ -120,14 +135,32 @@ import MacBCore
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) { NSApp.terminate(nil) }
         } else if CommandLine.arguments.contains("--show-panel") {
             notch.openPanel()
-        } else if CommandLine.arguments.contains("--preview-glance") {
-            notch.showDevelopmentPreview(phase: .glance)
+        } else if CommandLine.arguments.contains("--preview-home") {
+            notch.showDevelopmentPreview(phase: .expanded, content: .home)
+        } else if CommandLine.arguments.contains("--preview-library") {
+            widgetLayout.isEditing = true
+            notch.showDevelopmentPreview(phase: .expanded, content: .home)
+        } else if CommandLine.arguments.contains("--preview-widgets") {
+            for kind in [IslandWidgetKind.battery, .storage, .shelf, .notes, .worldClock] {
+                guard let widget = widgetLayout.layout.widgets.first(where: { $0.kind == kind }) else { continue }
+                widgetLayout.add(id: widget.id)
+            }
+            notch.showDevelopmentPreview(phase: .expanded, content: .home)
+        } else if CommandLine.arguments.contains("--preview-active-timer") {
+            islandTimer.start()
+            notch.showDevelopmentPreview(phase: .expanded, content: .home)
+        } else if CommandLine.arguments.contains("--preview-peek") {
+            notch.showDevelopmentPreview(phase: .peek)
         } else if CommandLine.arguments.contains("--preview-files") {
             notch.showDevelopmentPreview(phase: .expanded, content: .files)
         } else if CommandLine.arguments.contains("--preview-clipboard") {
             notch.showDevelopmentPreview(phase: .expanded, content: .clipboard)
-        } else if CommandLine.arguments.contains("--preview-tools") {
-            notch.showDevelopmentPreview(phase: .expanded, content: .tools)
+        } else if CommandLine.arguments.contains("--preview-drop") {
+            notch.showDevelopmentPreview(phase: .expanded, content: .files, dropping: true)
+        } else if CommandLine.arguments.contains("--preview-timer") {
+            notch.showDevelopmentPreview(phase: .expanded, content: .timer)
+        } else if CommandLine.arguments.contains("--preview-apps") {
+            notch.showDevelopmentPreview(phase: .expanded, content: .apps)
         } else if CommandLine.arguments.contains("--preview-switcher") {
             switcher.showDevelopmentPreview()
         } else if CommandLine.arguments.contains("--preview-onboarding") {
@@ -255,7 +288,8 @@ import MacBCore
         settingsWindow?.contentView = NSHostingView(rootView: SettingsView(preferences: preferences, permissions: permissions,
             spotify: spotify, appleMusic: appleMusic, browserMedia: browserMedia, camera: camera, shelf: shelf, hotKey: hotKey,
             utilities: utilities, aiActivity: aiActivity, systemMonitor: systemMonitor, keyboardCleaning: keyboardCleaning,
-            updates: updates,
+            updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
+            faceUnlock: faceUnlock, launcher: launcher,
             openPanel: { [weak self] in self?.openNotch() }))
     }
 
@@ -338,6 +372,7 @@ import MacBCore
         clipboardShelf.stop()
         fileActivity.stop()
         camera.stop()
+        faceUnlock.suspend()
         biometricAuth.reset()
     }
 
@@ -352,6 +387,9 @@ import MacBCore
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // Put the macOS panel back before anything else, so a slow teardown
+        // cannot leave the Mac without its own indicators.
+        systemEvents.restoreSystemHUD()
         hotKey.unregister()
         windowLayout.stop()
         switcher.dismiss()
@@ -365,6 +403,7 @@ import MacBCore
         clipboardShelf.stop()
         fileActivity.stop()
         camera.stop()
+        faceUnlock.suspend()
         biometricAuth.reset()
         permissions.stopObserving()
         for observer in workspaceObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }

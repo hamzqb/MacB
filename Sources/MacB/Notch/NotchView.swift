@@ -17,14 +17,20 @@ struct NotchView: View {
     @ObservedObject var aiActivity: AIActivityService
     @ObservedObject var systemMonitor: SystemMonitorService
     @ObservedObject var keyboardCleaning: KeyboardCleaningService
+    @ObservedObject var timer: TimerService
+    @ObservedObject var widgets: IslandLayoutStore
+    @ObservedObject var launcher: AppLauncherStore
+    @ObservedObject var background: IslandBackgroundStore
+    @ObservedObject var weather: WeatherService
+    @ObservedObject var note: QuickNoteStore
+    @ObservedObject var faceUnlock: FaceUnlockService
     var open: () -> Void
     var close: () -> Void
     var select: (NotchContent) -> Void
     var openSettings: () -> Void
     var cameraAction: () -> Void
     var notify: (String, String) -> Void
-    @State private var newTask = ""
-    @State private var clipboardQuery = ""
+    @State private var clipboardFilter: ClipboardFilter = .recent
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -45,8 +51,8 @@ struct NotchView: View {
         }
         .frame(width: presentation.width, height: presentation.height, alignment: .top)
         .clipShape(islandShape)
-        .overlay(islandShape.strokeBorder(presentation.isDropTarget ? MacBDesign.accent.opacity(0.8) : surfaceStroke,
-            lineWidth: presentation.isDropTarget ? 1.5 : (presentation.layout.phase == .collapsed ? 0 : 0.5)))
+        .overlay(islandShape.strokeBorder(surfaceStroke,
+            lineWidth: presentation.layout.phase == .collapsed ? 0 : 0.5))
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .onExitCommand(perform: close)
@@ -55,28 +61,40 @@ struct NotchView: View {
     @ViewBuilder private var islandSurface: some View {
         if presentation.layout.phase == .collapsed {
             Color.clear
-        } else if usesGlassSurface {
-            Rectangle().fill(.ultraThinMaterial)
-            ZStack {
-                Color.black.opacity(0.42)
-                LinearGradient(colors: [MacBDesign.Island.glassHighlight, .clear, .black.opacity(0.28)], startPoint: .topLeading, endPoint: .bottomTrailing)
-            }
         } else {
-            Color.black
+            switch preferences.islandAppearance {
+            case .pureBlack:
+                Color.black
+            case .liquidGlass:
+                Rectangle().fill(.ultraThinMaterial)
+                glassSheen
+            case .blackGlass:
+                Rectangle().fill(.ultraThinMaterial)
+                Color.black.opacity(0.62)
+                glassSheen
+            case .customImage:
+                if let image = background.image {
+                    Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                    // Widgets and labels are white; the picture has to stay behind them.
+                    Color.black.opacity(0.55)
+                    glassSheen
+                } else {
+                    Color.black
+                }
+            }
         }
     }
 
-    private var usesGlassSurface: Bool {
-        switch preferences.islandAppearance {
-        case .pureBlack: return false
-        case .liquidGlass: return true
-        case .automatic: return presentation.layout.phase != .collapsed
-        }
+    private var glassSheen: some View {
+        LinearGradient(colors: [MacBDesign.Island.glassHighlight, .clear, .black.opacity(0.28)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     private var surfaceStroke: Color {
         if presentation.layout.phase == .collapsed { return .clear }
-        return usesGlassSurface ? MacBDesign.Island.glassStroke : .white.opacity(0.04)
+        return preferences.islandAppearance == .pureBlack
+            ? .white.opacity(0.04)
+            : MacBDesign.Island.glassStroke
     }
 
     private var islandShape: UnevenRoundedRectangle {
@@ -89,100 +107,142 @@ struct NotchView: View {
         switch layout.phase {
         case .collapsed:
             compact.frame(width: layout.width, height: layout.height)
-        case .glance:
+        case .peek:
             VStack(spacing: 0) {
                 Color.clear.frame(height: presentation.cameraHeight)
-                glance.frame(height: MacBDesign.Island.glanceBodyHeight).padding(.horizontal, 16)
+                Group {
+                    if let event = presentation.event {
+                        IslandEventView(event: event, artwork: media.artwork)
+                            .transition(.opacity)
+                    } else {
+                        peek
+                    }
+                }
+                .frame(height: IslandGeometry.peekHeight)
+                .padding(.horizontal, 18)
             }.frame(width: layout.width, height: layout.height, alignment: .top).clipped()
         case .expanded:
             VStack(spacing: 0) {
                 Color.clear.frame(height: presentation.cameraHeight)
-                VStack(spacing: MacBDesign.Island.contentSpacing) {
-                    tabs(layout.content)
+                VStack(spacing: IslandGeometry.gap) {
+                    IslandNavigation(selected: layout.content, isEditing: widgets.isEditing,
+                                     select: select,
+                                     toggleEditing: { widgets.isEditing.toggle() },
+                                     cameraAction: cameraAction, openSettings: openSettings)
                     if presentation.cameraPreviewVisible { cameraCard }
-                    switch layout.content {
-                    case .music: mediaContent
-                    case .files: filesContent
-                    case .clipboard: clipboardContent
-                    case .tasks: tasksContent
-                    case .tools: toolsContent
-                    }
+                    section(layout)
                 }
-                .padding(.horizontal, MacBDesign.Island.horizontalPadding)
-                .padding(.top, 10).padding(.bottom, 16)
+                .padding(.horizontal, IslandGeometry.horizontalPadding)
+                .padding(.top, IslandGeometry.topPadding)
+                .padding(.bottom, IslandGeometry.bottomPadding)
             }.frame(width: layout.width, height: layout.height, alignment: .top).clipped()
         }
     }
 
-    private var compact: some View {
-        Button(action: open) {
-            Color.clear.frame(maxWidth: .infinity, maxHeight: .infinity).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityHidden(true)
-    }
-
-    private var glance: some View {
-        Button(action: open) {
-            HStack(spacing: 12) {
-                if !media.isPlaying, let activity = aiActivity.activities.first {
-                    Image(systemName: activity.kind.symbol).font(.system(size: 17, weight: .semibold)).foregroundStyle(.orange)
-                        .symbolEffect(.bounce, value: aiActivity.activities.count).frame(width: 42, height: 42)
-                        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                } else { cover(size: 42, radius: 10) }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(glanceTitle).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    Text(glanceSubtitle).font(.system(size: 10)).foregroundStyle(.white.opacity(0.45)).lineLimit(1)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                if media.isPlaying {
-                    playbackButton(media.isPlaying ? "pause.fill" : "play.fill", label: media.isPlaying ? "Duraklat" : "Oynat", size: 34, action: media.playPause)
+    @ViewBuilder private func section(_ layout: NotchLayout) -> some View {
+        if presentation.isDropTarget {
+            IslandDropView(recentTargets: recentTargets, pendingURLs: presentation.pendingDropURLs,
+                           sendToAirDrop: { urls in
+                               if !AirDropSender.send(urls) { notify("exclamationmark", "AirDrop bu dosyaları alamadı") }
+                           },
+                           addToShelf: { urls in
+                               shelf.add(urls: urls)
+                               notify("checkmark", "\(urls.count) öğe rafa eklendi")
+                           },
+                           openTarget: recentTargets.open)
+        } else {
+            switch layout.content {
+            case .home:
+                IslandWidgetStrip(store: widgets, media: media, timer: timer, clipboard: clipboard,
+                                  aiActivity: aiActivity, systemMonitor: systemMonitor,
+                                  recentFiles: recentFiles, tasks: tasks, launcher: launcher,
+                                  weather: weather, shelf: shelf, note: note,
+                                  preferences: preferences, width: layout.width, select: select,
+                                  openSettings: openSettings, notify: notify)
+            case .apps:
+                appsContent
+            case .files:
+                if isLocked(.shelf) {
+                    lockedContent(for: .shelf)
                 } else {
-                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white.opacity(0.35))
+                    filesContent
                 }
-            }.contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityLabel(media.isPlaying ? "\(mediaTitle), ayrıntıları aç" : "Medya yok, paneli aç")
-    }
-
-    private var glanceTitle: String {
-        if media.isPlaying { return mediaTitle }
-        if let activity = aiActivity.activities.first { return "\(activity.kind.rawValue) açık" }
-        return emptyTitle
-    }
-
-    private var glanceSubtitle: String {
-        if media.isPlaying { return mediaSubtitle }
-        if let activity = aiActivity.activities.first { return "\(activity.source) · \(activity.elapsedText)" }
-        return emptySubtitle
-    }
-
-    private func tabs(_ selected: NotchContent) -> some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 2) {
-                tab("Medya", "play.fill", .music, selected)
-                tab("Dosyalar", "tray.fill", .files, selected)
-                tab("Pano", "doc.on.clipboard", .clipboard, selected)
-                tab("İşler", "checkmark.circle", .tasks, selected)
-                tab("", "gauge.with.dots.needle.33percent", .tools, selected)
+            case .clipboard:
+                if isLocked(.clipboard) {
+                    lockedContent(for: .clipboard)
+                } else {
+                    IslandClipboardView(clipboard: clipboard, filter: $clipboardFilter, notify: notify)
+                }
+            case .timer:
+                IslandTimerView(timer: timer)
             }
-            .padding(3)
-            .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            Spacer(minLength: 2)
-            HStack(spacing: 4) {
-                iconButton(presentation.cameraPreviewVisible ? "camera.fill" : "camera", label: "Kamera", action: cameraAction)
-                iconButton("gearshape", label: "Ayarlar", action: openSettings)
-            }
-        }.frame(height: MacBDesign.Island.tabHeight)
+        }
     }
 
-    private func tab(_ title: String, _ symbol: String, _ section: NotchContent, _ selected: NotchContent) -> some View {
-        Button { select(section) } label: {
-            HStack(spacing: 5) {
-                Image(systemName: symbol).font(.system(size: 9, weight: .semibold))
-                if !title.isEmpty { Text(title).font(.system(size: 10, weight: .semibold)) }
-            }.padding(.horizontal, 7).frame(height: 26)
-                .foregroundStyle(.white.opacity(selected == section ? 0.94 : 0.42))
-                .background(selected == section ? .white.opacity(0.12) : .clear,
-                            in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-        }.buttonStyle(.plain).accessibilityLabel(title.isEmpty ? "Araçlar" : title)
-            .accessibilityAddTraits(selected == section ? .isSelected : [])
+    @ViewBuilder private var appsContent: some View {
+        IslandLauncherView(launcher: launcher, notify: notify)
+    }
+
+    /// Collapsed indicators. With nothing running the island renders nothing and takes no clicks.
+    @ViewBuilder private var compact: some View {
+        if collapsedIndicators.isEmpty {
+            Color.clear.allowsHitTesting(false).accessibilityHidden(true)
+        } else {
+            Button(action: open) {
+                HStack(spacing: 10) {
+                    Spacer(minLength: 0)
+                    ForEach(collapsedIndicators, id: \.label) { indicator in
+                        HStack(spacing: 4) {
+                            Image(systemName: indicator.symbol).font(.system(size: 10, weight: .semibold))
+                            Text(indicator.value).font(.system(size: 10, weight: .medium)).monospacedDigit()
+                        }
+                        .foregroundStyle(indicator.tint)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 10)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(collapsedIndicators.map { "\($0.label) \($0.value)" }.joined(separator: ", "))
+        }
+    }
+
+    private struct CollapsedIndicator {
+        let symbol: String
+        let value: String
+        let label: String
+        let tint: Color
+    }
+
+    private var collapsedIndicators: [CollapsedIndicator] {
+        guard presentation.indicators else { return [] }
+        var result: [CollapsedIndicator] = []
+        if media.isPlaying {
+            result.append(CollapsedIndicator(symbol: "waveform", value: mediaTitle,
+                                             label: "Çalıyor", tint: MacBDesign.IslandToken.primaryText))
+        }
+        if timer.isActive {
+            result.append(CollapsedIndicator(symbol: "timer", value: timer.remainingText,
+                                             label: "Zamanlayıcı", tint: MacBDesign.IslandToken.accent))
+        }
+        if !shelf.items.isEmpty {
+            result.append(CollapsedIndicator(symbol: "tray.full.fill", value: "\(shelf.items.count)",
+                                             label: "Rafta", tint: MacBDesign.IslandToken.secondaryText))
+        }
+        return result
+    }
+
+    private var peek: some View {
+        IslandPeekView(chips: PeekModel.chips(peekInput), artwork: media.artwork,
+                       mediaIsPlaying: media.isPlaying, open: open,
+                       toggleMedia: media.playPause)
+    }
+
+    private var peekInput: PeekModel.Input {
+        PeekModel.input(media: media, timer: timer, weather: weather, shelf: shelf,
+                        aiActivity: aiActivity, systemMonitor: systemMonitor)
     }
 
     private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
@@ -190,65 +250,6 @@ struct NotchView: View {
             .buttonStyle(.plain).foregroundStyle(.white.opacity(0.58)).help(label).accessibilityLabel(label)
     }
 
-    @ViewBuilder private var mediaContent: some View {
-        if media.isPlaying || media.isRunning {
-            VStack(spacing: 11) {
-                HStack(spacing: 12) {
-                    cover(size: MacBDesign.Island.heroArtwork, radius: 14)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(mediaTitle).font(.system(size: 15, weight: .semibold)).lineLimit(1)
-                        Text(mediaSubtitle).font(.system(size: 11, weight: .medium)).foregroundStyle(.white.opacity(0.48)).lineLimit(1)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(11).background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 17))
-                mediaControls
-                if let error = media.errorMessage { Text(error).font(.system(size: 10)).foregroundStyle(.orange.opacity(0.8)).lineLimit(1) }
-            }
-        } else {
-            HStack(spacing: 12) {
-                cover(size: 48, radius: 13)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(emptyTitle).font(.system(size: 15, weight: .semibold))
-                    Text(emptySubtitle).font(.system(size: 10)).foregroundStyle(.white.opacity(0.42)).lineLimit(1)
-                }
-                Spacer()
-                Image(systemName: "waveform").foregroundStyle(.white.opacity(0.25))
-            }
-            .padding(12).frame(maxWidth: .infinity)
-            .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 18))
-        }
-    }
-
-    private var emptyTitle: String {
-        switch Calendar.current.component(.hour, from: Date()) {
-        case 5..<12: return "Günaydın"
-        case 12..<18: return "İyi günler"
-        default: return "İyi akşamlar"
-        }
-    }
-
-    private var emptySubtitle: String {
-        if fileActivity.activeCount > 0 { return "\(fileActivity.activeCount) dosya hazırlanıyor" }
-        if !tasks.items.isEmpty { return "\(tasks.items.count) iş elinin altında" }
-        if !shelf.items.isEmpty { return "\(shelf.items.count) dosya rafta" }
-        return "Her şey elinin altında."
-    }
-
-    @ViewBuilder private var mediaControls: some View {
-        if media.isPlaying {
-            HStack(spacing: 16) {
-                if media.source != .browser { playbackButton("backward.fill", label: "Önceki", size: 32, action: media.previousTrack) }
-                playbackButton("pause.fill", label: "Duraklat", size: 40, prominent: true, action: media.playPause)
-                if media.source != .browser { playbackButton("forward.fill", label: "Sonraki", size: 32, action: media.nextTrack) }
-            }.frame(maxWidth: .infinity)
-        } else if media.isRunning && !media.isAuthorized {
-            Button("Bağlan", action: media.requestAuthorization).buttonStyle(.plain).font(.system(size: 11, weight: .semibold))
-                .frame(maxWidth: .infinity).frame(height: 34).background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
-        } else {
-            Button(action: media.playPause) { Label("Oynat", systemImage: "play.fill").font(.system(size: 11, weight: .semibold)) }
-                .buttonStyle(.plain).frame(maxWidth: .infinity).frame(height: 34).background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
-        }
-    }
 
     private var filesContent: some View {
         VStack(spacing: 10) {
@@ -304,77 +305,6 @@ struct NotchView: View {
         }.padding(.horizontal, 8).frame(height: 32).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 9))
     }
 
-    @ViewBuilder private var clipboardContent: some View {
-        if preferences.protectPrivateTools && !auth.isAuthenticated {
-            lockedContent(title: auth.isAuthenticating ? "Doğrulanıyor" : "Pano kilitli", symbol: "lock.fill") { select(.clipboard) }
-        } else if clipboard.items.isEmpty {
-            compactEmpty("Pano boş", symbol: "doc.on.clipboard", detail: "Kopyaladıkların burada.")
-        } else {
-            VStack(spacing: 6) {
-                HStack(spacing: 7) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.35))
-                    TextField("Panoda ara…", text: $clipboardQuery).textFieldStyle(.plain).font(.system(size: 11))
-                    if !clipboardQuery.isEmpty {
-                        Button { clipboardQuery = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain)
-                    }
-                }.padding(.horizontal, 10).frame(height: 32).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 6) {
-                        if !clipboard.favorites.isEmpty { sectionLabel("Sık kullanılanlar") }
-                        ForEach(clipboard.search(clipboardQuery).sorted { $0.isFavorite && !$1.isFavorite }) { item in clipboardRow(item) }
-                    }
-                }.frame(maxHeight: 218).scrollIndicators(.hidden)
-                if let error = clipboard.errorMessage { Text(error).font(.system(size: 10)).foregroundStyle(.orange).lineLimit(1) }
-            }
-        }
-    }
-
-    private func clipboardRow(_ item: ClipboardShelfItem) -> some View {
-        HStack(spacing: 7) {
-            Group {
-                if item.kind == .image, let data = item.imageData, let image = NSImage(data: data) {
-                    Image(nsImage: image).resizable().scaledToFill()
-                } else { Image(systemName: item.isFavorite ? "star.fill" : item.kind.symbol) }
-            }.frame(width: 18, height: 18).clipShape(RoundedRectangle(cornerRadius: 4))
-                .foregroundStyle(item.isFavorite ? .yellow.opacity(0.8) : .white.opacity(0.38))
-            Text(item.text.replacingOccurrences(of: "\n", with: " ")).font(.system(size: 11)).lineLimit(1)
-            Spacer()
-            rowButton("doc.on.doc", "Kopyala") { clipboard.copy(item); notify("checkmark", "Kopyalandı") }
-            rowButton(item.isFavorite ? "star.slash" : "star", item.isFavorite ? "Sık kullanılanlardan kaldır" : "Sık kullanılanlara ekle") { clipboard.toggleFavorite(item) }
-            rowButton("xmark", "Sil") { clipboard.remove(item) }
-        }.padding(.horizontal, 8).frame(height: 34).background(.white.opacity(item.isFavorite ? 0.065 : 0.04), in: RoundedRectangle(cornerRadius: 9))
-    }
-
-    private var tasksContent: some View {
-        VStack(spacing: 9) {
-            HStack(spacing: 7) {
-                TextField("Yeni iş…", text: $newTask).textFieldStyle(.plain).font(.system(size: 11)).onSubmit(addTask)
-                Button(action: addTask) { Image(systemName: "plus").frame(width: 28, height: 26).background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8)) }.buttonStyle(.plain).disabled(newTask.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }.padding(.leading, 10).padding(.trailing, 4).frame(height: 34).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 10))
-            if tasks.items.isEmpty {
-                compactEmpty("Liste temiz", symbol: "checkmark.circle", detail: "Aklındakini hemen ekle.")
-            } else {
-                ScrollView { LazyVStack(spacing: 6) { ForEach(tasks.items) { item in taskRow(item) } } }
-                    .frame(maxHeight: 180).scrollIndicators(.hidden)
-            }
-            if let error = tasks.errorMessage { Text(error).font(.system(size: 10)).foregroundStyle(.orange).lineLimit(1) }
-        }
-    }
-
-    private var toolsContent: some View {
-        ProductivityView(aiActivity: aiActivity, systemMonitor: systemMonitor, keyboardCleaning: keyboardCleaning)
-    }
-
-    private func taskRow(_ item: LocalTaskItem) -> some View {
-        HStack(spacing: 7) {
-            Button { tasks.toggleComplete(id: item.id) } label: { Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle").frame(width: 22, height: 28) }.buttonStyle(.plain)
-            Text(item.title).font(.system(size: 11, weight: .medium)).strikethrough(item.isCompleted).foregroundStyle(.white.opacity(item.isCompleted ? 0.35 : 0.78)).lineLimit(1)
-            Spacer()
-            rowButton(item.isPinned ? "pin.slash" : "pin", item.isPinned ? "Sabitlemeyi kaldır" : "Sabitle") { tasks.togglePin(id: item.id) }
-            rowButton("xmark", "Sil") { tasks.remove(id: item.id) }
-        }.padding(.horizontal, 6).frame(height: 34).background(.white.opacity(item.isPinned ? 0.065 : 0.04), in: RoundedRectangle(cornerRadius: 9))
-    }
-
     private var cameraCard: some View {
         Button(action: cameraAction) {
             ZStack(alignment: .bottomTrailing) {
@@ -398,13 +328,39 @@ struct NotchView: View {
         }.padding(10).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
-    private func lockedContent(title: String, symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 10) {
-                Image(systemName: symbol).font(.system(size: 22, weight: .medium)).symbolEffect(.pulse, isActive: auth.isAuthenticating)
-                Text(title).font(.system(size: 12, weight: .semibold))
-            }.frame(maxWidth: .infinity).frame(height: 112).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 17))
-        }.buttonStyle(.plain)
+    /// True when the section needs an unlock before it shows anything.
+    private func isLocked(_ area: ProtectedArea) -> Bool {
+        if faceUnlock.settings.guards(area) { return !faceUnlock.isUnlocked(area) }
+        if preferences.protectPrivateTools, area == .clipboard { return !auth.isAuthenticated }
+        return false
+    }
+
+    /// The locked panel. While a scan runs it becomes the scan animation, so the
+    /// user can see the camera is on and see it stop.
+    @ViewBuilder private func lockedContent(for area: ProtectedArea) -> some View {
+        Button {
+            select(area == .clipboard ? .clipboard : .files)
+        } label: {
+            Group {
+                if case .idle = faceUnlock.phase {
+                    VStack(spacing: 10) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 22, weight: .medium))
+                            .symbolEffect(.pulse, isActive: auth.isAuthenticating)
+                        Text(auth.isAuthenticating ? "Doğrulanıyor" : "\(area.title) kilitli")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                } else {
+                    IslandFaceScanView(phase: faceUnlock.phase, instruction: faceUnlock.scanInstruction)
+                        .padding(.horizontal, 18)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 112)
+            .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 17))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(area.title) kilitli, açmak için seç")
     }
 
     private func sectionLabel(_ title: String) -> some View { Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.35)).padding(.horizontal, 4) }
@@ -416,11 +372,6 @@ struct NotchView: View {
         Label(toast.message, systemImage: toast.symbol).font(.system(size: 10, weight: .semibold))
             .padding(.horizontal, 10).frame(height: 26).background(.white.opacity(0.14), in: Capsule())
             .overlay(Capsule().strokeBorder(.white.opacity(0.08)))
-    }
-    private func addTask() {
-        let title = newTask.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
-        tasks.add(title: title); newTask = ""; notify("checkmark", "İş eklendi")
     }
     private var mediaTitle: String { media.title.isEmpty ? media.source.title : media.title }
     private var mediaSubtitle: String { media.artist.isEmpty ? media.source.title : "\(media.artist) · \(media.source.title)" }

@@ -211,7 +211,7 @@ private struct DockHit {
     }
 
     private func present(pid: pid_t) {
-        let records = favorites.sort(windowService.windows.filter { $0.pid == pid }, enabled: preferences.favoriteWindowsEnabled)
+        let records = favorites.sort(windowService.windows.filter { $0.pid == pid && !$0.isRemoteDesktopWindow }, enabled: preferences.favoriteWindowsEnabled)
         guard !records.isEmpty else { return }
         activePID = pid
         let screen = NSScreen.screens.first { $0.frame.intersects(anchor) } ?? NSScreen.main ?? NSScreen.screens[0]
@@ -369,7 +369,7 @@ private struct DockPreviewView: View {
     let onSelect: (WindowRecord) -> Void
     let onFrames: ([String: CGRect]) -> Void
     let onPeek: (WindowRecord, Bool) -> Void
-    private var windows: [WindowRecord] { favorites.sort(windowService.windows.filter { $0.pid == pid }, enabled: preferences.favoriteWindowsEnabled) }
+    private var windows: [WindowRecord] { favorites.sort(windowService.windows.filter { $0.pid == pid && !$0.isRemoteDesktopWindow }, enabled: preferences.favoriteWindowsEnabled) }
     private var visibleWindows: [WindowRecord] { Array(windows.prefix(3)) }
     private var hiddenCount: Int { max(0, windows.count - visibleWindows.count) }
     private var favoriteCount: Int { windows.filter { favorites.isFavorite($0) }.count }

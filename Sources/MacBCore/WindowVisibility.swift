@@ -19,10 +19,9 @@ public enum WindowVisibilityPolicy {
                                   among processWindows: [WindowVisibilityCandidate]) -> Bool {
         guard isGenericTitle(candidate.title) else { return true }
         guard !candidate.isMain, !candidate.isFocused else { return true }
-        guard knownHelperWindowApps.contains(candidate.bundleIdentifier ?? "") else { return true }
 
         let hasNamedPrimaryWindow = processWindows.contains { peer in
-            !isGenericTitle(peer.title) && (peer.isMain || peer.isFocused)
+            !isGenericTitle(peer.title)
         }
         return !hasNamedPrimaryWindow
     }
@@ -33,9 +32,4 @@ public enum WindowVisibilityPolicy {
         return normalized == "window" || normalized == "pencere"
     }
 
-    private static let knownHelperWindowApps: Set<String> = [
-        "com.openai.codex",
-        "com.anthropic.claudefordesktop",
-        "com.apple.systempreferences"
-    ]
 }

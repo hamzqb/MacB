@@ -5,6 +5,8 @@ private struct AppleMusicSnapshot {
     var title = ""
     var artist = ""
     var playing = false
+    var position: Double = 0
+    var duration: Double = 0
     var error: String?
     var denied = false
 }
@@ -17,6 +19,8 @@ final class AppleMusicService: ObservableObject {
     @Published var isRunning = false
     @Published var isAuthorized = false
     @Published var errorMessage: String?
+    @Published var position: Double = 0
+    @Published var duration: Double = 0
 
     private let queue = DispatchQueue(label: "MacB.AppleMusic", qos: .utility)
     private var observers: [NSObjectProtocol] = []
@@ -93,6 +97,8 @@ final class AppleMusicService: ObservableObject {
             isPlaying = false
             trackTitle = ""
             artist = ""
+            position = 0
+            duration = 0
             pollingTask?.cancel(); pollingTask = nil
             pendingCommands.removeAll()
             return
@@ -139,10 +145,14 @@ final class AppleMusicService: ObservableObject {
                     self.trackTitle = snapshot.title
                     self.artist = snapshot.artist
                     self.isPlaying = snapshot.playing
+                    self.position = snapshot.position
+                    self.duration = snapshot.duration
                 } else {
                     self.isPlaying = false
                     self.trackTitle = ""
                     self.artist = ""
+                    self.position = 0
+                    self.duration = 0
                 }
                 if !self.pendingCommands.isEmpty {
                     let next = self.pendingCommands.removeFirst()
@@ -173,7 +183,9 @@ final class AppleMusicService: ObservableObject {
                 end if
                 set trackName to name of current track
                 set artistName to artist of current track
-                return trackName & "|" & artistName & "|" & stateText
+                set trackPosition to player position
+                set trackDuration to duration of current track
+                return trackName & "|" & artistName & "|" & stateText & "|" & trackPosition & "|" & trackDuration
             end tell
         end timeout
         """
@@ -184,7 +196,8 @@ final class AppleMusicService: ObservableObject {
             return AppleMusicSnapshot(error: "Apple Music şu anda yanıt vermiyor. Yeniden denenecek.")
         }
         let parts = result.components(separatedBy: "|")
-        guard parts.count >= 3 else { return AppleMusicSnapshot() }
-        return AppleMusicSnapshot(title: parts[0], artist: parts[1], playing: parts[2] == "playing")
+        guard parts.count >= 5 else { return AppleMusicSnapshot() }
+        return AppleMusicSnapshot(title: parts[0], artist: parts[1], playing: parts[2] == "playing",
+                                  position: Double(parts[3]) ?? 0, duration: Double(parts[4]) ?? 0)
     }
 }

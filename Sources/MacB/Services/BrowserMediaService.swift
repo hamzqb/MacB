@@ -29,6 +29,8 @@ final class BrowserMediaService: ObservableObject {
     @Published private(set) var title = ""
     @Published private(set) var sourceName = ""
     @Published private(set) var isPlaying = false
+    @Published private(set) var position: Double = 0
+    @Published private(set) var duration: Double = 0
     @Published private(set) var isRunning = false
     @Published private(set) var isAuthorized = false
     @Published private(set) var errorMessage: String?
@@ -164,17 +166,19 @@ final class BrowserMediaService: ObservableObject {
         isAuthorized = snapshot.authorized
         errorMessage = snapshot.setupMessage
         guard let probe = snapshot.probe, probe.isPlaying else {
-            title = ""; sourceName = ""; isPlaying = false
+            title = ""; sourceName = ""; isPlaying = false; position = 0; duration = 0
             return
         }
         title = probe.title
         sourceName = probe.artist.isEmpty ? (snapshot.target?.browser.name ?? "Tarayıcı") : probe.artist
         isPlaying = true
+        position = probe.currentTime
+        duration = probe.duration
         currentTarget = snapshot.target
     }
 
     private func clear(resetRunningState: Bool) {
-        title = ""; sourceName = ""; isPlaying = false; currentTarget = nil
+        title = ""; sourceName = ""; isPlaying = false; position = 0; duration = 0; currentTarget = nil
         if resetRunningState { isRunning = false; isAuthorized = false; errorMessage = nil }
     }
 

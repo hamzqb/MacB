@@ -1,6 +1,6 @@
 import Foundation
 import Combine
-import LocalAuthentication
+@preconcurrency import LocalAuthentication
 
 /// Uses the system authentication sheet; no password or biometric data enters MacB.
 @MainActor final class BiometricAuthService: ObservableObject {
@@ -10,14 +10,37 @@ import LocalAuthentication
     private var context: LAContext?
     private var generation = 0
 
-    func authenticate(completion: ((Bool) -> Void)? = nil) {
-        guard !isAuthenticating else { return }
+    func authenticate(reason: String = "MacB’de korunan içeriği açmak için kimliğini doğrula.",
+                      completion: ((Bool) -> Void)? = nil) {
+        evaluate(reason: reason, returnContext: false) { success, _ in completion?(success) }
+    }
+
+    /// Returns ownership of one evaluated context for an immediate protected
+    /// Keychain operation. All ordinary boolean authentication paths invalidate
+    /// their context before completing.
+    func authenticateForKeychain(reason: String) async -> LAContext? {
+        await withCheckedContinuation { continuation in
+            evaluate(reason: reason, returnContext: true) { success, context in
+                continuation.resume(returning: success ? context : nil)
+            }
+        }
+    }
+
+    private func evaluate(reason: String, returnContext: Bool,
+                          completion: @escaping (Bool, LAContext?) -> Void) {
+        guard !isAuthenticating else {
+            completion(false, nil)
+            return
+        }
+        context?.invalidate()
+        context = nil
         let context = LAContext()
         context.localizedCancelTitle = "Vazgeç"
         var error: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
             errorMessage = "Sistem doğrulaması kullanılamıyor. Mac oturumunun güvenlik ayarlarını kontrol et."
-            completion?(false)
+            context.invalidate()
+            completion(false, nil)
             return
         }
         self.context = context
@@ -27,9 +50,18 @@ import LocalAuthentication
         generation += 1
         let token = generation
         context.evaluatePolicy(.deviceOwnerAuthentication,
-                               localizedReason: "MacB’de korunan içeriği açmak için kimliğini doğrula.") { [weak self] success, error in
+                               localizedReason: reason) { [weak self] success, error in
             Task { @MainActor in
-                guard let self, self.generation == token else { return }
+                guard let self else {
+                    context.invalidate()
+                    completion(false, nil)
+                    return
+                }
+                guard self.generation == token else {
+                    context.invalidate()
+                    completion(false, nil)
+                    return
+                }
                 self.isAuthenticating = false
                 self.isAuthenticated = success
                 self.context = nil
@@ -37,7 +69,9 @@ import LocalAuthentication
                    error.code != .userCancel && error.code != .appCancel && error.code != .systemCancel {
                     self.errorMessage = "Kimlik doğrulanamadı. Tekrar deneyebilirsin."
                 }
-                completion?(success)
+                let grantedContext = success && returnContext ? context : nil
+                if grantedContext == nil { context.invalidate() }
+                completion(success, grantedContext)
             }
         }
     }
