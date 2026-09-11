@@ -45,7 +45,7 @@ Full Xcode can produce a universal Apple Silicon + Intel build with `MACB_UNIVER
 ## Use
 
 - Hover a running application's Dock icon for 250 ms; click a preview to focus it. Right, left and bottom Dock placement are supported without changing Dock preferences.
-- Hold Command and press Tab to cycle windows with live previews. Release Command to select; Escape cancels. Change or disable the shortcut in settings if macOS rejects `⌘ Tab` on your machine.
+- Hold Command and press Tab to cycle windows with live previews. Windows on the active desktop and other desktops appear in separate sections; selecting an offscreen window lets macOS move to its desktop. Release Command to select; Escape cancels. Change or disable the shortcut in settings if macOS rejects `⌘ Tab` on your machine.
 - Hover or click the notch panel. On displays without a notch it appears at the top center.
 - The notch can surface the right context automatically: music, files, recent downloads, recent local files and clipboard snippets.
 - Add local files/folders to the shelf with drag-and-drop or “Dosya ekle…”. Drag a shelf item over a Dock preview for 500 ms to bring the real target window forward, then drop into that window.
@@ -54,6 +54,8 @@ Full Xcode can produce a universal Apple Silicon + Intel build with `MACB_UNIVER
 - Enable focus mode to hide other regular apps when MacB focuses the selected window.
 - Use Appearance settings to choose Compact, Balanced or Spacious density.
 - Choose Automatic, Pure Black or Liquid Glass for the island surface.
+- Choose among four responsive media cards and four weather treatments. Cards reflow at narrow sizes instead of clipping, and the island measures visible content instead of reserving an empty canvas.
+- The Apps area searches pinned apps and folders and groups them automatically into productivity, development, design, communication, media, utilities, and folders.
 - Enable Window Management for Control–Option layout shortcuts: arrows tile halves, U/I/J/K tile corners, Return maximizes, C centers, Backspace restores and N moves the window to the next display.
 - The Clipboard tab keeps local text, links, images and file references, supports search and favorites, and filters common password, token, private-key and payment-card patterns.
 - The Tools tab shows Claude/Codex desktop and terminal activity, CPU/RAM/disk/battery/thermal state, creates and extracts ZIP files, sends audio/video to MacWhisper, finds exact application leftovers for review, and offers a timed keyboard-cleaning lock.
@@ -68,12 +70,13 @@ Full Xcode can produce a universal Apple Silicon + Intel build with `MACB_UNIVER
 "$HOME/Applications/MacB.app/Contents/MacOS/MacB" --smoke-test
 ```
 
-The real UI can be opened in fixed review states with `--preview-onboarding`, `--preview-glance`,
-`--show-panel`, `--preview-files`, `--preview-clipboard`, `--preview-tools`, or `--preview-switcher`.
+The real UI can be opened in fixed review states with `--preview-onboarding`, `--preview-peek`,
+`--preview-home`, `--preview-active-timer`, `--preview-apps`, `--preview-files`, `--preview-clipboard`, `--preview-drop`,
+`--preview-timer`, or `--preview-switcher`.
 
 `test.sh` runs all core policy and persistence scenarios without XCTest, which is absent from standalone Command Line Tools. Equivalent XCTest cases are kept in `Tests/MacBCoreTests` for `swift test` on a full Xcode toolchain.
 
-Before treating a build as daily-use ready, manually check Finder, Safari, Terminal and Spotify with duplicate window titles, minimized windows, Space changes, permission denial/revocation, canceled file drags, sleep/wake and multiple displays. Public macOS APIs cannot guarantee discovery of every window on every Space. Ambiguous preview matches show an icon instead of guessing. Minimized windows may show their last image or an icon.
+Before treating a build as daily-use ready, manually check Finder, Safari, Terminal and Spotify with duplicate window titles, minimized windows, Space changes, permission denial/revocation, canceled file drags, sleep/wake and multiple displays. The switcher reads Mission Control's Space topology dynamically and shows numbered `Masaüstü` sections; if that unsupported system interface changes, it safely falls back to the public current/other view. Ambiguous preview matches show an icon instead of guessing. Minimized windows may show their last image or an icon.
 
 Capture is limited to four visible streams at 8 FPS, stops when panels close, and never records audio or writes screenshots to disk. The release idle CPU target is below 1% on the M4; GUI and permission-dependent acceptance tests require actual OS permission grants.
 
