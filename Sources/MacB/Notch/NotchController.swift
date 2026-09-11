@@ -244,7 +244,8 @@ struct IslandToast: Equatable {
         let battery = systemMonitor.snapshot.batteryPercent.map { Int($0.rounded()) }
         systemEvents.present(.welcome(hour: Calendar.current.component(.hour, from: now),
                                       time: formatter.string(from: now),
-                                      batteryPercent: battery))
+                                      batteryPercent: battery,
+                                      custom: preferences.lidWelcomeText))
     }
 
     /// The lid is going down. Put something on screen for the hinge to fold.
@@ -257,7 +258,8 @@ struct IslandToast: Equatable {
         guard state.phase != .expanded, !incomingDragActive, !developmentPreviewLocked else { return }
         let battery = systemMonitor.snapshot.batteryPercent.map { Int($0.rounded()) }
         systemEvents.present(.farewell(hour: Calendar.current.component(.hour, from: Date()),
-                                       batteryPercent: battery))
+                                       batteryPercent: battery,
+                                       custom: preferences.lidFarewellText))
     }
 
     /// macOS only stops drawing its panel while MacB is actually replacing it.

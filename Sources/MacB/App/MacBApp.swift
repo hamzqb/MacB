@@ -290,6 +290,10 @@ private final class Flag: @unchecked Sendable {
         } else if CommandLine.arguments.contains("--preview-library") {
             widgetLayout.isEditing = true
             notch.showDevelopmentPreview(phase: .expanded, content: .home)
+        } else if CommandLine.arguments.contains("--preview-lid") {
+            UserDefaults.standard.set("Görünüm", forKey: "settingsPage")
+            UserDefaults.standard.set(SettingsView.hingeAnchor, forKey: "settingsAnchor")
+            showSettings()
         } else if CommandLine.arguments.contains("--preview-processes") {
             UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
             showSettings()

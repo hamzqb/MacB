@@ -808,6 +808,24 @@ struct CoreTestRunner {
                 try expect(LidScreenBlur.blurAlpha(progress: 0.25) > 0.4,
                            "The blur was invisible for the first quarter")
             }),
+            ("IslandEvent: a hand-written line replaces the greeting, detail intact", {
+                let event = IslandEvent.welcome(hour: 2, time: "09:14", batteryPercent: 78, custom: "Hoş geldin")
+                try expect(event.title == "Hoş geldin", "The written line was ignored")
+                try expect(event.detail == "09:14 · %78", "The detail was lost")
+                let bye = IslandEvent.farewell(hour: 2, batteryPercent: 72, custom: "  Kendine iyi bak  ")
+                try expect(bye.title == "Kendine iyi bak", "The farewell was not trimmed")
+                try expect(bye.detail == "%72", "The battery was lost")
+            }),
+            ("IslandEvent: an empty line leaves the time of day in charge", {
+                try expect(IslandEvent.customTitle(nil) == nil, "Nothing became something")
+                try expect(IslandEvent.customTitle("") == nil, "An empty field counted")
+                try expect(IslandEvent.customTitle("   \n ") == nil, "Spaces blanked the island")
+                try expect(IslandEvent.farewell(hour: 2, batteryPercent: nil, custom: " ").title == "İyi geceler",
+                           "A blank field replaced the farewell")
+                let long = String(repeating: "a", count: IslandEvent.customTitleLimit + 20)
+                try expect(IslandEvent.customTitle(long)?.count == IslandEvent.customTitleLimit,
+                           "A line too long for the island was not cut")
+            }),
             ("LidFold: an opening is reported once, and only after a real close", {
                 var tracker = LidFoldTracker()
                 for angle in [110.0, 104, 112, 100] {

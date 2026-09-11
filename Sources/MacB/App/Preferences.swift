@@ -126,6 +126,15 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     }
     /// Whether the whole screen blurs with the fold, or only the island.
     @Published var lidScreenBlur: Bool { didSet { defaults.set(lidScreenBlur, forKey: "lidScreenBlur") } }
+    /// What the island says when the lid opens. Empty means the greeting that
+    /// fits the time of day.
+    @Published var lidWelcomeText: String {
+        didSet { defaults.set(lidWelcomeText, forKey: "lidWelcomeText") }
+    }
+    /// What it says as the lid goes down. Empty means the time-of-day farewell.
+    @Published var lidFarewellText: String {
+        didSet { defaults.set(lidFarewellText, forKey: "lidFarewellText") }
+    }
     @Published var hidesSystemVolumeHUD: Bool { didSet { defaults.set(hidesSystemVolumeHUD, forKey: "hidesSystemVolumeHUD") } }
     @Published var mediaWidgetStyle: MediaWidgetStyle { didSet { defaults.set(mediaWidgetStyle.rawValue, forKey: "mediaWidgetStyle") } }
     @Published var weatherWidgetStyle: WeatherWidgetStyle { didSet { defaults.set(weatherWidgetStyle.rawValue, forKey: "weatherWidgetStyle") } }
@@ -175,6 +184,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         lidHingeEnabled = defaults.bool(forKey: "lidHingeEnabled")
         lidHingeAngle = LidFold.clampOpenAngle(defaults.double(forKey: "lidHingeAngle"))
         lidScreenBlur = defaults.bool(forKey: "lidScreenBlur")
+        lidWelcomeText = defaults.string(forKey: "lidWelcomeText") ?? ""
+        lidFarewellText = defaults.string(forKey: "lidFarewellText") ?? ""
         hidesSystemVolumeHUD = defaults.bool(forKey: "hidesSystemVolumeHUD")
         let storedZone = defaults.string(forKey: "secondaryTimeZone") ?? "America/New_York"
         secondaryTimeZone = TimeZone(identifier: storedZone) == nil ? "America/New_York" : storedZone

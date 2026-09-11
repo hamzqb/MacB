@@ -91,6 +91,16 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .defaultScrollAnchor(.top)
+            .onAppear {
+                // Set by a launch argument that opens the window at one section.
+                // Cleared straight away so the next launch starts at the top.
+                let defaults = UserDefaults.standard
+                guard let anchor = defaults.string(forKey: "settingsAnchor") else { return }
+                defaults.removeObject(forKey: "settingsAnchor")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    withAnimation { proxy.scrollTo(anchor, anchor: .top) }
+                }
+            }
             .onChange(of: utilities.removalCandidates.count) { _, count in
                 // A scan fills a list that usually starts below the fold, so the
                 // page moves to it rather than leaving the window looking unchanged.
@@ -570,6 +580,9 @@ struct SettingsView: View {
     private var libraryGroups: [IslandWidgetGroup] { widgets.layout.groups }
 
     private static let removalAnchor = "removal-review"
+    /// Named so a launch argument can open the window straight at the hinge
+    /// settings instead of leaving somebody to scroll for them.
+    static let hingeAnchor = "lid-hinge"
 
     private var removalHeader: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -795,6 +808,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            Color.clear.frame(height: 0).id(Self.hingeAnchor)
             section("Menteşe", "laptopcomputer") {
                 settingToggle("Kapakla katlanma",
                               detail: "Kapağı kapatırken island menteşeyle birlikte yatar, açtığında karşılama satırıyla geri açılır.",
@@ -821,6 +835,15 @@ struct SettingsView: View {
                             .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
+                    lidLine("Açılış yazısı", text: $preferences.lidWelcomeText,
+                            placeholder: IslandEvent.greeting(forHour: currentHour),
+                            label: "Kapak açılınca görünen yazı")
+                    lidLine("Kapanış yazısı", text: $preferences.lidFarewellText,
+                            placeholder: IslandEvent.farewellTitle(forHour: currentHour),
+                            label: "Kapak kapanırken görünen yazı")
+                    Text("Boş bırakırsan saate göre değişir. En fazla \(IslandEvent.customTitleLimit) karakter.")
+                        .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(lid.isAvailable
                      ? "\(lid.diagnostic)\(lid.angle.map { String(format: "  ·  şu an %.0f°", $0) } ?? "")"
@@ -1001,6 +1024,29 @@ struct SettingsView: View {
     /// of stacked grey boxes into a list somebody can scan. The glyph is passed
     /// in rather than looked up from the title, so a renamed section cannot
     /// silently lose it.
+    private var currentHour: Int { Calendar.current.component(.hour, from: Date()) }
+
+    /// One of the two lines the island says around a lid movement.
+    ///
+    /// The placeholder is what the user would get right now if they leave the
+    /// field empty, so it shows the default rather than describing it.
+    private func lidLine(_ title: String, text: Binding<String>,
+                         placeholder: String, label: String) -> some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 104, alignment: .leading)
+            TextField(placeholder, text: Binding(
+                get: { text.wrappedValue },
+                set: { text.wrappedValue = String($0.prefix(IslandEvent.customTitleLimit)) }
+            ))
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: 220)
+            .accessibilityLabel(label)
+            Spacer(minLength: 0)
+        }
+    }
+
     private func section<Content: View>(_ title: String, _ symbol: String = "square.grid.2x2",
                                         @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {

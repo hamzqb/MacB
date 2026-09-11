@@ -105,4 +105,26 @@ final class LidFoldTests: XCTestCase {
         XCTAssertGreaterThan(LidScreenBlur.blurAlpha(progress: 0.5), 0.6)
         XCTAssertGreaterThan(LidScreenBlur.blurAlpha(progress: 0.25), 0.4)
     }
+
+    func testAHandWrittenLineReplacesTheGreetingWithoutLosingTheDetail() {
+        let event = IslandEvent.welcome(hour: 2, time: "09:14", batteryPercent: 78, custom: "Hoş geldin")
+        XCTAssertEqual(event.title, "Hoş geldin")
+        XCTAssertEqual(event.detail, "09:14 · %78")
+        let bye = IslandEvent.farewell(hour: 2, batteryPercent: 72, custom: "  Kendine iyi bak  ")
+        XCTAssertEqual(bye.title, "Kendine iyi bak")
+        XCTAssertEqual(bye.detail, "%72")
+    }
+
+    func testAnEmptyLineLeavesTheTimeOfDayInCharge() {
+        XCTAssertNil(IslandEvent.customTitle(nil))
+        XCTAssertNil(IslandEvent.customTitle(""))
+        // Spaces alone must not blank the island out.
+        XCTAssertNil(IslandEvent.customTitle("   \n "))
+        XCTAssertEqual(IslandEvent.farewell(hour: 2, batteryPercent: nil, custom: " ").title, "İyi geceler")
+    }
+
+    func testALineTooLongForTheIslandIsCut() {
+        let long = String(repeating: "a", count: IslandEvent.customTitleLimit + 20)
+        XCTAssertEqual(IslandEvent.customTitle(long)?.count, IslandEvent.customTitleLimit)
+    }
 }

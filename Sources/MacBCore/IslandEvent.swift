@@ -118,9 +118,11 @@ public extension IslandEvent {
     ///
     /// Shown with the same machinery as a volume nudge, because that is exactly
     /// what it is: a line that appears, is read, and leaves on its own.
-    static func welcome(hour: Int, time: String, batteryPercent: Int?) -> IslandEvent {
+    static func welcome(hour: Int, time: String, batteryPercent: Int?,
+                        custom: String? = nil) -> IslandEvent {
         let detail = [time, batteryPercent.map { "%\($0)" }].compactMap { $0 }.joined(separator: " · ")
-        return IslandEvent(kind: .welcome, title: greeting(forHour: hour), detail: detail,
+        return IslandEvent(kind: .welcome, title: customTitle(custom) ?? greeting(forHour: hour),
+                           detail: detail,
                            progress: nil, symbol: symbolForGreeting(hour))
     }
 
@@ -128,10 +130,26 @@ public extension IslandEvent {
     ///
     /// The island is normally invisible when closed, so there would be nothing
     /// to fold. This is what gets put on screen to fold away.
-    static func farewell(hour: Int, batteryPercent: Int?) -> IslandEvent {
-        IslandEvent(kind: .lidClosing, title: farewellTitle(forHour: hour),
+    static func farewell(hour: Int, batteryPercent: Int?, custom: String? = nil) -> IslandEvent {
+        IslandEvent(kind: .lidClosing, title: customTitle(custom) ?? farewellTitle(forHour: hour),
                     detail: batteryPercent.map { "%\($0)" },
                     progress: nil, symbol: "laptopcomputer.and.arrow.down")
+    }
+
+    /// The most a hand-written line may be, in characters.
+    ///
+    /// The island is one line wide. Past this it would either be cut off or
+    /// squeeze the panel into something that no longer looks deliberate.
+    public static let customTitleLimit = 32
+
+    /// What the user typed, or nothing if they left the field alone.
+    ///
+    /// Whitespace only counts as leaving it alone, so a stray space cannot
+    /// replace the greeting with a blank island.
+    public static func customTitle(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return String(trimmed.prefix(customTitleLimit))
     }
 
     /// Sending somebody off is not the same words as greeting them, and at three
