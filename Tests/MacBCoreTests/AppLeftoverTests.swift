@@ -112,5 +112,39 @@ final class AppLeftoverTests: XCTestCase {
         let spotify = AppIdentity(bundleIdentifier: "com.spotify.client", name: "Spotify")
         XCTAssertNil(AppLeftoverMatcher.vendorToken(of: spotify))
         XCTAssertNil(AppLeftoverMatcher.vendorToken(of: AppIdentity(bundleIdentifier: "com.ab.tool", name: "Tooling")))
+        // Vendor folder plus application name is both halves of the identifier.
+        XCTAssertEqual(AppLeftoverMatcher.vendorChildConfidence(fileName: "Chrome", kind: .support, identity: chrome), .likely)
+        XCTAssertNil(AppLeftoverMatcher.vendorChildConfidence(fileName: "Drive", kind: .support, identity: chrome))
+    }
+
+    func testAShareExtensionIsFoundUnderBothTheTeamPrefixAndItsOwnSuffix() {
+        let telegram = AppIdentity(bundleIdentifier: "ru.keepcoder.Telegram", name: "Telegram",
+                                   executableName: "Telegram", teamIdentifier: "6N38VWS5BX")
+        XCTAssertEqual(AppLeftoverMatcher.confidence(fileName: "6N38VWS5BX.ru.keepcoder.Telegram.TelegramShare",
+                                                     kind: .groupContainer, identity: telegram), .likely)
+        XCTAssertEqual(AppLeftoverMatcher.confidence(fileName: "6N38VWS5BX.ru.keepcoder.Telegram.TelegramShare",
+                                                     kind: .applicationScript, identity: telegram), .likely)
+        XCTAssertEqual(AppLeftoverMatcher.confidence(fileName: "6N38VWS5BX.ru.keepcoder.Telegram",
+                                                     kind: .groupContainer, identity: telegram), .exact)
+        // Another developer's team prefix must not drag an unrelated app in.
+        XCTAssertNil(AppLeftoverMatcher.confidence(fileName: "6N38VWS5BX.ru.keepcoder.Telegrams.Share",
+                                                   kind: .groupContainer, identity: telegram))
+    }
+
+    func testACrashReportIsMatchedOnTheProcessNameIncludingItsHelpers() {
+        let chrome = AppIdentity(bundleIdentifier: "com.google.Chrome", name: "Chrome",
+                                 executableName: "Google Chrome", teamIdentifier: "EQHXZ8M8AV")
+        XCTAssertEqual(AppLeftoverMatcher.confidence(fileName: "Google Chrome Helper_2026-09-07-145618_mac.diag",
+                                                     kind: .crashReport, identity: chrome), .likely)
+        XCTAssertEqual(AppLeftoverMatcher.confidence(fileName: "Google Chrome_3F445A3A-8D0C.plist",
+                                                     kind: .crashReport, identity: chrome), .likely)
+        // The same name in an ordinary directory stays a plain name match.
+        XCTAssertNil(AppLeftoverMatcher.confidence(fileName: "Google Chrome Helper_2026-09-07-145618_mac.diag",
+                                                   kind: .log, identity: chrome))
+        XCTAssertNil(AppLeftoverMatcher.confidence(fileName: "Google Chromecast_2026-09-07.diag",
+                                                   kind: .crashReport, identity: chrome))
+        let paths = Set(AppLeftoverLocation.all.map(\.path))
+        XCTAssertTrue(paths.contains("Application Support/CrashReporter"))
+        XCTAssertTrue(paths.contains("Logs/DiagnosticReports"))
     }
 }

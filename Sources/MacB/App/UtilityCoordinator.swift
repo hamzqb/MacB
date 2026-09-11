@@ -12,8 +12,13 @@ import UniformTypeIdentifiers
     @Published var statusMessage: String?
     @Published var isWorking = false
 
+    @Published private(set) var cacheItems: [CacheSweepItem] = []
+    @Published private(set) var selectedCacheIDs: Set<String> = []
+    @Published private(set) var hasScannedCaches = false
+
     private let archiveService = ArchiveService()
     private let uninstallService = AppUninstallService()
+    private let cacheSweepService = CacheSweepService()
 
     var selectedRemovalCandidates: [AppRemovalCandidate] { removalCandidates.filter { selectedRemovalIDs.contains($0.id) } }
     var removalSize: Int64 { selectedRemovalCandidates.reduce(0) { $0 + $1.size } }
@@ -30,6 +35,51 @@ import UniformTypeIdentifiers
     /// and never ticked, because MacB does not ask for administrator rights.
     var administratorOnlyCandidates: [AppRemovalCandidate] { removalCandidates.filter(\.requiresAdministrator) }
     var macWhisperInstalled: Bool { macWhisperURL != nil }
+
+    var selectedCacheItems: [CacheSweepItem] { cacheItems.filter { selectedCacheIDs.contains($0.id) } }
+    var cacheSize: Int64 { selectedCacheItems.reduce(0) { $0 + $1.size } }
+    var cacheTotalSize: Int64 { cacheItems.reduce(0) { $0 + $1.size } }
+
+    /// The sweep list, grouped by what the folders are for.
+    var cacheGroups: [(group: CacheSweepGroup, items: [CacheSweepItem])] {
+        CacheSweepGroup.allCases.sorted { $0.order < $1.order }.compactMap { group in
+            let members = cacheItems.filter { $0.group == group }
+            return members.isEmpty ? nil : (group, members)
+        }
+    }
+
+    func scanCaches() {
+        isWorking = true; statusMessage = nil
+        Task {
+            let service = cacheSweepService
+            let found = await Task.detached(priority: .utility) { service.scan() }.value
+            cacheItems = found
+            // A cache whose application is open will be rebuilt before the Trash
+            // finishes emptying, so it is listed and left for the user to choose.
+            selectedCacheIDs = Set(found.filter { !$0.isInUse }.map(\.id))
+            hasScannedCaches = true
+            statusMessage = found.isEmpty ? "Temizlenecek bir önbellek bulunamadı." : nil
+            isWorking = false
+        }
+    }
+
+    func sweepCaches() {
+        let items = selectedCacheItems
+        guard !items.isEmpty else { return }
+        let count = items.count
+        let freed = ByteCountFormatter.string(fromByteCount: cacheSize, countStyle: .file)
+        cacheItems = []; selectedCacheIDs = []; hasScannedCaches = false
+        run { [cacheSweepService] in
+            try await cacheSweepService.moveToTrash(items)
+            return "\(count) klasör Çöp Sepeti'ne taşındı, \(freed) yer açıldı."
+        }
+    }
+
+    func isSelected(_ item: CacheSweepItem) -> Bool { selectedCacheIDs.contains(item.id) }
+    func toggleCache(_ item: CacheSweepItem) {
+        if selectedCacheIDs.contains(item.id) { selectedCacheIDs.remove(item.id) }
+        else { selectedCacheIDs.insert(item.id) }
+    }
 
     func createArchive() {
         let panel = NSOpenPanel()

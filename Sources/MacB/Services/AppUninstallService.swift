@@ -156,8 +156,8 @@ final class AppUninstallService {
               let children = try? FileManager.default.contentsOfDirectory(atPath: url.path) else { return [] }
         var found: [AppRemovalCandidate] = []
         for child in children {
-            guard let confidence = AppLeftoverMatcher.confidence(fileName: child, kind: location.kind,
-                                                                 identity: identity) else { continue }
+            guard let confidence = AppLeftoverMatcher.vendorChildConfidence(fileName: child, kind: location.kind,
+                                                                             identity: identity) else { continue }
             if let candidate = makeCandidate(url: url.appendingPathComponent(child), kind: location.kind,
                                              confidence: confidence,
                                              requiresAdministrator: location.requiresAdministrator,
@@ -280,26 +280,7 @@ final class AppUninstallService {
         return parts.allSatisfy { $0.unicodeScalars.allSatisfy(allowed.contains) }
     }
 
-    /// How many files the size walk visits before it gives up and reports a floor.
-    /// Roughly a tenth of a second on a cold cache, which keeps a scan of a whole
-    /// browser profile inside a couple of seconds.
-    private static let sizeWalkBudget = 20_000
-
     private func allocatedSize(of url: URL) -> (bytes: Int64, isPartial: Bool) {
-        let keys: Set<URLResourceKey> = [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey]
-        guard let enumerator = FileManager.default.enumerator(at: url, includingPropertiesForKeys: Array(keys), options: [.skipsHiddenFiles]) else {
-            let value = try? url.resourceValues(forKeys: keys)
-            return (Int64(value?.totalFileAllocatedSize ?? value?.fileAllocatedSize ?? 0), false)
-        }
-        var total: Int64 = 0
-        var visited = 0
-        for case let item as URL in enumerator {
-            visited += 1
-            if visited > Self.sizeWalkBudget { return (total, true) }
-            if let values = try? item.resourceValues(forKeys: keys), values.isRegularFile == true {
-                total += Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
-            }
-        }
-        return (total, false)
+        AllocatedSize.of(url)
     }
 }

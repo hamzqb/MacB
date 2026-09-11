@@ -51,6 +51,7 @@ struct SettingsView: View {
     var openPanel: () -> Void
     @AppStorage("settingsPage") private var selectedPage: SettingsPage = .general
     @State private var showRemovalConfirmation = false
+    @State private var showCacheConfirmation = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -93,6 +94,10 @@ struct SettingsView: View {
                 guard count > 0 else { return }
                 withAnimation { proxy.scrollTo(Self.removalAnchor, anchor: .top) }
             }
+            .onChange(of: utilities.cacheItems.count) { _, count in
+                guard count > 0 else { return }
+                withAnimation { proxy.scrollTo(Self.cacheAnchor, anchor: .top) }
+            }
             }
         }
         .frame(minWidth: 600, minHeight: 500)
@@ -103,6 +108,12 @@ struct SettingsView: View {
             Button("Çöp Sepeti’ne Taşı", role: .destructive, action: utilities.removeInspectedApplication)
         } message: {
             Text("\(utilities.selectedApplicationName) için seçtiğin \(utilities.selectedRemovalCandidates.count) öğe Çöp Sepeti'ne taşınacak. Silinmez, istediğin an geri koyabilirsin.")
+        }
+        .alert("Seçilen önbellekler Çöp Sepeti’ne taşınsın mı?", isPresented: $showCacheConfirmation) {
+            Button("Vazgeç", role: .cancel) {}
+            Button("Çöp Sepeti’ne Taşı", role: .destructive, action: utilities.sweepCaches)
+        } message: {
+            Text("\(utilities.selectedCacheItems.count) klasör Çöp Sepeti'ne taşınacak, \(ByteCountFormatter.string(fromByteCount: utilities.cacheSize, countStyle: .file)) yer açılacak. Uygulamalar bu verileri gerektiğinde yeniden oluşturur.")
         }
     }
 
@@ -224,6 +235,25 @@ struct SettingsView: View {
                         }
                         Button("Seçilenleri Çöp Sepeti’ne taşı", role: .destructive) { showRemovalConfirmation = true }
                             .disabled(utilities.selectedRemovalCandidates.isEmpty)
+                    }
+                    .padding(12)
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            section("Önbellek temizliği") {
+                Color.clear.frame(height: 0).id(Self.cacheAnchor)
+                Text("Uygulamaların yeniden oluşturabildiği geçici klasörleri arar. Belgeler, ayarlar ve uygulama verileri hiç taranmaz.")
+                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(utilities.hasScannedCaches ? "Yeniden tara" : "Önbellekleri tara", action: utilities.scanCaches)
+                if !utilities.cacheItems.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        cacheHeader
+                        ForEach(utilities.cacheGroups, id: \.group) { group in
+                            cacheGroupView(group.group, group.items)
+                        }
+                        Button("Seçilenleri Çöp Sepeti’ne taşı", role: .destructive) { showCacheConfirmation = true }
+                            .disabled(utilities.selectedCacheItems.isEmpty)
                     }
                     .padding(12)
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
@@ -580,6 +610,73 @@ struct SettingsView: View {
             Spacer(minLength: 0)
             Button {
                 NSWorkspace.shared.activateFileViewerSelecting([candidate.url])
+            } label: {
+                Image(systemName: "folder").font(.system(size: 10))
+            }
+            .buttonStyle(.borderless)
+            .help("Finder'da göster")
+            .accessibilityLabel("Finder'da göster")
+        }
+    }
+
+    private static let cacheAnchor = "cache-review"
+
+    private var cacheHeader: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text("Geri kazanılabilir alan").font(.system(size: 13, weight: .semibold))
+            Text("\(utilities.cacheItems.count) klasör · \(utilities.selectedCacheItems.count) seçili · \(ByteCountFormatter.string(fromByteCount: utilities.cacheSize, countStyle: .file))")
+                .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+        }
+    }
+
+    @ViewBuilder
+    private func cacheGroupView(_ group: CacheSweepGroup, _ items: [CacheSweepItem]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Image(systemName: group.symbol).font(.system(size: 11))
+                Text(group.title).font(.system(size: 12, weight: .semibold))
+                Text("\(items.count)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Color.primary.opacity(0.08), in: Capsule())
+                Spacer()
+            }
+            Text(group.summary).font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(items) { item in cacheRow(item) }
+        }
+    }
+
+    private func cacheRow(_ item: CacheSweepItem) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Toggle(isOn: Binding(get: { utilities.isSelected(item) },
+                                 set: { _ in utilities.toggleCache(item) })) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text(item.owner).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                        Text(item.sizeText)
+                            .font(.system(size: 10)).foregroundStyle(MacBDesign.muted)
+                        if item.isInUse {
+                            Text("uygulama açık")
+                                .font(.system(size: 9, weight: .medium))
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Color.orange.opacity(0.18), in: Capsule())
+                        }
+                    }
+                    Text(item.displayPath)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(MacBDesign.muted)
+                        .lineLimit(1)
+                        // The end of the path is the folder name, which is the
+                        // part worth reading, so a long one loses its middle.
+                        .truncationMode(.middle)
+                        .help(item.url.path)
+                }
+            }
+            .toggleStyle(.checkbox)
+            Spacer(minLength: 0)
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([item.url])
             } label: {
                 Image(systemName: "folder").font(.system(size: 10))
             }

@@ -139,13 +139,15 @@ public struct AppLeftoverLocation: Equatable, Sendable {
         AppLeftoverLocation(root: .userLibrary, path: "WebKit", kind: .webKit),
         AppLeftoverLocation(root: .userLibrary, path: "Logs", kind: .log),
         AppLeftoverLocation(root: .userLibrary, path: "Logs/DiagnosticReports", kind: .crashReport),
+        AppLeftoverLocation(root: .userLibrary, path: "Application Support/CrashReporter", kind: .crashReport),
         AppLeftoverLocation(root: .userLibrary, path: "LaunchAgents", kind: .launchAgent),
         AppLeftoverLocation(root: .userLibrary, path: "Application Scripts", kind: .applicationScript),
         AppLeftoverLocation(root: .userLibrary, path: "Cookies", kind: .cookie),
         AppLeftoverLocation(root: .systemLibrary, path: "Application Support", kind: .support),
         AppLeftoverLocation(root: .systemLibrary, path: "LaunchAgents", kind: .launchAgent),
         AppLeftoverLocation(root: .systemLibrary, path: "LaunchDaemons", kind: .launchDaemon),
-        AppLeftoverLocation(root: .systemLibrary, path: "Logs", kind: .log)
+        AppLeftoverLocation(root: .systemLibrary, path: "Logs", kind: .log),
+        AppLeftoverLocation(root: .systemLibrary, path: "Logs/DiagnosticReports", kind: .crashReport)
     ]
 }
 
@@ -159,7 +161,8 @@ public enum AppLeftoverMatcher {
     /// turns "com.acme.app.plist" into an exact identifier match rather than a
     /// prefix one.
     private static let strippableSuffixes = [
-        ".plist.lockfile", ".plist", ".savedState", ".binarycookies", ".sfl2", ".sfl3", ".lockfile"
+        ".plist.lockfile", ".plist", ".savedState", ".binarycookies", ".sfl2", ".sfl3", ".lockfile",
+        ".diag", ".ips", ".crash", ".hang", ".spin", ".panic", ".wakeups_resource"
     ]
 
     /// Vendor folders shared by everything that vendor ships.
@@ -230,11 +233,8 @@ public enum AppLeftoverMatcher {
             }
         }
 
-        // A crash report is named after the executable, not the bundle.
-        if kind == .crashReport, let executable = identity.executableName, executable.count >= 3 {
-            if stem == executable || stem.hasPrefix(executable + "_") || stem.hasPrefix(executable + "-") {
-                return .likely
-            }
+        if kind == .crashReport, let result = crashReportConfidence(stem: stem, identity: identity) {
+            return result
         }
 
         return nameConfidence(stem: stem, kind: kind, identity: identity)
@@ -252,8 +252,50 @@ public enum AppLeftoverMatcher {
         // ByHost preferences and helper bundles both extend the identifier with
         // another dotted component, which is the application's own namespace.
         if stem.hasPrefix(identifier + ".") || stem.hasPrefix(identifier + "-") { return .likely }
+        // A share extension's group container carries both the team prefix and
+        // the extension suffix at once: 6N38VWS5BX.ru.keepcoder.Telegram.TelegramShare.
+        // Neither half alone matches, so the two are checked together.
+        if let team = identity.teamIdentifier, !team.isEmpty,
+           stem.hasPrefix("\(team).\(identifier).") || stem.hasPrefix("group.\(team).\(identifier).") {
+            return .likely
+        }
         if kind == .groupContainer, stem.hasSuffix("." + identifier) { return .likely }
         return nil
+    }
+
+    /// A crash report is named after the process, not the bundle.
+    ///
+    /// The process is the executable, one of its helpers, or the display name,
+    /// and macOS appends a timestamp and the host: "Chrome Helper_2026-09-07-
+    /// 145618_hamza-mac". The underscore and the space are both real separators
+    /// in that scheme, which is why a prefix is enough here and nowhere else.
+    private static func crashReportConfidence(stem: String,
+                                              identity: AppIdentity) -> AppLeftoverConfidence? {
+        var processNames: [String] = []
+        if let executable = identity.executableName { processNames.append(executable) }
+        processNames.append(identity.name)
+        for process in processNames where process.count >= 3 {
+            if stem == process { return .likely }
+            if stem.hasPrefix(process + "_") || stem.hasPrefix(process + "-") { return .likely }
+            // "Google Chrome Helper" is Chrome's, and only Chrome's, because the
+            // prefix is the whole executable name rather than a word inside it.
+            if stem.hasPrefix(process + " ") { return .likely }
+        }
+        return nil
+    }
+
+    /// How sure a match one level inside a vendor folder is.
+    ///
+    /// "Application Support/Google/Chrome" matches twice over: the folder is the
+    /// vendor named in com.google.Chrome, and the child is the application named
+    /// in it. Two halves of the same identifier is evidence, not a coincidence,
+    /// so the verdict is raised above a bare name match.
+    public static func vendorChildConfidence(fileName: String, kind: AppLeftoverKind,
+                                             identity: AppIdentity) -> AppLeftoverConfidence? {
+        guard let result = confidence(fileName: fileName, kind: kind, identity: identity) else { return nil }
+        guard result == .possible, let leaf = identity.bundleIdentifier.split(separator: ".").last,
+              normalize(fileName) == normalize(String(leaf)) else { return result }
+        return .likely
     }
 
     private static func nameConfidence(stem: String, kind: AppLeftoverKind,

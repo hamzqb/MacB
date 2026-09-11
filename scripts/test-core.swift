@@ -670,6 +670,94 @@ struct CoreTestRunner {
                 let short = AppIdentity(bundleIdentifier: "com.ab.tool", name: "Tooling")
                 try expect(AppLeftoverMatcher.vendorToken(of: short) == nil,
                            "A two-letter vendor component was treated as a company folder")
+                // Vendor folder plus application name is both halves of the identifier.
+                try expect(AppLeftoverMatcher.vendorChildConfidence(fileName: "Chrome", kind: .support,
+                                                                    identity: chrome) == .likely,
+                           "The application's own folder inside its vendor folder was still only a guess")
+                try expect(AppLeftoverMatcher.vendorChildConfidence(fileName: "Drive", kind: .support,
+                                                                    identity: chrome) == nil,
+                           "A sibling product inside the vendor folder was offered")
+            }),
+            ("AppLeftover: a share extension is found under the team prefix and its own suffix", {
+                let telegram = AppIdentity(bundleIdentifier: "ru.keepcoder.Telegram", name: "Telegram",
+                                           executableName: "Telegram", teamIdentifier: "6N38VWS5BX")
+                for kind in [AppLeftoverKind.groupContainer, .applicationScript] {
+                    try expect(AppLeftoverMatcher.confidence(fileName: "6N38VWS5BX.ru.keepcoder.Telegram.TelegramShare",
+                                                             kind: kind, identity: telegram) == .likely,
+                               "The share extension was missed in \(kind)")
+                }
+                try expect(AppLeftoverMatcher.confidence(fileName: "6N38VWS5BX.ru.keepcoder.Telegram",
+                                                         kind: .groupContainer, identity: telegram) == .exact,
+                           "The plain group container stopped being an exact match")
+                try expect(AppLeftoverMatcher.confidence(fileName: "6N38VWS5BX.ru.keepcoder.Telegrams.Share",
+                                                         kind: .groupContainer, identity: telegram) == nil,
+                           "A neighbouring identifier under the same team was claimed")
+            }),
+            ("AppLeftover: a crash report is matched on the process name, helpers included", {
+                let chrome = AppIdentity(bundleIdentifier: "com.google.Chrome", name: "Chrome",
+                                         executableName: "Google Chrome", teamIdentifier: "EQHXZ8M8AV")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Google Chrome Helper_2026-09-07-145618_mac.diag",
+                                                         kind: .crashReport, identity: chrome) == .likely,
+                           "A helper's crash report was missed")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Google Chrome_3F445A3A-8D0C.plist",
+                                                         kind: .crashReport, identity: chrome) == .likely,
+                           "The CrashReporter record was missed")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Google Chrome Helper_2026-09-07-145618_mac.diag",
+                                                         kind: .log, identity: chrome) == nil,
+                           "Process-name matching leaked out of crash reports")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Google Chromecast_2026-09-07.diag",
+                                                         kind: .crashReport, identity: chrome) == nil,
+                           "Another process whose name starts the same was claimed")
+                let paths = Set(AppLeftoverLocation.all.map(\.path))
+                try expect(paths.contains("Application Support/CrashReporter") && paths.contains("Logs/DiagnosticReports"),
+                           "Crash reports have nowhere to be found")
+            }),
+            ("CacheSweep: only caches, logs and build output are ever swept", {
+                let paths = Set(CacheSource.all.map(\.path))
+                for expected in ["Library/Caches", "Library/Logs", "Library/Developer/Xcode/DerivedData"] {
+                    try expect(paths.contains(expected), "\(expected) is not swept")
+                }
+                for forbidden in ["Documents", "Library/Containers", "Library/Group Containers",
+                                  "Library/Preferences", "Library/Application Support", "Desktop"] {
+                    try expect(!paths.contains(forbidden), "\(forbidden) is swept")
+                }
+            }),
+            ("CacheSweep: a queue is not a cache and is never offered", {
+                for name in ["CloudKit", "com.apple.containermanagerd",
+                             "com.apple.nsurlsessiond", "com.apple.appstore"] {
+                    try expect(!CacheSweepRules.isSweepable(name: name), "\(name) was offered")
+                }
+                try expect(CacheSweepRules.isSweepable(name: "com.spotify.client"),
+                           "An ordinary application cache was refused")
+                for name in ["", ".", "..", ".marker", "a/b"] {
+                    try expect(!CacheSweepRules.isSweepable(name: name), "\(name) was accepted")
+                }
+            }),
+            ("CacheSweep: the sweep reaches exactly one level into a listed directory", {
+                let home = "/Users/tester"
+                for allowed in ["\(home)/Library/Caches/com.spotify.client",
+                                "\(home)/Library/Logs/Claude", "\(home)/.npm/_cacache"] {
+                    try expect(CacheSweepRules.isSweepablePath(allowed, home: home), "\(allowed) was refused")
+                }
+                for refused in ["\(home)/Library/Caches",
+                                "\(home)/Library/Caches/com.spotify.client/Data",
+                                "\(home)/Library/Preferences/com.spotify.client.plist",
+                                "/Library/Caches/com.spotify.client",
+                                "\(home)/Library/Caches/../Preferences/x"] {
+                    try expect(!CacheSweepRules.isSweepablePath(refused, home: home), "\(refused) was allowed")
+                }
+                try expect(!CacheSweepRules.isSweepablePath("\(home)/Library/Caches/x", home: ""),
+                           "An empty home directory matched everything")
+            }),
+            ("CacheSweep: build tool caches are read as developer work", {
+                try expect(CacheSweepRules.group(forCacheName: "Homebrew", default: .applications) == .developer,
+                           "Homebrew was filed under applications")
+                try expect(CacheSweepRules.group(forCacheName: "org.swift.swiftpm", default: .applications) == .developer,
+                           "SwiftPM was filed under applications")
+                try expect(CacheSweepRules.group(forCacheName: "com.spotify.client", default: .applications) == .applications,
+                           "An application cache was filed under developer work")
+                try expect(CacheSweepRules.group(forCacheName: "SomeThing", default: .logs) == .logs,
+                           "An unknown folder ignored the caller's fallback")
             }),
             ("FaceEmbedding: a template is the normalised mean, not the loudest sample", {
                 let quiet: [Float] = [1, 0, 0]

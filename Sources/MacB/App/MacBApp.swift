@@ -20,6 +20,40 @@ import MacBCore
         // Nothing is recycled here: the point is to read the scan's verdicts
         // against real installs before trusting the review sheet with a Trash
         // operation.
+        // Moves one already-listed cache folder to Trash, so the write path can be
+        // exercised on a real disk without clicking through the review sheet. It
+        // refuses anything the sweep would not have offered in the first place.
+        if let index = CommandLine.arguments.firstIndex(of: "--sweep-cache"),
+           CommandLine.arguments.count > index + 1 {
+            let wanted = URL(fileURLWithPath: CommandLine.arguments[index + 1]).standardizedFileURL.path
+            let service = CacheSweepService()
+            guard let item = service.scan().first(where: { $0.url.path == wanted }) else {
+                print("error: \(wanted) bu taramada yok")
+                return
+            }
+            // Recycling wants a running main run loop, so this pumps it rather
+            // than blocking on a semaphore and deadlocking against itself.
+            let finished = Flag()
+            Task {
+                do {
+                    try await service.moveToTrash([item])
+                    print("\(item.displayPath) Çöp Sepeti'ne taşındı (\(item.sizeText))")
+                } catch { print("error: \(error.localizedDescription)") }
+                finished.set()
+            }
+            while !finished.isSet, RunLoop.current.run(mode: .default, before: .distantFuture) {}
+            return
+        }
+        if CommandLine.arguments.contains("--scan-caches") {
+            let items = CacheSweepService().scan()
+            let total = items.reduce(Int64(0)) { $0 + $1.size }
+            print("\(items.count) klasör · \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))")
+            for item in items {
+                let busy = item.isInUse ? " [açık]" : ""
+                print("  \(item.group.rawValue)\t\(item.sizeText)\t\(item.owner)\t\(item.displayPath)\(busy)")
+            }
+            return
+        }
         if let index = CommandLine.arguments.firstIndex(of: "--scan-app"),
            CommandLine.arguments.count > index + 1 {
             let path = CommandLine.arguments[index + 1]
@@ -40,6 +74,14 @@ import MacBCore
         app.delegate = delegate
         withExtendedLifetime(delegate) { app.run() }
     }
+}
+
+/// A one-way flag the command line waits on while the run loop turns.
+private final class Flag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    var isSet: Bool { lock.withLock { value } }
+    func set() { lock.withLock { value = true } }
 }
 
 @MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -160,6 +202,10 @@ import MacBCore
                   CommandLine.arguments.count > index + 1 {
             UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
             utilities.inspectApplication(at: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+            showSettings()
+        } else if CommandLine.arguments.contains("--preview-caches") {
+            UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
+            utilities.scanCaches()
             showSettings()
         } else if CommandLine.arguments.contains("--preview-library") {
             widgetLayout.isEditing = true
