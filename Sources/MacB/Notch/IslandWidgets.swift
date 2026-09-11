@@ -34,24 +34,12 @@ struct IslandWidgetStrip: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: IslandGeometry.gap) {
-            gridSurface
+            grid
                 .environment(\.islandUsesGlass, usesGlass)
             if store.isEditing {
                 IslandWidgetLibrary(store: store)
                     .transition(.opacity)
             }
-        }
-    }
-
-    /// Glass panes close together should read as one sheet with seams, not as
-    /// separate windows stacked on a window. The container is what tells macOS
-    /// they belong to each other, so their edges bend into one another instead
-    /// of each card refracting on its own.
-    @ViewBuilder private var gridSurface: some View {
-        if usesGlass, #available(macOS 26.0, *) {
-            GlassEffectContainer(spacing: IslandGeometry.gap) { grid }
-        } else {
-            grid
         }
     }
 
@@ -302,16 +290,12 @@ struct WidgetCard<Content: View>: View {
             .background(cardSurface)
     }
 
-    @ViewBuilder private var cardSurface: some View {
-        if usesGlass, #available(macOS 26.0, *) {
-            // Glass of its own, so the card lifts off the panel instead of
-            // sitting on it as a lighter rectangle.
-            Color.clear.glassEffect(
-                .regular.tint(.white.opacity(isActive ? 0.10 : 0.05)),
-                in: RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous))
-        } else {
-            isActive ? MacBDesign.IslandToken.widgetActiveFill : MacBDesign.IslandToken.widgetFill
-        }
+    /// Flat fill, deliberately.
+    ///
+    /// Glass behind a card renders the card's own text through the glass, which
+    /// smears it into the panel. The panel is the sheet; the cards sit on it.
+    private var cardSurface: some View {
+        isActive ? MacBDesign.IslandToken.widgetActiveFill : MacBDesign.IslandToken.widgetFill
     }
 }
 
