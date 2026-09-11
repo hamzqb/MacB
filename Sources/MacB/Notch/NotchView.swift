@@ -92,7 +92,12 @@ struct NotchView: View {
     /// with a lit edge rather than pretending to refract.
     @ViewBuilder private func liquidGlass(tint: Color?) -> some View {
         if #available(macOS 26.0, *) {
-            Color.clear.glassEffect(tint.map { Glass.regular.tint($0) } ?? .regular, in: islandShape)
+            // Interactive glass tracks the pointer: the rim brightens where the
+            // cursor is, which is what makes the panel feel like a physical
+            // sheet rather than a blurred screenshot.
+            Color.clear.glassEffect(
+                (tint.map { Glass.regular.tint($0) } ?? .regular).interactive(),
+                in: islandShape)
         } else {
             Rectangle().fill(.ultraThinMaterial)
             if let tint { tint }

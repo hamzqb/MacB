@@ -175,10 +175,17 @@ struct IslandClipboardView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 7) {
-            Image(systemName: filter.symbol)
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
+        VStack(spacing: 8) {
+            ZStack {
+                Circle()
+                    .fill(RadialGradient(colors: [.white.opacity(0.13), .white.opacity(0.02)],
+                                         center: .topLeading, startRadius: 1, endRadius: 40))
+                Circle().strokeBorder(.white.opacity(0.10), lineWidth: 0.8)
+                Image(systemName: filter.symbol)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+            }
+            .frame(width: 40, height: 40)
             Text(filter.emptyMessage)
                 .font(.system(size: 11))
                 .foregroundStyle(MacBDesign.IslandToken.secondaryText)

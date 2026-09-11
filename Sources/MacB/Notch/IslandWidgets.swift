@@ -30,14 +30,28 @@ struct IslandWidgetStrip: View {
     private var columns: Int { IslandGeometry.columns(forWidth: width) }
     private var columnWidth: CGFloat { IslandGeometry.columnWidth(forWidth: width, columns: columns) }
 
+    private var usesGlass: Bool { preferences.islandAppearance != .pureBlack }
+
     var body: some View {
         VStack(alignment: .leading, spacing: IslandGeometry.gap) {
-            grid
-                .environment(\.islandUsesGlass, preferences.islandAppearance != .pureBlack)
+            gridSurface
+                .environment(\.islandUsesGlass, usesGlass)
             if store.isEditing {
                 IslandWidgetLibrary(store: store)
                     .transition(.opacity)
             }
+        }
+    }
+
+    /// Glass panes close together should read as one sheet with seams, not as
+    /// separate windows stacked on a window. The container is what tells macOS
+    /// they belong to each other, so their edges bend into one another instead
+    /// of each card refracting on its own.
+    @ViewBuilder private var gridSurface: some View {
+        if usesGlass, #available(macOS 26.0, *) {
+            GlassEffectContainer(spacing: IslandGeometry.gap) { grid }
+        } else {
+            grid
         }
     }
 
@@ -449,19 +463,10 @@ struct MediaWidget: View {
         .padding(.horizontal, 12)
     }
 
-    /// Nothing is playing. A quiet single line beats an empty transport that does nothing.
     private var idle: some View {
-        HStack(spacing: 9) {
-            Image(systemName: "play.slash")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
-            Text("Çalan bir şey yok")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(MacBDesign.IslandToken.secondaryText)
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(14)
+        WidgetEmptyState(symbol: "music.note", title: "Çalan bir şey yok",
+                         hint: "Spotify, Müzik veya tarayıcı")
+            .padding(10)
     }
 
     // MARK: - Pieces
@@ -845,9 +850,8 @@ struct AssistantWidget: View {
             VStack(alignment: .leading, spacing: 6) {
                 WidgetCaption("Asistanlar")
                 if activity.statuses.isEmpty {
-                    Text("Çalışan görev yok")
-                        .font(.system(size: 11))
-                        .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
+                    WidgetEmptyState(symbol: "sparkles", title: "Çalışan görev yok",
+                                     hint: "Claude ve Codex burada görünür")
                 } else {
                     ForEach(activity.statuses.prefix(3)) { item in
                         HStack(spacing: 6) {
@@ -921,9 +925,8 @@ struct QuickLaunchWidget: View {
                 VStack(alignment: .leading, spacing: 6) {
                     WidgetCaption("Hızlı erişim")
                     if launcher.items.isEmpty {
-                        Text("Uygulama ekle")
-                            .font(.system(size: 11))
-                            .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
+                        WidgetEmptyState(symbol: "square.grid.2x2", title: "Uygulama ekle",
+                                         hint: "Sık açtıklarını buraya sabitle")
                     } else {
                         HStack(spacing: 7) {
                             ForEach(quickItems.prefix(4)) { item in
@@ -959,9 +962,8 @@ struct TasksWidget: View {
             VStack(alignment: .leading, spacing: 6) {
                 WidgetCaption("Yapılacaklar")
                 if tasks.items.isEmpty {
-                    Text("Liste boş")
-                        .font(.system(size: 11))
-                        .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
+                    WidgetEmptyState(symbol: "checklist", title: "Liste boş",
+                                     hint: "Yapılacak eklemek için dokun")
                 } else {
                     ForEach(tasks.items.prefix(3)) { item in
                         HStack(spacing: 6) {
@@ -989,9 +991,8 @@ struct RecentFilesWidget: View {
                 VStack(alignment: .leading, spacing: 6) {
                     WidgetCaption("Son dosyalar")
                     if recentFiles.items.isEmpty {
-                        Text("Yeni dosya yok")
-                            .font(.system(size: 11))
-                            .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
+                        WidgetEmptyState(symbol: "clock.arrow.circlepath", title: "Yeni dosya yok",
+                                         hint: "Son dokunduklarım burada")
                     } else {
                         ForEach(recentFiles.items.prefix(3)) { item in
                             HStack(spacing: 6) {
@@ -1179,5 +1180,50 @@ private struct EntranceEffect: ViewModifier {
                 .animation(.spring(response: 0.40, dampingFraction: 0.80)
                     .delay(min(0.24, Double(index) * 0.03)), value: isVisible)
         )
+    }
+}
+
+/// What a widget shows before it has anything to show.
+///
+/// A grey sentence reads as a widget that failed. A glyph on its own disc reads
+/// as a widget that is ready and waiting, which is the truth, and it gives the
+/// empty card the same weight as a full one so the strip does not sag where
+/// nothing is happening yet.
+struct WidgetEmptyState: View {
+    let symbol: String
+    let title: String
+    var hint: String?
+    @Environment(\.islandWidgetSpan) private var span
+
+    private var diameter: CGFloat { span >= 2 ? 34 : 28 }
+
+    var body: some View {
+        VStack(spacing: span >= 2 ? 7 : 5) {
+            ZStack {
+                Circle()
+                    .fill(RadialGradient(colors: [.white.opacity(0.13), .white.opacity(0.02)],
+                                         center: .topLeading, startRadius: 1, endRadius: diameter))
+                Circle().strokeBorder(.white.opacity(0.10), lineWidth: 0.8)
+                Image(systemName: symbol)
+                    .font(.system(size: span >= 2 ? 14 : 12, weight: .medium))
+                    .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+            }
+            .frame(width: diameter, height: diameter)
+            VStack(spacing: 1) {
+                Text(title)
+                    .font(.system(size: span >= 2 ? 11 : 10, weight: .medium))
+                    .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+                if let hint, span >= 2 {
+                    Text(hint)
+                        .font(.system(size: 9))
+                        .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel([title, hint].compactMap { $0 }.joined(separator: ", "))
     }
 }

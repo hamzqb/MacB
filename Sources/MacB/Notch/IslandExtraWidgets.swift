@@ -146,9 +146,8 @@ struct ShelfWidget: View {
                 VStack(alignment: .leading, spacing: 6) {
                     WidgetCaption("Raf", trailing: shelf.items.isEmpty ? nil : "\(shelf.items.count)")
                     if shelf.items.isEmpty {
-                        Text("Dosya sürükle")
-                            .font(.system(size: 11))
-                            .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
+                        WidgetEmptyState(symbol: "tray.and.arrow.down", title: "Dosya sürükle",
+                                         hint: "Çentiğin üstüne bırak")
                     } else {
                         HStack(spacing: 7) {
                             ForEach(shelf.items.prefix(4)) { item in
