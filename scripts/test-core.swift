@@ -562,6 +562,115 @@ struct CoreTestRunner {
                 try expect(IslandGeometry.homeWidth(unitCount: 16, isEditing: true, screenWidth: 1512) == full,
                            "The library narrowed a full strip")
             }),
+            ("AppLeftover: an identifier-named file is an exact match whatever macOS appended", {
+                let spotify = AppIdentity(bundleIdentifier: "com.spotify.client", name: "Spotify",
+                                          executableName: "Spotify", teamIdentifier: "2FNC3A47ZF",
+                                          helperIdentifiers: ["com.spotify.client.helper"])
+                let exact: [(String, AppLeftoverKind)] = [
+                    ("com.spotify.client", .support),
+                    ("com.spotify.client.plist", .preference),
+                    ("com.spotify.client.savedState", .savedState),
+                    ("com.spotify.client.binarycookies", .cookie),
+                    ("com.spotify.client", .container),
+                    ("2FNC3A47ZF.com.spotify.client", .groupContainer),
+                    ("group.com.spotify.client", .groupContainer),
+                    ("com.spotify.client.helper", .launchAgent)
+                ]
+                for (name, kind) in exact {
+                    try expect(AppLeftoverMatcher.confidence(fileName: name, kind: kind, identity: spotify) == .exact,
+                               "\(name) was not matched exactly")
+                }
+                try expect(AppLeftoverMatcher.confidence(fileName: "com.spotify.client.updater.plist",
+                                                         kind: .preference, identity: spotify) == .likely,
+                           "A helper preference was not reported as likely")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Spotify_2026-01-04_Mac.ips",
+                                                         kind: .crashReport, identity: spotify) == .likely,
+                           "A crash report named after the executable was missed")
+            }),
+            ("AppLeftover: a name match is the weakest verdict and is refused where names are not used", {
+                let spotify = AppIdentity(bundleIdentifier: "com.spotify.client", name: "Spotify",
+                                          executableName: "Spotify")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Spotify", kind: .support, identity: spotify) == .possible,
+                           "A folder named after the application was not reported")
+                try expect(AppLeftoverConfidence.possible.isSelectedByDefault == false,
+                           "A name match would be ticked by default")
+                try expect(AppLeftoverConfidence.likely.isSelectedByDefault,
+                           "An identifier match would not be ticked by default")
+                for kind in [AppLeftoverKind.container, .groupContainer, .application] {
+                    try expect(AppLeftoverMatcher.confidence(fileName: "Spotify", kind: kind, identity: spotify) == nil,
+                               "A name match leaked into \(kind)")
+                }
+            }),
+            ("AppLeftover: shared vendor and generic folders are never offered by name", {
+                let chrome = AppIdentity(bundleIdentifier: "com.google.Chrome", name: "Google",
+                                         executableName: "Google Chrome")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Google", kind: .support, identity: chrome) == nil,
+                           "Uninstalling Chrome offered the shared Google folder")
+                try expect(AppLeftoverMatcher.confidence(fileName: "com.google.Chrome", kind: .support, identity: chrome) == .exact,
+                           "The identifier match inside a vendor folder was lost")
+                let notes = AppIdentity(bundleIdentifier: "com.example.notes", name: "Notes")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Notes", kind: .support, identity: notes) == nil,
+                           "A generic name was offered")
+                let short = AppIdentity(bundleIdentifier: "com.example.ab", name: "Ab")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Ab", kind: .support, identity: short) == nil,
+                           "A two-letter name was offered")
+            }),
+            ("AppLeftover: a neighbouring identifier is never mistaken for the application", {
+                let spotify = AppIdentity(bundleIdentifier: "com.spotify.client", name: "Spotify",
+                                          executableName: "Spotify")
+                for name in ["com.spotify.clienthelper", "com.spotifyx.client", "org.spotify.client",
+                             "SpotifyDeluxe", "com.apple.Safari", "Discord"] {
+                    try expect(AppLeftoverMatcher.confidence(fileName: name, kind: .support, identity: spotify) == nil,
+                               "\(name) was matched against Spotify")
+                }
+                // A group container ending in the whole identifier belongs to that
+                // application whatever team prefix macOS put in front of it, but
+                // without a signature to confirm the prefix it is only likely.
+                let unsigned = AppIdentity(bundleIdentifier: "com.example.tool", name: "Tooling")
+                try expect(AppLeftoverMatcher.confidence(fileName: "TEAMID.com.example.tool",
+                                                         kind: .groupContainer, identity: unsigned) == .likely,
+                           "An unsigned app lost its own group container")
+                try expect(AppLeftoverMatcher.confidence(fileName: "TEAMID.com.example.toolkit",
+                                                         kind: .groupContainer, identity: unsigned) == nil,
+                           "A longer identifier was matched as a group container")
+            }),
+            ("AppLeftover: the scan covers every place a leftover lands, and marks the ones needing an admin", {
+                let covered = Set(AppLeftoverLocation.all.map(\.kind))
+                for kind in AppLeftoverKind.allCases where kind != .application {
+                    try expect(covered.contains(kind), "\(kind) has no directory to scan")
+                }
+                let userPaths = Set(AppLeftoverLocation.all.filter { $0.root == .userLibrary }.map(\.path))
+                for expected in ["Application Support", "Caches", "Containers", "Group Containers",
+                                 "Preferences", "Preferences/ByHost", "Saved Application State",
+                                 "HTTPStorages", "WebKit", "Logs", "LaunchAgents", "Application Scripts"] {
+                    try expect(userPaths.contains(expected), "\(expected) is not scanned")
+                }
+                let system = AppLeftoverLocation.all.filter { $0.root == .systemLibrary }
+                try expect(!system.isEmpty, "Nothing under /Library is reported at all")
+                try expect(system.allSatisfy(\.requiresAdministrator), "A /Library item was offered for removal")
+                try expect(AppLeftoverLocation.all.filter { $0.root == .userLibrary }
+                    .allSatisfy { !$0.requiresAdministrator }, "A user library item was marked admin-only")
+            }),
+            ("AppLeftover: a vendor folder is looked into once, and never offered itself", {
+                let chrome = AppIdentity(bundleIdentifier: "com.google.Chrome", name: "Chrome",
+                                         executableName: "Google Chrome", teamIdentifier: "EQHXZ8M8AV")
+                try expect(AppLeftoverMatcher.isVendorContainer(fileName: "Google", identity: chrome),
+                           "The vendor folder was not recognised")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Google", kind: .support, identity: chrome) == nil,
+                           "The shared vendor folder was offered for removal")
+                try expect(AppLeftoverMatcher.confidence(fileName: "Chrome", kind: .support, identity: chrome) == .possible,
+                           "The application folder inside the vendor folder was missed")
+                try expect(!AppLeftoverMatcher.isVendorContainer(fileName: "Mozilla", identity: chrome),
+                           "Another vendor's folder was treated as this one's")
+                // An application whose vendor component is its own name has nothing
+                // to descend into: that folder was already matched at the top level.
+                let spotify = AppIdentity(bundleIdentifier: "com.spotify.client", name: "Spotify")
+                try expect(AppLeftoverMatcher.vendorToken(of: spotify) == nil,
+                           "Spotify would descend into its own folder twice")
+                let short = AppIdentity(bundleIdentifier: "com.ab.tool", name: "Tooling")
+                try expect(AppLeftoverMatcher.vendorToken(of: short) == nil,
+                           "A two-letter vendor component was treated as a company folder")
+            }),
             ("FaceEmbedding: a template is the normalised mean, not the loudest sample", {
                 let quiet: [Float] = [1, 0, 0]
                 let loud: [Float] = [0, 900, 0]

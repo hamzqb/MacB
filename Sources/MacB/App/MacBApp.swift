@@ -16,6 +16,25 @@ import MacBCore
             print("Displays: \(NSScreen.screens.count)")
             return
         }
+        // Prints what the uninstaller would offer for one application and exits.
+        // Nothing is recycled here: the point is to read the scan's verdicts
+        // against real installs before trusting the review sheet with a Trash
+        // operation.
+        if let index = CommandLine.arguments.firstIndex(of: "--scan-app"),
+           CommandLine.arguments.count > index + 1 {
+            let path = CommandLine.arguments[index + 1]
+            do {
+                let report = try AppUninstallService().report(for: URL(fileURLWithPath: path))
+                print("\(report.identity.name) — \(report.identity.bundleIdentifier)")
+                print("team: \(report.identity.teamIdentifier ?? "—")  helpers: \(report.identity.helperIdentifiers.joined(separator: ", "))")
+                print("running: \(report.runningProcessCount)")
+                for candidate in report.candidates {
+                    let admin = candidate.requiresAdministrator ? " [admin]" : ""
+                    print("  \(candidate.confidence)\t\(candidate.kind.rawValue)\t\(candidate.sizeText)\t\(candidate.displayPath)\(admin)")
+                }
+            } catch { print("error: \(error.localizedDescription)") }
+            return
+        }
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate
@@ -137,6 +156,11 @@ import MacBCore
             notch.openPanel()
         } else if CommandLine.arguments.contains("--preview-home") {
             notch.showDevelopmentPreview(phase: .expanded, content: .home)
+        } else if let index = CommandLine.arguments.firstIndex(of: "--preview-uninstall"),
+                  CommandLine.arguments.count > index + 1 {
+            UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
+            utilities.inspectApplication(at: URL(fileURLWithPath: CommandLine.arguments[index + 1]))
+            showSettings()
         } else if CommandLine.arguments.contains("--preview-library") {
             widgetLayout.isEditing = true
             notch.showDevelopmentPreview(phase: .expanded, content: .home)

@@ -56,6 +56,7 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             sidebar
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: MacBDesign.contentSpacing) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -86,6 +87,13 @@ struct SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .defaultScrollAnchor(.top)
+            .onChange(of: utilities.removalCandidates.count) { _, count in
+                // A scan fills a list that usually starts below the fold, so the
+                // page moves to it rather than leaving the window looking unchanged.
+                guard count > 0 else { return }
+                withAnimation { proxy.scrollTo(Self.removalAnchor, anchor: .top) }
+            }
+            }
         }
         .frame(minWidth: 600, minHeight: 500)
         .background(MacBDesign.surface)
@@ -94,7 +102,7 @@ struct SettingsView: View {
             Button("Vazgeç", role: .cancel) {}
             Button("Çöp Sepeti’ne Taşı", role: .destructive, action: utilities.removeInspectedApplication)
         } message: {
-            Text("\(utilities.selectedApplicationName) ile ilişkili \(utilities.selectedRemovalCandidates.count) öğe taşınacak. Kaynakları silmeden önce listeden seçimini kontrol et.")
+            Text("\(utilities.selectedApplicationName) için seçtiğin \(utilities.selectedRemovalCandidates.count) öğe Çöp Sepeti'ne taşınacak. Silinmez, istediğin an geri koyabilirsin.")
         }
     }
 
@@ -195,8 +203,10 @@ struct SettingsView: View {
                 }
             }
             section("Uygulama kaldırma") {
-                Text("Uygulamayı ve ilişkili kullanıcı kalıntılarını önce gösterir, sonra Çöp Sepeti’ne taşır.")
+                Color.clear.frame(height: 0).id(Self.removalAnchor)
+                Text("Uygulamayı, yardımcılarını ve kullanıcı kalıntılarını arar. Hiçbir şey silinmez, hepsi Çöp Sepeti'ne taşınır.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                 Button("Uygulama seç…") {
                     Task {
                         if faceUnlock.settings.guards(.uninstaller) && !faceUnlock.isUnlocked(.uninstaller) {
@@ -206,18 +216,17 @@ struct SettingsView: View {
                     }
                 }
                 if !utilities.removalCandidates.isEmpty {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text("\(utilities.selectedApplicationName) · \(utilities.removalCandidates.count) öğe · \(ByteCountFormatter.string(fromByteCount: utilities.removalSize, countStyle: .file))")
-                            .font(.system(size: 12, weight: .medium))
-                        ForEach(utilities.removalCandidates) { candidate in
-                            Toggle(isOn: Binding(get: { utilities.isSelected(candidate) }, set: { _ in utilities.toggleRemoval(candidate) })) {
-                                Text(candidate.url.path).font(.system(size: 10, design: .monospaced)).foregroundStyle(MacBDesign.muted)
-                                    .lineLimit(2).help(candidate.url.path)
-                            }.toggleStyle(.checkbox)
+                    VStack(alignment: .leading, spacing: 12) {
+                        removalHeader
+                        if utilities.inspectedIsRunning { removalRunningNotice }
+                        ForEach(utilities.removalGroups, id: \.confidence) { group in
+                            removalGroup(group.confidence, group.candidates)
                         }
                         Button("Seçilenleri Çöp Sepeti’ne taşı", role: .destructive) { showRemovalConfirmation = true }
                             .disabled(utilities.selectedRemovalCandidates.isEmpty)
-                    }.padding(12).background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
+                    }
+                    .padding(12)
+                    .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
             section("MacWhisper") {
@@ -503,6 +512,82 @@ struct SettingsView: View {
     }
 
     private var libraryGroups: [IslandWidgetGroup] { widgets.layout.groups }
+
+    private static let removalAnchor = "removal-review"
+
+    private var removalHeader: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(utilities.selectedApplicationName).font(.system(size: 13, weight: .semibold))
+            Text("\(utilities.removalCandidates.count) öğe bulundu · \(utilities.selectedRemovalCandidates.count) seçili · \(ByteCountFormatter.string(fromByteCount: utilities.removalSize, countStyle: .file))")
+                .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+        }
+    }
+
+    private var removalRunningNotice: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Text("Uygulama açık. Kapatılmadan kendi paketi taşınamaz.")
+                .font(.system(size: 11))
+            Spacer()
+            Button("Kapat", action: utilities.quitInspectedApplication)
+        }
+        .padding(9)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
+    }
+
+    @ViewBuilder
+    private func removalGroup(_ confidence: AppLeftoverConfidence,
+                              _ candidates: [AppRemovalCandidate]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text(confidence.title).font(.system(size: 12, weight: .semibold))
+                Text("\(candidates.count)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .background(Color.primary.opacity(0.08), in: Capsule())
+                Spacer()
+            }
+            Text(confidence.detail).font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+            ForEach(candidates) { candidate in removalRow(candidate) }
+        }
+    }
+
+    private func removalRow(_ candidate: AppRemovalCandidate) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Toggle(isOn: Binding(get: { utilities.isSelected(candidate) },
+                                 set: { _ in utilities.toggleRemoval(candidate) })) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text(candidate.kind.title).font(.system(size: 11, weight: .medium))
+                        Text(candidate.sizeText)
+                            .font(.system(size: 10)).foregroundStyle(MacBDesign.muted)
+                        if candidate.requiresAdministrator {
+                            Text("yönetici gerekir")
+                                .font(.system(size: 9, weight: .medium))
+                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .background(Color.orange.opacity(0.18), in: Capsule())
+                        }
+                    }
+                    Text(candidate.displayPath)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(MacBDesign.muted)
+                        .lineLimit(2)
+                        .help(candidate.url.path)
+                }
+            }
+            .toggleStyle(.checkbox)
+            .disabled(candidate.requiresAdministrator)
+            Spacer(minLength: 0)
+            Button {
+                NSWorkspace.shared.activateFileViewerSelecting([candidate.url])
+            } label: {
+                Image(systemName: "folder").font(.system(size: 10))
+            }
+            .buttonStyle(.borderless)
+            .help("Finder'da göster")
+            .accessibilityLabel("Finder'da göster")
+        }
+    }
 
     private func stepButton(_ symbol: String, label: String, enabled: Bool,
                             action: @escaping () -> Void) -> some View {
