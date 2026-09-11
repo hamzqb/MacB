@@ -118,6 +118,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var interfaceDensity: InterfaceDensity { didSet { defaults.set(interfaceDensity.rawValue, forKey: "interfaceDensity") } }
     @Published var islandAppearance: IslandAppearance { didSet { defaults.set(islandAppearance.rawValue, forKey: "islandAppearance") } }
     @Published var islandEventsEnabled: Bool { didSet { defaults.set(islandEventsEnabled, forKey: "islandEventsEnabled") } }
+    @Published var lidHingeEnabled: Bool { didSet { defaults.set(lidHingeEnabled, forKey: "lidHingeEnabled") } }
     @Published var hidesSystemVolumeHUD: Bool { didSet { defaults.set(hidesSystemVolumeHUD, forKey: "hidesSystemVolumeHUD") } }
     @Published var mediaWidgetStyle: MediaWidgetStyle { didSet { defaults.set(mediaWidgetStyle.rawValue, forKey: "mediaWidgetStyle") } }
     @Published var weatherWidgetStyle: WeatherWidgetStyle { didSet { defaults.set(weatherWidgetStyle.rawValue, forKey: "weatherWidgetStyle") } }
@@ -141,6 +142,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "interfaceDensity": InterfaceDensity.balanced.rawValue,
                                     "islandAppearance": IslandAppearance.pureBlack.rawValue,
                                     "islandEventsEnabled": true,
+                                    "lidHingeEnabled": true,
                                     "hidesSystemVolumeHUD": false,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
@@ -161,6 +163,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         interfaceDensity = InterfaceDensity(rawValue: defaults.string(forKey: "interfaceDensity") ?? "") ?? .balanced
         islandAppearance = IslandAppearance(rawValue: defaults.string(forKey: "islandAppearance") ?? "") ?? .pureBlack
         islandEventsEnabled = defaults.bool(forKey: "islandEventsEnabled")
+        lidHingeEnabled = defaults.bool(forKey: "lidHingeEnabled")
         hidesSystemVolumeHUD = defaults.bool(forKey: "hidesSystemVolumeHUD")
         let storedZone = defaults.string(forKey: "secondaryTimeZone") ?? "America/New_York"
         secondaryTimeZone = TimeZone(identifier: storedZone) == nil ? "America/New_York" : storedZone

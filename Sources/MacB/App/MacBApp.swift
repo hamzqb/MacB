@@ -68,6 +68,18 @@ import MacBCore
             }
             return
         }
+        if CommandLine.arguments.contains("--lid-angle") {
+            let sensor = LidAngleSensor()
+            print(sensor.diagnostic)
+            guard sensor.isAvailable else { return }
+            print("6 saniye boyunca okunuyor, kapağı yavaşça oynat:")
+            for _ in 0..<60 {
+                let reading = sensor.read().map { String(format: "%.0f°", $0) } ?? "—"
+                print("  \(reading)")
+                _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
+            }
+            return
+        }
         if CommandLine.arguments.contains("--top-processes") {
             let monitor = ProcessMonitorService()
             monitor.refresh()
@@ -149,6 +161,7 @@ private final class Flag: @unchecked Sendable {
     private let aiActivity = AIActivityService()
     private let systemMonitor = SystemMonitorService()
     private let processes = ProcessMonitorService()
+    private let lid = LidAngleService()
     private let keyboardCleaning = KeyboardCleaningService()
     private let utilities = UtilityCoordinator()
     private let islandTimer = TimerService()
@@ -169,7 +182,7 @@ private final class Flag: @unchecked Sendable {
                                             fileActivity: fileActivity, tasks: tasks, camera: camera,
                                             auth: biometricAuth, recentTargets: recentTargets,
                                             aiActivity: aiActivity, systemMonitor: systemMonitor,
-                                            processes: processes,
+                                            processes: processes, lid: lid,
                                             keyboardCleaning: keyboardCleaning,
                                             timer: islandTimer, widgets: widgetLayout, launcher: launcher,
                                             background: islandBackground, weather: weather,
@@ -231,6 +244,7 @@ private final class Flag: @unchecked Sendable {
         aiActivity.start()
         systemMonitor.start()
         processes.start()
+        lid.setEnabled(preferences.lidHingeEnabled)
         applyPreferences()
         updates.$state.removeDuplicates().sink { [weak self] state in
             self?.refreshUpdateMenu(for: state)
@@ -337,6 +351,7 @@ private final class Flag: @unchecked Sendable {
         if preferences.switcherEnabled { hotKey.register(preferences.shortcut) }
         else { hotKey.unregister(); switcher.dismiss() }
         windowLayout.setEnabled(preferences.windowManagementEnabled)
+        lid.setEnabled(preferences.lidHingeEnabled && preferences.notchEnabled)
         recentFiles.enabled = preferences.recentFilesEnabled
         clipboardShelf.enabled = preferences.clipboardShelfEnabled
         fileActivity.enabled = preferences.fileActivityEnabled
@@ -406,7 +421,7 @@ private final class Flag: @unchecked Sendable {
         settingsWindow?.contentView = NSHostingView(rootView: SettingsView(preferences: preferences, permissions: permissions,
             spotify: spotify, appleMusic: appleMusic, browserMedia: browserMedia, camera: camera, shelf: shelf, hotKey: hotKey,
             utilities: utilities, aiActivity: aiActivity, systemMonitor: systemMonitor,
-            processes: processes, keyboardCleaning: keyboardCleaning,
+            processes: processes, lid: lid, keyboardCleaning: keyboardCleaning,
             updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher,
             openPanel: { [weak self] in self?.openNotch() }))

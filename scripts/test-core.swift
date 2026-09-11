@@ -759,6 +759,47 @@ struct CoreTestRunner {
                 try expect(CacheSweepRules.group(forCacheName: "SomeThing", default: .logs) == .logs,
                            "An unknown folder ignored the caller's fallback")
             }),
+            ("LidFold: the fold only starts once the lid is past the open angle", {
+                try expect(LidFold.progress(forAngle: 180) == 0, "An open lid folded")
+                try expect(LidFold.progress(forAngle: LidFold.openAngle) == 0, "The boundary folded")
+                try expect(abs(LidFold.progress(forAngle: 46) - 0.5) < 0.02, "The midpoint was wrong")
+                try expect(LidFold.progress(forAngle: LidFold.foldedAngle) == 1, "A shut lid was not folded")
+                try expect(LidFold.progress(forAngle: 0) == 1, "A shut lid was not folded")
+                try expect(LidFold.isClosed(angle: 3) && !LidFold.isClosed(angle: 30), "Closed was misread")
+            }),
+            ("LidFold: an opening is reported once, and only after a real close", {
+                var tracker = LidFoldTracker()
+                for angle in [110.0, 104, 112, 100] {
+                    try expect(tracker.update(angle: angle) == .none, "Typing wobble counted as an event")
+                }
+                try expect(tracker.update(angle: 70) == .folding, "The fold was not reported")
+                try expect(tracker.update(angle: 40) == .none, "The fold was reported twice")
+                try expect(tracker.update(angle: 2) == .none, "Closing raised an event")
+                try expect(tracker.update(angle: 20) == .none, "A half open lid greeted")
+                try expect(tracker.update(angle: 95) == .opened, "The opening was missed")
+                try expect(tracker.update(angle: 100) == .none, "The same open lid greeted twice")
+                // A dip that never reaches closed must never greet on the way back.
+                var dipping = LidFoldTracker()
+                _ = dipping.update(angle: 120)
+                try expect(dipping.update(angle: 50) == .folding, "The dip did not fold")
+                try expect(dipping.update(angle: 120) == .none, "A dip greeted")
+                // A sensor that goes quiet forgets the angle but not the state.
+                var quiet = LidFoldTracker()
+                _ = quiet.update(angle: 3)
+                try expect(quiet.update(angle: nil) == .none, "A silent sensor raised an event")
+                try expect(quiet.progress == 0, "A silent sensor still folded the island")
+                try expect(quiet.update(angle: 100) == .opened, "The opening was lost with the reading")
+            }),
+            ("LidFold: the greeting fits the time of day", {
+                try expect(IslandEvent.greeting(forHour: 7) == "Günaydın", "Morning was wrong")
+                try expect(IslandEvent.greeting(forHour: 13) == "İyi günler", "Midday was wrong")
+                try expect(IslandEvent.greeting(forHour: 20) == "İyi akşamlar", "Evening was wrong")
+                try expect(IslandEvent.greeting(forHour: 2) == "İyi geceler", "Night was wrong")
+                let event = IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: 78)
+                try expect(event.kind == .welcome && event.detail == "09:14 · %78", "The greeting read wrong")
+                try expect(IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: nil).detail == "09:14",
+                           "A machine with no battery printed one")
+            }),
             ("ProcessRanking: a helper is credited to the application it belongs to", {
                 let helper = "/Applications/Google Chrome.app/Contents/Frameworks/Chrome Framework.framework/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)"
                 try expect(ProcessRanking.bundlePath(forExecutablePath: helper) == "/Applications/Google Chrome.app",

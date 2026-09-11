@@ -9,7 +9,7 @@ import Foundation
 /// an interruption but a confirmation.
 public struct IslandEvent: Equatable, Sendable {
     public enum Kind: String, Equatable, Sendable {
-        case volume, mute, brightness, nowPlaying, charging, unplugged, batteryLow
+        case volume, mute, brightness, nowPlaying, charging, unplugged, batteryLow, welcome
     }
 
     public let kind: Kind
@@ -39,6 +39,7 @@ public struct IslandEvent: Equatable, Sendable {
         case .nowPlaying: return 2.4
         case .charging, .unplugged: return 2.0
         case .batteryLow: return 3.0
+        case .welcome: return 2.8
         }
     }
 
@@ -55,6 +56,7 @@ public struct IslandEvent: Equatable, Sendable {
     public var priority: Int {
         switch kind {
         case .batteryLow: return 3
+        case .welcome: return 3
         case .volume, .mute, .brightness: return 2
         case .charging, .unplugged: return 1
         case .nowPlaying: return 0
@@ -106,6 +108,36 @@ public extension IslandEvent {
         IslandEvent(kind: .batteryLow, title: "Pil azaldı",
                     detail: "\(percent)%", progress: Double(percent) / 100,
                     symbol: "battery.25")
+    }
+
+    /// The moment the lid comes back up.
+    ///
+    /// Shown with the same machinery as a volume nudge, because that is exactly
+    /// what it is: a line that appears, is read, and leaves on its own.
+    static func welcome(hour: Int, time: String, batteryPercent: Int?) -> IslandEvent {
+        let detail = [time, batteryPercent.map { "%\($0)" }].compactMap { $0 }.joined(separator: " · ")
+        return IslandEvent(kind: .welcome, title: greeting(forHour: hour), detail: detail,
+                           progress: nil, symbol: symbolForGreeting(hour))
+    }
+
+    /// What to call the time of day. Turkish splits the evening and the night
+    /// where a clock does not, so the boundaries are named rather than computed.
+    static func greeting(forHour hour: Int) -> String {
+        switch hour {
+        case 5..<11: return "Günaydın"
+        case 11..<18: return "İyi günler"
+        case 18..<23: return "İyi akşamlar"
+        default: return "İyi geceler"
+        }
+    }
+
+    private static func symbolForGreeting(_ hour: Int) -> String {
+        switch hour {
+        case 5..<11: return "sunrise.fill"
+        case 11..<18: return "sun.max.fill"
+        case 18..<23: return "sunset.fill"
+        default: return "moon.stars.fill"
+        }
     }
 
     private static func symbolForVolume(_ level: Double) -> String {

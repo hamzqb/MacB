@@ -66,3 +66,20 @@ Current conditions come from [Open-Meteo](https://open-meteo.com), free for
 non-commercial use under CC BY 4.0. MacB sends only a place name the user typed
 and the coordinates that name resolves to. No account and no API key are used,
 and the request runs only while the weather widget is on screen.
+
+## Lid angle sensor
+
+Apple silicon MacBooks expose the hinge angle through an undocumented HID
+feature report. The matching criteria (vendor `0x05ac`, product `0x8104`, usage
+page `0x20`, usage `0x8a`) and the two-byte little-endian report layout come
+from [Lid Plane](https://github.com/jh3y/lid-plane) by Jhey Tompkins, which is
+MIT licensed. MacB's reader is its own code and the sensor is only ever read,
+never seized or written to; readings outside 0–180° are discarded rather than
+trusted, and machines without the sensor keep the feature switched off.
+
+MIT License, Copyright (c) 2026 Jhey. Permission is hereby granted, free of
+charge, to any person obtaining a copy of this software and associated
+documentation files to deal in the Software without restriction, subject to the
+copyright notice and this permission notice being included in all copies or
+substantial portions of the Software. The Software is provided "as is", without
+warranty of any kind.

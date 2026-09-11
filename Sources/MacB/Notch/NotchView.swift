@@ -17,6 +17,7 @@ struct NotchView: View {
     @ObservedObject var aiActivity: AIActivityService
     @ObservedObject var systemMonitor: SystemMonitorService
     @ObservedObject var processes: ProcessMonitorService
+    @ObservedObject var lid: LidAngleService
     @ObservedObject var keyboardCleaning: KeyboardCleaningService
     @ObservedObject var timer: TimerService
     @ObservedObject var widgets: IslandLayoutStore
@@ -55,6 +56,7 @@ struct NotchView: View {
         .overlay(islandShape.strokeBorder(surfaceStroke,
             lineWidth: presentation.layout.phase == .collapsed ? 0 : 0.5)
             .animation(.easeOut(duration: 0.5), value: media.tint))
+        .modifier(HingeFold(progress: lid.foldProgress))
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .onExitCommand(perform: close)
@@ -458,5 +460,33 @@ struct NotchView: View {
     private func playbackButton(_ icon: String, label: String, size: CGFloat, prominent: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: icon).font(.system(size: prominent ? 14 : 11, weight: .semibold)).foregroundStyle(prominent ? .black : .white.opacity(0.82)).frame(width: size, height: size).background(prominent ? .white : .white.opacity(0.07), in: Circle()) }
             .buttonStyle(.plain).accessibilityLabel(label).help(label)
+    }
+}
+
+/// The island folding with the lid.
+///
+/// The rotation is around the top edge, which is where the hinge is, so the
+/// island lies down into the bezel rather than shrinking in place. It is driven
+/// straight from the sensor, so it tracks the hand on the screen instead of
+/// playing a canned animation, and it is skipped entirely when the system asks
+/// for reduced motion.
+private struct HingeFold: ViewModifier {
+    let progress: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        if reduceMotion || progress <= 0.001 {
+            content
+        } else {
+            content
+                .rotation3DEffect(.degrees(-86 * progress), axis: (x: 1, y: 0, z: 0),
+                                  anchor: .top, perspective: 0.55)
+                .scaleEffect(x: 1 - 0.06 * progress, anchor: .top)
+                .opacity(1 - 0.88 * progress)
+                .blur(radius: 5 * progress)
+                // Short enough to feel attached to the hinge, long enough that a
+                // jittery reading does not look like a stutter.
+                .animation(.easeOut(duration: 0.09), value: progress)
+        }
     }
 }

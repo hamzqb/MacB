@@ -42,6 +42,7 @@ struct SettingsView: View {
     @ObservedObject var aiActivity: AIActivityService
     @ObservedObject var systemMonitor: SystemMonitorService
     @ObservedObject var processes: ProcessMonitorService
+    @ObservedObject var lid: LidAngleService
     @ObservedObject var keyboardCleaning: KeyboardCleaningService
     @ObservedObject var updates: UpdateService
     @ObservedObject var widgets: IslandLayoutStore
@@ -792,6 +793,18 @@ struct SettingsView: View {
                     if let error = background.errorMessage {
                         Text(error).font(.system(size: 11)).foregroundStyle(.orange)
                     }
+                }
+            }
+            section("Menteşe", "laptopcomputer") {
+                settingToggle("Kapakla katlanma",
+                              detail: "Kapağı kapatırken island menteşeyle birlikte yatar, açtığında karşılama satırıyla geri açılır.",
+                              isOn: $preferences.lidHingeEnabled)
+                Text(lid.isAvailable
+                     ? "\(lid.diagnostic)\(lid.angle.map { String(format: "  ·  şu an %.0f°", $0) } ?? "")"
+                     : lid.diagnostic)
+                    .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                if !lid.isAvailable {
+                    message("Menteşe açısı sensörü yalnızca Apple silikon MacBook'larda bulunur ve her modelde okunamaz.")
                 }
             }
             section("Panel davranışı", "hand.point.up.left") {

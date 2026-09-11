@@ -48,6 +48,7 @@ struct IslandToast: Equatable {
     private let aiActivity: AIActivityService
     private let systemMonitor: SystemMonitorService
     private let processes: ProcessMonitorService
+    private let lid: LidAngleService
     private let keyboardCleaning: KeyboardCleaningService
     private let timer: TimerService
     private let widgets: IslandLayoutStore
@@ -85,7 +86,7 @@ struct IslandToast: Equatable {
          camera: CameraPreviewService, auth: BiometricAuthService,
          recentTargets: RecentTargetStore, aiActivity: AIActivityService,
          systemMonitor: SystemMonitorService, processes: ProcessMonitorService,
-         keyboardCleaning: KeyboardCleaningService,
+         lid: LidAngleService, keyboardCleaning: KeyboardCleaningService,
          timer: TimerService, widgets: IslandLayoutStore, launcher: AppLauncherStore,
          background: IslandBackgroundStore, weather: WeatherService, note: QuickNoteStore,
          faceUnlock: FaceUnlockService,
@@ -97,7 +98,7 @@ struct IslandToast: Equatable {
         self.tasks = tasks; self.camera = camera; self.auth = auth
         self.recentTargets = recentTargets; self.openSettings = openSettings
         self.aiActivity = aiActivity; self.systemMonitor = systemMonitor
-        self.processes = processes; self.keyboardCleaning = keyboardCleaning
+        self.processes = processes; self.lid = lid; self.keyboardCleaning = keyboardCleaning
         self.timer = timer; self.widgets = widgets; self.launcher = launcher; self.background = background; self.weather = weather; self.note = note
         self.faceUnlock = faceUnlock
         self.systemEvents = systemEvents
@@ -116,7 +117,7 @@ struct IslandToast: Equatable {
             preferences: preferences, recentFiles: recentFiles, clipboard: clipboard,
             fileActivity: fileActivity, tasks: tasks, camera: camera, auth: auth,
             recentTargets: recentTargets, aiActivity: aiActivity, systemMonitor: systemMonitor,
-            processes: processes,
+            processes: processes, lid: lid,
             keyboardCleaning: keyboardCleaning, timer: timer, widgets: widgets, launcher: launcher, background: background, weather: weather, note: note,
             faceUnlock: faceUnlock,
             open: { [weak self] in self?.openPanel() }, close: { [weak self] in self?.closePanel() },
@@ -193,8 +194,30 @@ struct IslandToast: Equatable {
         media.$title.removeDuplicates().sink { [weak self] title in
             DispatchQueue.main.async { self?.trackChanged(to: title) }
         }.store(in: &subscriptions)
+        lid.didOpen.sink { [weak self] in
+            self?.greetAfterLidOpen()
+        }.store(in: &subscriptions)
+        // The fold is a continuous transform on the island, so the view has to
+        // be redrawn as the hinge turns rather than only when a phase changes.
+        lid.$foldProgress.removeDuplicates().sink { [weak self] _ in
+            self?.render()
+        }.store(in: &subscriptions)
         systemEvents.start()
         applyHUDSuppression()
+    }
+
+    /// The lid has come back up. One line, read in the time it takes to sit down.
+    private func greetAfterLidOpen() {
+        guard preferences.lidHingeEnabled, preferences.islandEventsEnabled else { return }
+        guard state.phase != .expanded, !incomingDragActive, !developmentPreviewLocked else { return }
+        let now = Date()
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "tr_TR")
+        formatter.dateFormat = "HH:mm"
+        let battery = systemMonitor.snapshot.batteryPercent.map { Int($0.rounded()) }
+        systemEvents.present(.welcome(hour: Calendar.current.component(.hour, from: now),
+                                      time: formatter.string(from: now),
+                                      batteryPercent: battery))
     }
 
     /// macOS only stops drawing its panel while MacB is actually replacing it.
