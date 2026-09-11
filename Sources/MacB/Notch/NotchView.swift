@@ -53,7 +53,8 @@ struct NotchView: View {
         .frame(width: presentation.width, height: presentation.height, alignment: .top)
         .clipShape(islandShape)
         .overlay(islandShape.strokeBorder(surfaceStroke,
-            lineWidth: presentation.layout.phase == .collapsed ? 0 : 0.5))
+            lineWidth: presentation.layout.phase == .collapsed ? 0 : 0.5)
+            .animation(.easeOut(duration: 0.5), value: media.tint))
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .onExitCommand(perform: close)
@@ -67,12 +68,9 @@ struct NotchView: View {
             case .pureBlack:
                 Color.black
             case .liquidGlass:
-                Rectangle().fill(.ultraThinMaterial)
-                glassSheen
+                liquidGlass(tint: nil)
             case .blackGlass:
-                Rectangle().fill(.ultraThinMaterial)
-                Color.black.opacity(0.62)
-                glassSheen
+                liquidGlass(tint: .black.opacity(0.55))
             case .customImage:
                 if let image = background.image {
                     Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
@@ -86,6 +84,22 @@ struct NotchView: View {
         }
     }
 
+    /// The real thing where macOS has it, and an honest imitation where it does not.
+    ///
+    /// macOS 26 renders glass itself: it bends what is behind the panel at the
+    /// edges and lights the rim from wherever the desktop is bright. Nothing
+    /// hand-drawn gets close, so on older systems this stays a blurred material
+    /// with a lit edge rather than pretending to refract.
+    @ViewBuilder private func liquidGlass(tint: Color?) -> some View {
+        if #available(macOS 26.0, *) {
+            Color.clear.glassEffect(tint.map { Glass.regular.tint($0) } ?? .regular, in: islandShape)
+        } else {
+            Rectangle().fill(.ultraThinMaterial)
+            if let tint { tint }
+            glassSheen
+        }
+    }
+
     private var glassSheen: some View {
         LinearGradient(colors: [MacBDesign.Island.glassHighlight, .clear, .black.opacity(0.28)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -93,6 +107,9 @@ struct NotchView: View {
 
     private var surfaceStroke: Color {
         if presentation.layout.phase == .collapsed { return .clear }
+        // While music is playing the rim borrows the cover's colour, which is
+        // the quietest way for the whole panel to know what is on.
+        if media.isPlaying, let tint = media.tint { return tint.opacity(0.38) }
         return preferences.islandAppearance == .pureBlack
             ? .white.opacity(0.04)
             : MacBDesign.Island.glassStroke
@@ -194,7 +211,11 @@ struct NotchView: View {
                     Spacer(minLength: 0)
                     ForEach(collapsedIndicators, id: \.label) { indicator in
                         HStack(spacing: 4) {
-                            Image(systemName: indicator.symbol).font(.system(size: 10, weight: .semibold))
+                            if indicator.isPlayingMedia {
+                                EqualizerBars(tint: indicator.tint, isPlaying: media.isPlaying, height: 10)
+                            } else {
+                                Image(systemName: indicator.symbol).font(.system(size: 10, weight: .semibold))
+                            }
                             Text(indicator.value).font(.system(size: 10, weight: .medium)).monospacedDigit()
                         }
                         .foregroundStyle(indicator.tint)
@@ -248,7 +269,7 @@ struct NotchView: View {
         }
         if media.isPlaying, media.duration > 0 {
             return CollapsedStatus(fraction: media.position / media.duration,
-                                   tint: MacBDesign.IslandToken.primaryText.opacity(0.8))
+                                   tint: media.tint ?? MacBDesign.IslandToken.primaryText.opacity(0.8))
         }
         return nil
     }
@@ -258,14 +279,17 @@ struct NotchView: View {
         let value: String
         let label: String
         let tint: Color
+        /// Drawn as moving bars rather than a static glyph.
+        var isPlayingMedia = false
     }
 
     private var collapsedIndicators: [CollapsedIndicator] {
         guard presentation.indicators else { return [] }
         var result: [CollapsedIndicator] = []
         if media.isPlaying {
-            result.append(CollapsedIndicator(symbol: "waveform", value: mediaTitle,
-                                             label: "Çalıyor", tint: MacBDesign.IslandToken.primaryText))
+            result.append(CollapsedIndicator(symbol: "waveform", value: mediaTitle, label: "Çalıyor",
+                                             tint: media.tint ?? MacBDesign.IslandToken.primaryText,
+                                             isPlayingMedia: true))
         }
         if timer.isActive {
             result.append(CollapsedIndicator(symbol: "timer", value: timer.remainingText,

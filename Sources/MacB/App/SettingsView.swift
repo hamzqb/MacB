@@ -121,7 +121,7 @@ struct SettingsView: View {
 
     private var windowsPage: some View {
         VStack(alignment: .leading, spacing: 22) {
-            section("Pencere yönetimi") {
+            section("Pencere yönetimi", "macwindow") {
                 settingToggle("Pencere kısayolları", detail: "Etkin pencereyi ekranın yarısına, köşesine veya başka ekrana taşı.",
                               isOn: $preferences.windowManagementEnabled)
                 if preferences.windowManagementEnabled {
@@ -129,7 +129,7 @@ struct SettingsView: View {
                 }
             }
             if preferences.windowManagementEnabled {
-                    section("Temel yerleşimler") {
+                    section("Temel yerleşimler", "rectangle.split.2x1") {
                     shortcutRow("Sol yarı", symbol: "rectangle.lefthalf.filled", keys: "⌃⌥←")
                     rowDivider
                     shortcutRow("Sağ yarı", symbol: "rectangle.righthalf.filled", keys: "⌃⌥→")
@@ -142,7 +142,7 @@ struct SettingsView: View {
                     rowDivider
                     shortcutRow("Ortala", symbol: "rectangle.center.inset.filled", keys: "⌃⌥C")
                 }
-                    section("Köşeler ve ekranlar") {
+                    section("Köşeler ve ekranlar", "rectangle.split.2x2") {
                     shortcutRow("Sol üst / Sağ üst", symbol: "rectangle.split.2x1", keys: "⌃⌥U  /  ⌃⌥I")
                     rowDivider
                     shortcutRow("Sol alt / Sağ alt", symbol: "rectangle.split.2x1", keys: "⌃⌥J  /  ⌃⌥K")
@@ -157,7 +157,7 @@ struct SettingsView: View {
 
     private var toolsPage: some View {
         VStack(alignment: .leading, spacing: 22) {
-            section("Claude ve Codex") {
+            section("Claude ve Codex", "sparkles") {
                 if aiActivity.statuses.isEmpty {
                     message("Açık masaüstü veya terminal oturumu bulunmadı.")
                 } else {
@@ -178,7 +178,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            section("Sistem") {
+            section("Sistem", "gauge.with.dots.needle.67percent") {
                 HStack(spacing: 10) {
                     systemMetric("CPU", "\(Int(systemMonitor.snapshot.cpuUsage))%",
                                  fraction: systemMonitor.snapshot.cpuUsage / 100)
@@ -192,7 +192,7 @@ struct SettingsView: View {
                 Label(thermalText, systemImage: "thermometer.medium")
                     .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
             }
-            section("Klavye temizleme") {
+            section("Klavye temizleme", "keyboard") {
                 Text("Klavye girişini geçici olarak durdurur. Fare çalışır; üç kez Esc acil çıkıştır.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
                 HStack(spacing: 9) {
@@ -207,7 +207,7 @@ struct SettingsView: View {
                 }
                 if let error = keyboardCleaning.errorMessage { message(error, warning: true) }
             }
-            section("Arşiv") {
+            section("Arşiv", "doc.zipper") {
                 Text("Dosyaları MacB içinde ZIP olarak sıkıştır veya güvenli biçimde çıkar.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
                 HStack(spacing: 9) {
@@ -215,7 +215,7 @@ struct SettingsView: View {
                     Button("ZIP çıkar…", action: utilities.extractArchive)
                 }
             }
-            section("Uygulama kaldırma") {
+            section("Uygulama kaldırma", "trash") {
                 Color.clear.frame(height: 0).id(Self.removalAnchor)
                 Text("Uygulamayı, yardımcılarını ve kullanıcı kalıntılarını arar. Hiçbir şey silinmez, hepsi Çöp Sepeti'ne taşınır.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
@@ -242,7 +242,7 @@ struct SettingsView: View {
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
-            section("Kaynak kullanımı") {
+            section("Kaynak kullanımı", "chart.bar.xaxis") {
                 Text("Belleği ve işlemciyi en çok kim kullanıyor. Yardımcı süreçler kendi uygulamalarının altında toplanır.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -265,7 +265,7 @@ struct SettingsView: View {
                         .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
                 }
             }
-            section("Önbellek temizliği") {
+            section("Önbellek temizliği", "sparkles.rectangle.stack") {
                 Color.clear.frame(height: 0).id(Self.cacheAnchor)
                 Text("Uygulamaların yeniden oluşturabildiği geçici klasörleri arar. Belgeler, ayarlar ve uygulama verileri hiç taranmaz.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
@@ -284,7 +284,7 @@ struct SettingsView: View {
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
-            section("MacWhisper") {
+            section("MacWhisper", "waveform") {
                 Text(utilities.macWhisperInstalled ? "Ses veya video dosyasını MacWhisper’a gönder." : "MacWhisper kurulu değil.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
                 Button("Dosya gönder…", action: utilities.sendAudioToMacWhisper).disabled(!utilities.macWhisperInstalled)
@@ -346,7 +346,7 @@ struct SettingsView: View {
 
     private var generalPage: some View {
         VStack(alignment: .leading, spacing: 22) {
-            section("Çalışma alanı") {
+            section("Çalışma alanı", "square.stack.3d.up") {
                 settingToggle("Dock önizlemeleri", detail: "Bir simgenin üzerinde bekle, istediğin pencereye geç.", isOn: $preferences.dockEnabled)
                 rowDivider
                 settingToggle("Notch paneli", detail: "Medya, dosya, pano ve işlerini ekranın üst kenarından aç.", isOn: $preferences.notchEnabled)
@@ -366,7 +366,7 @@ struct SettingsView: View {
                 }
                 if let shortcutError = hotKey.registrationError { message(shortcutError, warning: true) }
             }
-            section("Akıllı akış") {
+            section("Akıllı akış", "wand.and.stars") {
                 settingToggle("Akıllı Notch", detail: "Panel açılırken müzik, raf ve indirme durumuna göre doğru bölümü öne çıkar.", isOn: $preferences.smartNotchEnabled)
                 rowDivider
                 settingToggle("Favori pencereler", detail: "Yıldızladığın pencereleri Dock ve pencere seçicide üstte tut.", isOn: $preferences.favoriteWindowsEnabled)
@@ -375,7 +375,7 @@ struct SettingsView: View {
                 rowDivider
                 settingToggle("Odak modu", detail: "Seçtiğin pencere öne gelirken diğer uygulamaları gizle.", isOn: $preferences.focusModeEnabled)
             }
-            section("Dosya rafı") {
+            section("Dosya rafı", "tray.full") {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(shelf.items.isEmpty ? "Dosyaların için küçük bir yer." : "\(shelf.items.count) öğe elinin altında.")
                         .font(.system(size: 13, weight: .medium))
@@ -393,7 +393,7 @@ struct SettingsView: View {
                 }
                 if let error = shelf.errorMessage { message(error, warning: true) }
             }
-            section("Güncellemeler") {
+            section("Güncellemeler", "arrow.triangle.2.circlepath") {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(updateTitle).font(.system(size: 13, weight: .medium))
@@ -430,7 +430,7 @@ struct SettingsView: View {
 
     private var widgetsPage: some View {
         VStack(alignment: .leading, spacing: 22) {
-            section("Şeritte (\(widgets.layout.enabledWidgets.count))") {
+            section("Şeritte (\(widgets.layout.enabledWidgets.count))", "rectangle.grid.1x2") {
                 if widgets.layout.enabledWidgets.isEmpty {
                     Text("Şerit boş. Aşağıdaki kütüphaneden widget ekle.")
                         .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
@@ -443,7 +443,7 @@ struct SettingsView: View {
                 }
             }
             ForEach(libraryGroups) { group in
-                section("\(group.category.title) kütüphanesi") {
+                section("\(group.category.title) kütüphanesi", group.category.symbol) {
                     ForEach(Array(group.widgets.enumerated()), id: \.element.id) { index, widget in
                         if index > 0 { rowDivider }
                         libraryWidgetRow(widget)
@@ -451,7 +451,7 @@ struct SettingsView: View {
                 }
             }
             if widgets.isActive(.worldClock) {
-                section("Dünya saati") {
+                section("Dünya saati", "globe") {
                     Picker("Şehir", selection: $preferences.secondaryTimeZone) {
                         ForEach(WorldClockWidget.choices, id: \.identifier) { choice in
                             Text(choice.name).tag(choice.identifier)
@@ -463,7 +463,7 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            section("Hava durumu") {
+            section("Hava durumu", "cloud.sun") {
                 Picker("Kart stili", selection: $preferences.weatherWidgetStyle) {
                     ForEach(WeatherWidgetStyle.allCases) { Text($0.title).tag($0) }
                 }
@@ -487,7 +487,7 @@ struct SettingsView: View {
                     Text(error).font(.system(size: 11)).foregroundStyle(.orange)
                 }
             }
-            section("Medya görünümü") {
+            section("Medya görünümü", "music.note") {
                 Picker("Kart stili", selection: $preferences.mediaWidgetStyle) {
                     ForEach(MediaWidgetStyle.allCases) { Text($0.title).tag($0) }
                 }
@@ -762,7 +762,7 @@ struct SettingsView: View {
 
     private var appearancePage: some View {
         VStack(alignment: .leading, spacing: 22) {
-            section("Anlık bildirimler") {
+            section("Anlık bildirimler", "bell.badge") {
                 settingToggle("Sistem değişikliklerini göster",
                               detail: "Sesi değiştirince, şarkı geçince ya da şarj takılınca island kısa süre açılıp gösterir.",
                               isOn: $preferences.islandEventsEnabled)
@@ -772,7 +772,7 @@ struct SettingsView: View {
                               isOn: $preferences.hidesSystemVolumeHUD)
                     .disabled(!preferences.islandEventsEnabled)
             }
-            section("Island yüzeyi") {
+            section("Island yüzeyi", "rectangle.topthird.inset.filled") {
                 Picker("Island yüzeyi", selection: $preferences.islandAppearance) {
                     ForEach(IslandAppearance.allCases) { Text($0.title).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("Island yüzeyi")
@@ -794,14 +794,14 @@ struct SettingsView: View {
                     }
                 }
             }
-            section("Panel davranışı") {
+            section("Panel davranışı", "hand.point.up.left") {
                 settingToggle("Küçük göstergeler", detail: "Panel kapalıyken oynatma durumunu ve raftaki öğe sayısını göster.", isOn: $preferences.compactIndicators)
                 rowDivider
                 settingToggle("Yumuşak geçişler", detail: "Paneller açılırken ve kapanırken kısa animasyonlar kullan.", isOn: $preferences.animationsEnabled)
                 rowDivider
                 settingToggle("Pencere peek modu", detail: "Kartta bekleyince pencerenin ekrandaki yerini hafifçe vurgula.", isOn: $preferences.peekEnabled)
             }
-            section("Hızlı erişim") {
+            section("Hızlı erişim", "square.grid.2x2") {
                 Text("Island'daki Uygulamalar bölümünde yalnızca buraya eklediklerin görünür. MacB kurulu uygulamaları taramaz.")
                     .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -813,17 +813,17 @@ struct SettingsView: View {
                         .foregroundStyle(MacBDesign.muted)
                 }
             }
-            section("Raf yardımcıları") {
+            section("Raf yardımcıları", "tray") {
                 settingToggle("Son dosyalar", detail: "Downloads, Desktop ve Documents içinden son dosyaları öner. macOS klasör erişimi isteyebilir.", isOn: $preferences.recentFilesEnabled)
                 rowDivider
                 settingToggle("Mini pano rafı", detail: "Son kopyaladığın metinleri Pano görünümünde tut.", isOn: $preferences.clipboardShelfEnabled)
                 rowDivider
                 settingToggle("İndirme göstergesi", detail: "Downloads klasöründeki yeni dosyaları göster. macOS klasör erişimi isteyebilir.", isOn: $preferences.fileActivityEnabled)
             }
-            section("Gizlilik") {
+            section("Gizlilik", "lock.shield") {
                 settingToggle("Özel araçları kilitle", detail: "Pano ve kamera açılırken Touch ID, Apple Watch veya Mac parolanla doğrula.", isOn: $preferences.protectPrivateTools)
             }
-            section("Yoğunluk") {
+            section("Yoğunluk", "arrow.up.and.down.text.horizontal") {
                 Picker("Görünüm yoğunluğu", selection: $preferences.interfaceDensity) {
                     ForEach(InterfaceDensity.allCases) { Text($0.title).tag($0) }
                 }
@@ -959,16 +959,38 @@ struct SettingsView: View {
     ///
     /// The card is what separates one group from the next, so the page no longer
     /// needs a divider between every section and stops reading as one long list.
-    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(MacBDesign.muted)
-                .accessibilityAddTraits(.isHeader)
+    /// One titled card.
+    ///
+    /// The heading carries a glyph in a tinted tile, which is what turns a page
+    /// of stacked grey boxes into a list somebody can scan. The glyph is passed
+    /// in rather than looked up from the title, so a renamed section cannot
+    /// silently lose it.
+    private func section<Content: View>(_ title: String, _ symbol: String = "square.grid.2x2",
+                                        @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(MacBDesign.accent)
+                    .frame(width: 22, height: 22)
+                    .background(MacBDesign.accent.opacity(0.13),
+                                in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+            }
             VStack(alignment: .leading, spacing: 14, content: content)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(14)
+                .padding(16)
                 .background(MacBDesign.cardFill, in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
+                // A light fall from the top edge, the same idea as the island
+                // cards, so the two halves of MacB read as one product.
+                .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
+                    .fill(LinearGradient(colors: [.white.opacity(0.05), .clear],
+                                         startPoint: .top, endPoint: .center))
+                    .allowsHitTesting(false))
                 .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
                     .strokeBorder(MacBDesign.cardStroke))
         }

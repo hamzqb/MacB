@@ -24,6 +24,8 @@ struct IslandWidgetStrip: View {
     var notify: (String, String) -> Void
 
     @State private var dragging: UUID?
+    @State private var hasAppeared = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var columns: Int { IslandGeometry.columns(forWidth: width) }
     private var columnWidth: CGFloat { IslandGeometry.columnWidth(forWidth: width, columns: columns) }
@@ -31,6 +33,7 @@ struct IslandWidgetStrip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: IslandGeometry.gap) {
             grid
+                .environment(\.islandUsesGlass, preferences.islandAppearance != .pureBlack)
             if store.isEditing {
                 IslandWidgetLibrary(store: store)
                     .transition(.opacity)
@@ -40,15 +43,22 @@ struct IslandWidgetStrip: View {
 
     private var grid: some View {
         VStack(spacing: IslandGeometry.gap) {
-            ForEach(Array(store.rows(columns: columns).enumerated()), id: \.offset) { _, row in
+            ForEach(Array(store.rows(columns: columns).enumerated()), id: \.offset) { rowIndex, row in
                 HStack(spacing: IslandGeometry.gap) {
-                    ForEach(row.widgets) { widget in
+                    ForEach(Array(row.widgets.enumerated()), id: \.element.id) { columnIndex, widget in
                         widgetCard(widget)
+                            .modifier(EntranceEffect(isVisible: hasAppeared,
+                                                     index: rowIndex * max(1, columns) + columnIndex,
+                                                     isEnabled: !reduceMotion))
                     }
                     Spacer(minLength: 0)
                 }
             }
         }
+        // The panel is already sliding open when this appears, so the cards
+        // arrive just behind it rather than with it.
+        .onAppear { hasAppeared = true }
+        .onDisappear { hasAppeared = false }
     }
 
     /// One card in the strip.
@@ -223,8 +233,18 @@ private struct WidgetDropDelegate: DropDelegate {
 /// for a caption and a value on the same line. Widgets read this to drop the
 /// parts that would otherwise arrive as an ellipsis.
 private struct IslandWidgetSpanKey: EnvironmentKey { static let defaultValue = 2 }
+/// Whether the island surface under the cards is glass rather than black.
+///
+/// A card painted with a flat white wash reads as a grey box on glass. When the
+/// surface refracts, the cards have to as well or the strip looks pasted on.
+private struct IslandGlassKey: EnvironmentKey { static let defaultValue = false }
 
 extension EnvironmentValues {
+    var islandUsesGlass: Bool {
+        get { self[IslandGlassKey.self] }
+        set { self[IslandGlassKey.self] = newValue }
+    }
+
     var islandWidgetSpan: Int {
         get { self[IslandWidgetSpanKey.self] }
         set { self[IslandWidgetSpanKey.self] = newValue }
@@ -258,13 +278,26 @@ struct WidgetCard<Content: View>: View {
     var isActive = false
     @ViewBuilder var content: Content
     @Environment(\.islandWidgetSpan) private var span
+    @Environment(\.islandUsesGlass) private var usesGlass
 
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.horizontal, span <= 1 ? 9 : 12)
             .padding(.vertical, 10)
-            .background(isActive ? MacBDesign.IslandToken.widgetActiveFill : MacBDesign.IslandToken.widgetFill)
+            .background(cardSurface)
+    }
+
+    @ViewBuilder private var cardSurface: some View {
+        if usesGlass, #available(macOS 26.0, *) {
+            // Glass of its own, so the card lifts off the panel instead of
+            // sitting on it as a lighter rectangle.
+            Color.clear.glassEffect(
+                .regular.tint(.white.opacity(isActive ? 0.10 : 0.05)),
+                in: RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous))
+        } else {
+            isActive ? MacBDesign.IslandToken.widgetActiveFill : MacBDesign.IslandToken.widgetFill
+        }
     }
 }
 
@@ -283,6 +316,8 @@ struct MediaWidget: View {
     /// The browser exposes play and pause through the page, and nothing else:
     /// offering skip buttons that cannot work is worse than not offering them.
     private var hasSkip: Bool { media.source != .browser }
+    /// The cover's colour when there is one, the island's own accent when not.
+    private var tint: Color { media.tint ?? MacBDesign.IslandToken.accent }
 
     var body: some View {
         GeometryReader { proxy in
@@ -449,7 +484,8 @@ struct MediaWidget: View {
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
             .strokeBorder(.white.opacity(0.14), lineWidth: 0.5))
-        .shadow(color: .black.opacity(0.35), radius: 5, y: 2)
+        // The cover throws a little of its own colour onto the card behind it.
+        .shadow(color: (media.tint ?? .black).opacity(0.45), radius: 6, y: 2)
         .accessibilityHidden(true)
     }
 
@@ -501,9 +537,10 @@ struct MediaWidget: View {
                 .frame(width: diameter, height: diameter)
                 // The button sits on album art as often as on black, so it
                 // carries its own contrast rather than borrowing the card's.
-                .background(.black.opacity(0.38), in: Circle())
-                .background(.white.opacity(0.22), in: Circle())
-                .overlay(Circle().strokeBorder(.white.opacity(0.22), lineWidth: 0.5))
+                .background(.black.opacity(0.34), in: Circle())
+                .background(tint.opacity(media.isPlaying ? 0.55 : 0.30), in: Circle())
+                .overlay(Circle().strokeBorder(.white.opacity(0.24), lineWidth: 0.5))
+                .animation(.easeOut(duration: 0.45), value: media.tint)
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.plain)
@@ -526,9 +563,10 @@ struct MediaWidget: View {
             }
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.25))
-                    Capsule().fill(.white)
+                    Capsule().fill(.white.opacity(0.22))
+                    Capsule().fill(tint)
                         .frame(width: proxy.size.width * min(1, max(0, media.position / max(1, media.duration))))
+                        .animation(.easeOut(duration: 0.3), value: media.position)
                 }
             }
             .frame(height: 2)
@@ -1083,5 +1121,63 @@ struct Sparkline: View {
             path.closeSubpath()
         }
         return path
+    }
+}
+
+/// Four bars that move while something is playing.
+///
+/// Not a real spectrum: reading the audio would mean recording it, which the
+/// island has no business doing. These are four sine waves at different rates,
+/// which is what a level meter looks like from across a room.
+struct EqualizerBars: View {
+    var tint: Color = MacBDesign.IslandToken.primaryText
+    var isPlaying = true
+    var height: CGFloat = 11
+
+    private let rates: [Double] = [1.9, 2.7, 1.4, 2.2]
+    private let phases: [Double] = [0, 0.8, 1.9, 2.6]
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 24, paused: !isPlaying)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            HStack(alignment: .bottom, spacing: 1.5) {
+                ForEach(rates.indices, id: \.self) { index in
+                    Capsule()
+                        .fill(tint)
+                        .frame(width: 2, height: barHeight(index, time: time))
+                }
+            }
+            .frame(height: height, alignment: .bottom)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func barHeight(_ index: Int, time: Double) -> CGFloat {
+        guard isPlaying else { return height * 0.25 }
+        let wave = (sin(time * rates[index] * .pi + phases[index]) + 1) / 2
+        return height * (0.22 + 0.78 * wave)
+    }
+}
+
+/// Cards arriving one after another instead of all at once.
+///
+/// Thirty milliseconds apart is enough to read as a sequence and short enough
+/// that the last card is in place before anybody reaches for it. Turned off
+/// entirely when the system asks for reduced motion.
+private struct EntranceEffect: ViewModifier {
+    let isVisible: Bool
+    let index: Int
+    let isEnabled: Bool
+
+    func body(content: Content) -> some View {
+        guard isEnabled else { return AnyView(content) }
+        return AnyView(
+            content
+                .opacity(isVisible ? 1 : 0)
+                .scaleEffect(isVisible ? 1 : 0.94, anchor: .top)
+                .offset(y: isVisible ? 0 : 8)
+                .animation(.spring(response: 0.40, dampingFraction: 0.80)
+                    .delay(min(0.24, Double(index) * 0.03)), value: isVisible)
+        )
     }
 }

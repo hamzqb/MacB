@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import Combine
 
 enum MediaSource: String, Identifiable {
@@ -28,6 +29,9 @@ final class MediaService: ObservableObject {
     @Published private(set) var title = ""
     @Published private(set) var artist = ""
     @Published private(set) var artwork: NSImage?
+    /// One colour taken from the cover, or nil when the cover has none worth
+    /// using. Everything that follows the music is tinted with it.
+    @Published private(set) var tint: Color?
     @Published private(set) var isPlaying = false
     /// Playback position and length in seconds. Zero means the source does not report them.
     @Published private(set) var position: Double = 0
@@ -120,6 +124,7 @@ final class MediaService: ObservableObject {
     private func sync() {
         let next = bestSource()
         source = next
+        let previousArtwork = artwork
         switch next {
         case .none:
             title = ""
@@ -162,6 +167,15 @@ final class MediaService: ObservableObject {
             position = browser.position
             duration = browser.duration
         }
+        updateTint(previous: previousArtwork)
+    }
+
+    /// Reads the cover's colour once per cover, not once per poll: the services
+    /// hand back the same image object until the track changes.
+    private func updateTint(previous: NSImage?) {
+        guard artwork !== previous else { return }
+        guard let artwork else { tint = nil; return }
+        tint = ArtworkPalette.tint(for: artwork)
     }
 
     private func bestSource() -> MediaSource {
