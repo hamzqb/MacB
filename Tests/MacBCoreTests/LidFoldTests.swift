@@ -79,4 +79,30 @@ final class LidFoldTests: XCTestCase {
         XCTAssertEqual(event.detail, "09:14 · %78")
         XCTAssertEqual(IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: nil).detail, "09:14")
     }
+
+    // MARK: - Screen blur
+
+    func testTheScreenIsUntouchedUntilTheFoldStarts() {
+        XCTAssertEqual(LidScreenBlur.blurAlpha(progress: 0), 0)
+        XCTAssertEqual(LidScreenBlur.dimAlpha(progress: 0), 0)
+    }
+
+    func testTheScreenIsFullyBlurredBeforeTheLidFinishes() {
+        XCTAssertEqual(LidScreenBlur.blurAlpha(progress: 0.92), 1)
+        XCTAssertEqual(LidScreenBlur.blurAlpha(progress: 1), 1)
+        XCTAssertEqual(LidScreenBlur.dimAlpha(progress: 1), LidScreenBlur.maximumDim, accuracy: 0.0001)
+    }
+
+    func testTheBlurOnlyEverDeepensAndFrontLoadsWhatIsSeen() {
+        var previous = -1.0
+        for step in 0...100 {
+            let alpha = LidScreenBlur.blurAlpha(progress: Double(step) / 100)
+            XCTAssertGreaterThanOrEqual(alpha, previous)
+            previous = alpha
+        }
+        // Half the fold has to look like more than half the blur, or the screen
+        // appears untouched until the last moment and then snaps.
+        XCTAssertGreaterThan(LidScreenBlur.blurAlpha(progress: 0.5), 0.6)
+        XCTAssertGreaterThan(LidScreenBlur.blurAlpha(progress: 0.25), 0.4)
+    }
 }

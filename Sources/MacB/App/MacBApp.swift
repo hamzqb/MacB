@@ -80,6 +80,26 @@ import MacBCore
             }
             return
         }
+        // Drives the screen blur by hand so it can be photographed without a
+        // real lid: it runs the whole ramp once, then puts itself away.
+        if CommandLine.arguments.contains("--blur-probe") {
+            NSApplication.shared.setActivationPolicy(.accessory)
+            NSApplication.shared.finishLaunching()
+            let overlay = LidBlurOverlay()
+            let target = CommandLine.arguments.firstIndex(of: "--blur-probe")
+                .flatMap { CommandLine.arguments.indices.contains($0 + 1) ? Double(CommandLine.arguments[$0 + 1]) : nil } ?? 1
+            for step in 0...40 {
+                overlay.apply(progress: target * Double(step) / 40)
+                _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+            }
+            print("Blur \(target) seviyesinde, 4 saniye açık kalacak.")
+            let hold = Date().addingTimeInterval(4)
+            while Date() < hold, RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2)) {}
+            overlay.hide()
+            _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.3))
+            print("Kapatıldı.")
+            return
+        }
         if CommandLine.arguments.contains("--top-processes") {
             let monitor = ProcessMonitorService()
             monitor.refresh()

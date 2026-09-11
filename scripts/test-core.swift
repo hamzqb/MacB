@@ -786,6 +786,28 @@ struct CoreTestRunner {
                 try expect(abs(LidFold.progress(forAngle: 18, openAngle: 20) - 0.333) < 0.01,
                            "The lowest starting angle had no room to animate")
             }),
+            ("LidScreenBlur: the screen is untouched until the fold starts", {
+                try expect(LidScreenBlur.blurAlpha(progress: 0) == 0, "The blur started early")
+                try expect(LidScreenBlur.dimAlpha(progress: 0) == 0, "The screen was already dimmed")
+            }),
+            ("LidScreenBlur: the screen is fully blurred before the lid finishes", {
+                try expect(LidScreenBlur.blurAlpha(progress: 0.92) == 1, "The blur never reached full")
+                try expect(LidScreenBlur.blurAlpha(progress: 1) == 1, "The blur overshot")
+                try expect(abs(LidScreenBlur.dimAlpha(progress: 1) - LidScreenBlur.maximumDim) < 0.0001,
+                           "The dim missed its limit")
+            }),
+            ("LidScreenBlur: the blur only deepens, and front-loads what is seen", {
+                var previous = -1.0
+                for step in 0...100 {
+                    let alpha = LidScreenBlur.blurAlpha(progress: Double(step) / 100)
+                    try expect(alpha >= previous, "The blur went backwards")
+                    previous = alpha
+                }
+                try expect(LidScreenBlur.blurAlpha(progress: 0.5) > 0.6,
+                           "Half the fold did not look like half the blur")
+                try expect(LidScreenBlur.blurAlpha(progress: 0.25) > 0.4,
+                           "The blur was invisible for the first quarter")
+            }),
             ("LidFold: an opening is reported once, and only after a real close", {
                 var tracker = LidFoldTracker()
                 for angle in [110.0, 104, 112, 100] {

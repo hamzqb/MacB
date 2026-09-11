@@ -76,6 +76,7 @@ struct IslandToast: Equatable {
     private var display: NSScreen?
     private var toastTask: Task<Void, Never>?
     private var cameraWindow: NSWindow?
+    private let lidBlur = LidBlurOverlay()
     var enabled = true {
         didSet { if enabled { start() } else { stop() } }
     }
@@ -202,15 +203,38 @@ struct IslandToast: Equatable {
         }.store(in: &subscriptions)
         // The fold is a continuous transform on the island, so the view has to
         // be redrawn as the hinge turns rather than only when a phase changes.
-        lid.$foldProgress.removeDuplicates().sink { [weak self] _ in
-            self?.render()
+        lid.$foldProgress.removeDuplicates().sink { [weak self] progress in
+            self?.foldProgressChanged(progress)
+        }.store(in: &subscriptions)
+        // Switching either setting off has to clear the screen at once. Waiting
+        // for the next hinge reading would leave the desktop blurred behind a
+        // settings window that says the blur is off.
+        preferences.$lidScreenBlur.removeDuplicates().sink { [weak self] enabled in
+            if !enabled { self?.lidBlur.hide() }
+        }.store(in: &subscriptions)
+        preferences.$lidHingeEnabled.removeDuplicates().sink { [weak self] enabled in
+            if !enabled { self?.lidBlur.hide() }
         }.store(in: &subscriptions)
         systemEvents.start()
         applyHUDSuppression()
     }
 
+    /// The hinge moved. Redraw the island and take the screen blur with it.
+    ///
+    /// The blur is switched off rather than merely faded when the fold is at
+    /// zero, so a lid that is simply open never leaves windows lying about.
+    private func foldProgressChanged(_ progress: Double) {
+        render()
+        guard preferences.lidHingeEnabled, preferences.lidScreenBlur else {
+            if lidBlur.isVisible { lidBlur.hide() }
+            return
+        }
+        lidBlur.apply(progress: progress)
+    }
+
     /// The lid has come back up. One line, read in the time it takes to sit down.
     private func greetAfterLidOpen() {
+        lidBlur.hide()
         guard preferences.lidHingeEnabled, preferences.islandEventsEnabled else { return }
         guard state.phase != .expanded, !incomingDragActive, !developmentPreviewLocked else { return }
         let now = Date()
@@ -281,6 +305,7 @@ struct IslandToast: Equatable {
         presentation.cameraPreviewVisible = false
         camera.stop()
         cameraWindow?.orderOut(nil); cameraWindow = nil
+        lidBlur.hide()
     }
 
     func openPanel() {

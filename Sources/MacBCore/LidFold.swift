@@ -118,3 +118,40 @@ public struct LidFoldTracker: Equatable, Sendable {
         return .none
     }
 }
+
+/// How strongly the screen behind the island is blurred as the lid comes down.
+///
+/// One pane of system blur, brought in gradually. Stacking several was tried
+/// and thrown away: a single pane at full strength already hides everything, so
+/// the extra panes added nothing but tint and turned the screen black long
+/// before the lid was shut.
+///
+/// The pane reaches full strength slightly before the lid does, so the screen
+/// has settled rather than still being mid-change when it goes dark.
+public enum LidScreenBlur {
+    /// Where the blur finishes arriving, in fold progress.
+    private static let fullyBlurredAt: Double = 0.92
+    /// How dark the screen is allowed to get on top of the blur. Slight on
+    /// purpose: the blur already dims, and the lid finishes the job.
+    public static let maximumDim: Double = 0.25
+
+    /// Bends the pane's opacity so the blur *looks* even.
+    ///
+    /// The system pane does not grow a radius; it mixes a fully blurred copy of
+    /// the screen over the sharp one. Mixing is not what the eye measures: at
+    /// half opacity the sharp copy still carries the text and almost nothing
+    /// seems to have happened, and everything then vanishes in the last third.
+    /// Raising the opacity to a power under one front-loads it, which spreads
+    /// the part you can actually see across the whole travel of the lid.
+    private static let perceptualExponent: Double = 0.45
+
+    /// 0 with the lid open, 1 once the screen is completely blurred.
+    public static func blurAlpha(progress: Double) -> Double {
+        guard progress > 0 else { return 0 }
+        return pow(min(1, progress / fullyBlurredAt), perceptualExponent)
+    }
+
+    public static func dimAlpha(progress: Double) -> Double {
+        min(1, max(0, progress)) * maximumDim
+    }
+}

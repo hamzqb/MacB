@@ -124,6 +124,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var lidHingeAngle: Double {
         didSet { defaults.set(LidFold.clampOpenAngle(lidHingeAngle), forKey: "lidHingeAngle") }
     }
+    /// Whether the whole screen blurs with the fold, or only the island.
+    @Published var lidScreenBlur: Bool { didSet { defaults.set(lidScreenBlur, forKey: "lidScreenBlur") } }
     @Published var hidesSystemVolumeHUD: Bool { didSet { defaults.set(hidesSystemVolumeHUD, forKey: "hidesSystemVolumeHUD") } }
     @Published var mediaWidgetStyle: MediaWidgetStyle { didSet { defaults.set(mediaWidgetStyle.rawValue, forKey: "mediaWidgetStyle") } }
     @Published var weatherWidgetStyle: WeatherWidgetStyle { didSet { defaults.set(weatherWidgetStyle.rawValue, forKey: "weatherWidgetStyle") } }
@@ -149,6 +151,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "islandEventsEnabled": true,
                                     "lidHingeEnabled": true,
                                     "lidHingeAngle": LidFold.defaultOpenAngle,
+                                    "lidScreenBlur": true,
                                     "hidesSystemVolumeHUD": false,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
@@ -171,6 +174,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         islandEventsEnabled = defaults.bool(forKey: "islandEventsEnabled")
         lidHingeEnabled = defaults.bool(forKey: "lidHingeEnabled")
         lidHingeAngle = LidFold.clampOpenAngle(defaults.double(forKey: "lidHingeAngle"))
+        lidScreenBlur = defaults.bool(forKey: "lidScreenBlur")
         hidesSystemVolumeHUD = defaults.bool(forKey: "hidesSystemVolumeHUD")
         let storedZone = defaults.string(forKey: "secondaryTimeZone") ?? "America/New_York"
         secondaryTimeZone = TimeZone(identifier: storedZone) == nil ? "America/New_York" : storedZone

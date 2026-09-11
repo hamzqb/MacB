@@ -800,6 +800,9 @@ struct SettingsView: View {
                               detail: "Kapağı kapatırken island menteşeyle birlikte yatar, açtığında karşılama satırıyla geri açılır.",
                               isOn: $preferences.lidHingeEnabled)
                 if lid.isAvailable && preferences.lidHingeEnabled {
+                    settingToggle("Tüm ekran bulanıklaşsın",
+                                  detail: "Kapak inerken masaüstü de island ile birlikte bulanıklaşır. Ekran görüntüsü alınmaz, ekran kaydı izni istenmez. Harici ekran bağlıysa yalnızca MacBook ekranı bulanıklaşır.",
+                                  isOn: $preferences.lidScreenBlur)
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
                             Text("Katlanma açısı")
