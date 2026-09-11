@@ -9,7 +9,7 @@ import Foundation
 /// an interruption but a confirmation.
 public struct IslandEvent: Equatable, Sendable {
     public enum Kind: String, Equatable, Sendable {
-        case volume, mute, brightness, nowPlaying, charging, unplugged, batteryLow, welcome
+        case volume, mute, brightness, nowPlaying, charging, unplugged, batteryLow, welcome, lidClosing
     }
 
     public let kind: Kind
@@ -40,6 +40,9 @@ public struct IslandEvent: Equatable, Sendable {
         case .charging, .unplugged: return 2.0
         case .batteryLow: return 3.0
         case .welcome: return 2.8
+        // Long enough to survive a slow close: the island has to still be there
+        // to fold, and it leaves with the screen either way.
+        case .lidClosing: return 6.0
         }
     }
 
@@ -57,6 +60,7 @@ public struct IslandEvent: Equatable, Sendable {
         switch kind {
         case .batteryLow: return 3
         case .welcome: return 3
+        case .lidClosing: return 4
         case .volume, .mute, .brightness: return 2
         case .charging, .unplugged: return 1
         case .nowPlaying: return 0
@@ -118,6 +122,26 @@ public extension IslandEvent {
         let detail = [time, batteryPercent.map { "%\($0)" }].compactMap { $0 }.joined(separator: " · ")
         return IslandEvent(kind: .welcome, title: greeting(forHour: hour), detail: detail,
                            progress: nil, symbol: symbolForGreeting(hour))
+    }
+
+    /// The moment the lid starts going down.
+    ///
+    /// The island is normally invisible when closed, so there would be nothing
+    /// to fold. This is what gets put on screen to fold away.
+    static func farewell(hour: Int, batteryPercent: Int?) -> IslandEvent {
+        IslandEvent(kind: .lidClosing, title: farewellTitle(forHour: hour),
+                    detail: batteryPercent.map { "%\($0)" },
+                    progress: nil, symbol: "laptopcomputer.and.arrow.down")
+    }
+
+    /// Sending somebody off is not the same words as greeting them, and at three
+    /// in the afternoon "iyi geceler" would be wrong.
+    static func farewellTitle(forHour hour: Int) -> String {
+        switch hour {
+        case 5..<18: return "Görüşürüz"
+        case 18..<23: return "İyi akşamlar"
+        default: return "İyi geceler"
+        }
     }
 
     /// What to call the time of day. Turkish splits the evening and the night

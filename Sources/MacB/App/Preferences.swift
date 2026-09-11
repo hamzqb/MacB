@@ -1,4 +1,5 @@
 import AppKit
+import MacBCore
 import Carbon
 import Combine
 
@@ -119,6 +120,10 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var islandAppearance: IslandAppearance { didSet { defaults.set(islandAppearance.rawValue, forKey: "islandAppearance") } }
     @Published var islandEventsEnabled: Bool { didSet { defaults.set(islandEventsEnabled, forKey: "islandEventsEnabled") } }
     @Published var lidHingeEnabled: Bool { didSet { defaults.set(lidHingeEnabled, forKey: "lidHingeEnabled") } }
+    /// The hinge angle at which the fold starts, in degrees.
+    @Published var lidHingeAngle: Double {
+        didSet { defaults.set(LidFold.clampOpenAngle(lidHingeAngle), forKey: "lidHingeAngle") }
+    }
     @Published var hidesSystemVolumeHUD: Bool { didSet { defaults.set(hidesSystemVolumeHUD, forKey: "hidesSystemVolumeHUD") } }
     @Published var mediaWidgetStyle: MediaWidgetStyle { didSet { defaults.set(mediaWidgetStyle.rawValue, forKey: "mediaWidgetStyle") } }
     @Published var weatherWidgetStyle: WeatherWidgetStyle { didSet { defaults.set(weatherWidgetStyle.rawValue, forKey: "weatherWidgetStyle") } }
@@ -143,6 +148,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "islandAppearance": IslandAppearance.pureBlack.rawValue,
                                     "islandEventsEnabled": true,
                                     "lidHingeEnabled": true,
+                                    "lidHingeAngle": LidFold.defaultOpenAngle,
                                     "hidesSystemVolumeHUD": false,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
@@ -164,6 +170,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         islandAppearance = IslandAppearance(rawValue: defaults.string(forKey: "islandAppearance") ?? "") ?? .pureBlack
         islandEventsEnabled = defaults.bool(forKey: "islandEventsEnabled")
         lidHingeEnabled = defaults.bool(forKey: "lidHingeEnabled")
+        lidHingeAngle = LidFold.clampOpenAngle(defaults.double(forKey: "lidHingeAngle"))
         hidesSystemVolumeHUD = defaults.bool(forKey: "hidesSystemVolumeHUD")
         let storedZone = defaults.string(forKey: "secondaryTimeZone") ?? "America/New_York"
         secondaryTimeZone = TimeZone(identifier: storedZone) == nil ? "America/New_York" : storedZone

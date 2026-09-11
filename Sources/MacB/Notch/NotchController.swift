@@ -197,6 +197,9 @@ struct IslandToast: Equatable {
         lid.didOpen.sink { [weak self] in
             self?.greetAfterLidOpen()
         }.store(in: &subscriptions)
+        lid.willFold.sink { [weak self] in
+            self?.showFarewellBeforeLidCloses()
+        }.store(in: &subscriptions)
         // The fold is a continuous transform on the island, so the view has to
         // be redrawn as the hinge turns rather than only when a phase changes.
         lid.$foldProgress.removeDuplicates().sink { [weak self] _ in
@@ -218,6 +221,19 @@ struct IslandToast: Equatable {
         systemEvents.present(.welcome(hour: Calendar.current.component(.hour, from: now),
                                       time: formatter.string(from: now),
                                       batteryPercent: battery))
+    }
+
+    /// The lid is going down. Put something on screen for the hinge to fold.
+    ///
+    /// Without this the fold has nothing to work on: the island is collapsed to
+    /// nothing whenever it is idle, and rotating an empty rectangle is not an
+    /// animation. An open panel is left alone, because the user put it there.
+    private func showFarewellBeforeLidCloses() {
+        guard preferences.lidHingeEnabled, preferences.islandEventsEnabled else { return }
+        guard state.phase != .expanded, !incomingDragActive, !developmentPreviewLocked else { return }
+        let battery = systemMonitor.snapshot.batteryPercent.map { Int($0.rounded()) }
+        systemEvents.present(.farewell(hour: Calendar.current.component(.hour, from: Date()),
+                                       batteryPercent: battery))
     }
 
     /// macOS only stops drawing its panel while MacB is actually replacing it.

@@ -4,12 +4,34 @@ import XCTest
 final class LidFoldTests: XCTestCase {
     func testTheFoldOnlyStartsOnceTheLidIsPastTheOpenAngle() {
         XCTAssertEqual(LidFold.progress(forAngle: 180), 0)
-        XCTAssertEqual(LidFold.progress(forAngle: LidFold.openAngle), 0)
-        XCTAssertEqual(LidFold.progress(forAngle: 46), 0.5, accuracy: 0.02)
-        XCTAssertEqual(LidFold.progress(forAngle: LidFold.foldedAngle), 1)
+        XCTAssertEqual(LidFold.progress(forAngle: LidFold.defaultOpenAngle), 0)
+        XCTAssertEqual(LidFold.progress(forAngle: 37), 0.5, accuracy: 0.02)
+        XCTAssertEqual(LidFold.progress(forAngle: 14), 1)
         XCTAssertEqual(LidFold.progress(forAngle: 0), 1)
         XCTAssertTrue(LidFold.isClosed(angle: 3))
         XCTAssertFalse(LidFold.isClosed(angle: 30))
+    }
+
+    func testEveryDegreeOfHingeAddsTheSameAmountOfFold() {
+        // A straight line, so the picture tracks the hand turning the lid.
+        let step = LidFold.progress(forAngle: 50) - LidFold.progress(forAngle: 55)
+        for start in stride(from: 55.0, to: 20.0, by: -5) {
+            let delta = LidFold.progress(forAngle: start - 5) - LidFold.progress(forAngle: start)
+            XCTAssertEqual(delta, step, accuracy: 0.001)
+        }
+    }
+
+    func testAChosenAngleMovesTheWholeFoldWithIt() {
+        XCTAssertEqual(LidFold.progress(forAngle: 80, openAngle: 100), 0.233, accuracy: 0.01)
+        XCTAssertEqual(LidFold.progress(forAngle: 80, openAngle: 60), 0)
+        // Out of range choices are pulled back rather than producing nonsense.
+        XCTAssertEqual(LidFold.clampOpenAngle(0), LidFold.minimumOpenAngle)
+        XCTAssertEqual(LidFold.clampOpenAngle(500), LidFold.maximumOpenAngle)
+        XCTAssertEqual(LidFold.progress(forAngle: 30, openAngle: 5), 0)
+        // A low starting angle still has room to animate instead of snapping.
+        XCTAssertLessThan(LidFold.foldedAngle(openAngle: LidFold.minimumOpenAngle),
+                          LidFold.minimumOpenAngle)
+        XCTAssertEqual(LidFold.progress(forAngle: 18, openAngle: 20), 0.333, accuracy: 0.01)
     }
 
     func testAnOpeningIsReportedOnceAndOnlyAfterTheLidWasActuallyShut() {
@@ -18,7 +40,7 @@ final class LidFoldTests: XCTestCase {
         for angle in [110.0, 104, 112, 100] {
             XCTAssertEqual(tracker.update(angle: angle), .none)
         }
-        XCTAssertEqual(tracker.update(angle: 70), .folding)
+        XCTAssertEqual(tracker.update(angle: 55), .folding)
         // Still folding, so no second event.
         XCTAssertEqual(tracker.update(angle: 40), .none)
         XCTAssertEqual(tracker.update(angle: 2), .none)
@@ -27,15 +49,15 @@ final class LidFoldTests: XCTestCase {
         XCTAssertEqual(tracker.update(angle: 95), .opened)
         // The same open lid must not greet again.
         XCTAssertEqual(tracker.update(angle: 100), .none)
-        XCTAssertEqual(tracker.update(angle: 60), .folding)
+        XCTAssertEqual(tracker.update(angle: 55), .folding)
     }
 
     func testALidThatDipsWithoutClosingNeverGreets() {
         var tracker = LidFoldTracker()
         XCTAssertEqual(tracker.update(angle: 120), .none)
-        XCTAssertEqual(tracker.update(angle: 50), .folding)
+        XCTAssertEqual(tracker.update(angle: 40), .folding)
         XCTAssertEqual(tracker.update(angle: 120), .none)
-        XCTAssertEqual(tracker.update(angle: 50), .folding)
+        XCTAssertEqual(tracker.update(angle: 40), .folding)
     }
 
     func testASilentSensorFoldsNothingAndForgetsNothing() {

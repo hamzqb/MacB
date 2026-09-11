@@ -482,8 +482,11 @@ private struct HingeFold: ViewModifier {
                 .rotation3DEffect(.degrees(-86 * progress), axis: (x: 1, y: 0, z: 0),
                                   anchor: .top, perspective: 0.55)
                 .scaleEffect(x: 1 - 0.06 * progress, anchor: .top)
-                .opacity(1 - 0.88 * progress)
-                .blur(radius: 5 * progress)
+                // Straight-line, like the fold itself: one degree of hinge is
+                // one step of blur, all the way down. A curve here makes the
+                // picture lag the hand turning the lid.
+                .blur(radius: 16 * progress)
+                .opacity(1 - 0.85 * progress)
                 // Short enough to feel attached to the hinge, long enough that a
                 // jittery reading does not look like a stutter.
                 .animation(.easeOut(duration: 0.09), value: progress)

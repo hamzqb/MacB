@@ -761,18 +761,37 @@ struct CoreTestRunner {
             }),
             ("LidFold: the fold only starts once the lid is past the open angle", {
                 try expect(LidFold.progress(forAngle: 180) == 0, "An open lid folded")
-                try expect(LidFold.progress(forAngle: LidFold.openAngle) == 0, "The boundary folded")
-                try expect(abs(LidFold.progress(forAngle: 46) - 0.5) < 0.02, "The midpoint was wrong")
-                try expect(LidFold.progress(forAngle: LidFold.foldedAngle) == 1, "A shut lid was not folded")
+                try expect(LidFold.progress(forAngle: LidFold.defaultOpenAngle) == 0, "The boundary folded")
+                try expect(abs(LidFold.progress(forAngle: 37) - 0.5) < 0.02, "The midpoint was wrong")
+                try expect(LidFold.progress(forAngle: 14) == 1, "A shut lid was not folded")
                 try expect(LidFold.progress(forAngle: 0) == 1, "A shut lid was not folded")
                 try expect(LidFold.isClosed(angle: 3) && !LidFold.isClosed(angle: 30), "Closed was misread")
+            }),
+            ("LidFold: every degree of hinge adds the same amount of fold", {
+                let step = LidFold.progress(forAngle: 50) - LidFold.progress(forAngle: 55)
+                for start in stride(from: 55.0, to: 20.0, by: -5) {
+                    let delta = LidFold.progress(forAngle: start - 5) - LidFold.progress(forAngle: start)
+                    try expect(abs(delta - step) < 0.001, "The fold was not a straight line at \(start)°")
+                }
+            }),
+            ("LidFold: a chosen angle moves the whole fold with it", {
+                try expect(abs(LidFold.progress(forAngle: 80, openAngle: 100) - 0.233) < 0.01,
+                           "A higher starting angle did not move the fold")
+                try expect(LidFold.progress(forAngle: 80, openAngle: 60) == 0,
+                           "The default start folded too early")
+                try expect(LidFold.clampOpenAngle(0) == LidFold.minimumOpenAngle,
+                           "An impossible angle was accepted")
+                try expect(LidFold.clampOpenAngle(500) == LidFold.maximumOpenAngle,
+                           "An impossible angle was accepted")
+                try expect(abs(LidFold.progress(forAngle: 18, openAngle: 20) - 0.333) < 0.01,
+                           "The lowest starting angle had no room to animate")
             }),
             ("LidFold: an opening is reported once, and only after a real close", {
                 var tracker = LidFoldTracker()
                 for angle in [110.0, 104, 112, 100] {
                     try expect(tracker.update(angle: angle) == .none, "Typing wobble counted as an event")
                 }
-                try expect(tracker.update(angle: 70) == .folding, "The fold was not reported")
+                try expect(tracker.update(angle: 55) == .folding, "The fold was not reported")
                 try expect(tracker.update(angle: 40) == .none, "The fold was reported twice")
                 try expect(tracker.update(angle: 2) == .none, "Closing raised an event")
                 try expect(tracker.update(angle: 20) == .none, "A half open lid greeted")
@@ -781,7 +800,7 @@ struct CoreTestRunner {
                 // A dip that never reaches closed must never greet on the way back.
                 var dipping = LidFoldTracker()
                 _ = dipping.update(angle: 120)
-                try expect(dipping.update(angle: 50) == .folding, "The dip did not fold")
+                try expect(dipping.update(angle: 40) == .folding, "The dip did not fold")
                 try expect(dipping.update(angle: 120) == .none, "A dip greeted")
                 // A sensor that goes quiet forgets the angle but not the state.
                 var quiet = LidFoldTracker()

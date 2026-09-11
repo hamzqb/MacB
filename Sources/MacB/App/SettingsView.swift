@@ -799,6 +799,26 @@ struct SettingsView: View {
                 settingToggle("Kapakla katlanma",
                               detail: "Kapağı kapatırken island menteşeyle birlikte yatar, açtığında karşılama satırıyla geri açılır.",
                               isOn: $preferences.lidHingeEnabled)
+                if lid.isAvailable && preferences.lidHingeEnabled {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("Katlanma açısı")
+                                .font(.system(size: 12, weight: .medium))
+                            Spacer(minLength: 8)
+                            Text("\(Int(preferences.lidHingeAngle))°")
+                                .font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                                .foregroundStyle(MacBDesign.accent)
+                        }
+                        Slider(value: $preferences.lidHingeAngle,
+                               in: LidFold.minimumOpenAngle...LidFold.maximumOpenAngle, step: 5)
+                            .onChange(of: preferences.lidHingeAngle) { _, value in
+                                lid.setOpenAngle(value)
+                            }
+                        Text("Kapak bu açının altına inince katlanma ve bulanıklık başlar, her derecede eşit miktarda artar.")
+                            .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
                 Text(lid.isAvailable
                      ? "\(lid.diagnostic)\(lid.angle.map { String(format: "  ·  şu an %.0f°", $0) } ?? "")"
                      : lid.diagnostic)

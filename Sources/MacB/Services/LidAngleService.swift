@@ -13,6 +13,9 @@ import MacBCore
     @Published private(set) var angle: Double?
     /// Raised for a moment when the lid has just been opened from shut.
     let didOpen = PassthroughSubject<Void, Never>()
+    /// Raised once as the lid starts going down, so something can be put on
+    /// screen to fold. A closed island has nothing to animate.
+    let willFold = PassthroughSubject<Void, Never>()
 
     private let sensor = LidAngleSensor()
     private var tracker = LidFoldTracker()
@@ -29,6 +32,14 @@ import MacBCore
 
     var isAvailable: Bool { sensor.isAvailable }
     var diagnostic: String { sensor.diagnostic }
+
+    /// Where the fold starts. Changing it re-reads at once so the settings
+    /// slider moves the island while the user is dragging it.
+    func setOpenAngle(_ degrees: Double) {
+        guard LidFold.clampOpenAngle(degrees) != tracker.openAngle else { return }
+        tracker.setOpenAngle(degrees)
+        foldProgress = tracker.progress
+    }
 
     func setEnabled(_ enabled: Bool) {
         guard enabled != isEnabled else { return }
@@ -56,7 +67,11 @@ import MacBCore
         let event = tracker.update(angle: reading)
         angle = reading
         foldProgress = tracker.progress
-        if event == .opened { didOpen.send() }
+        switch event {
+        case .opened: didOpen.send()
+        case .folding: willFold.send()
+        case .none: break
+        }
 
         // A hinge that has not moved for a few readings does not need thirty
         // samples a second; one that just moved almost certainly will again.

@@ -244,6 +244,7 @@ private final class Flag: @unchecked Sendable {
         aiActivity.start()
         systemMonitor.start()
         processes.start()
+        lid.setOpenAngle(preferences.lidHingeAngle)
         lid.setEnabled(preferences.lidHingeEnabled)
         applyPreferences()
         updates.$state.removeDuplicates().sink { [weak self] state in
@@ -351,6 +352,7 @@ private final class Flag: @unchecked Sendable {
         if preferences.switcherEnabled { hotKey.register(preferences.shortcut) }
         else { hotKey.unregister(); switcher.dismiss() }
         windowLayout.setEnabled(preferences.windowManagementEnabled)
+        lid.setOpenAngle(preferences.lidHingeAngle)
         lid.setEnabled(preferences.lidHingeEnabled && preferences.notchEnabled)
         recentFiles.enabled = preferences.recentFilesEnabled
         clipboardShelf.enabled = preferences.clipboardShelfEnabled

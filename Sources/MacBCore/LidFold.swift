@@ -7,21 +7,48 @@ import Foundation
 /// is arithmetic on an angle: no hardware, no timers, so the thresholds that
 /// decide when the island folds are provable in the test runner.
 public enum LidFold {
-    /// Above this the lid is simply open and nothing happens.
-    public static let openAngle: Double = 80
-    /// At and below this the island is fully folded away.
-    public static let foldedAngle: Double = 12
+    /// Where the fold starts unless the user says otherwise.
+    ///
+    /// Late on purpose. Past sixty degrees the screen is already hard to read
+    /// from a normal seat, so this is the point where the lid is clearly being
+    /// shut rather than merely tilted, and the fold does not fire while someone
+    /// is adjusting the angle to cut a reflection.
+    public static let defaultOpenAngle: Double = 60
+    public static let minimumOpenAngle: Double = 20
+    public static let maximumOpenAngle: Double = 110
+
     /// A reading this low means the lid is shut and the screen is gone.
     public static let closedAngle: Double = 6
-    /// The lid has to pass this on the way up before an opening counts, so a
-    /// hand resting on the screen cannot trigger the greeting over and over.
-    public static let greetingAngle: Double = 45
+    /// Where the fold finishes when there is room for it.
+    ///
+    /// It has to complete before macOS cuts the display, or the last and most
+    /// dramatic frames are never seen by anybody.
+    private static let completionAngle: Double = 14
+    /// The narrowest the fold is ever allowed to be, so a low starting angle
+    /// still animates over something rather than snapping shut.
+    private static let minimumTravel: Double = 6
+
+    public static func clampOpenAngle(_ value: Double) -> Double {
+        min(maximumOpenAngle, max(minimumOpenAngle, value))
+    }
+
+    /// The angle at which the fold is complete, given where it starts.
+    public static func foldedAngle(openAngle: Double) -> Double {
+        min(completionAngle, clampOpenAngle(openAngle) - minimumTravel)
+    }
 
     /// 0 while the lid is open, 1 when it is folded away.
-    public static func progress(forAngle angle: Double) -> Double {
-        guard angle < openAngle else { return 0 }
-        guard angle > foldedAngle else { return 1 }
-        return (openAngle - angle) / (openAngle - foldedAngle)
+    ///
+    /// Straight-line in the angle, so every degree of hinge adds the same amount
+    /// of fold. An eased curve looks better in isolation and worse on a hinge:
+    /// the hand turning it expects the picture to follow it exactly.
+    public static func progress(forAngle angle: Double,
+                                openAngle: Double = defaultOpenAngle) -> Double {
+        let start = clampOpenAngle(openAngle)
+        let end = foldedAngle(openAngle: start)
+        guard angle < start else { return 0 }
+        guard angle > end else { return 1 }
+        return (start - angle) / (start - end)
     }
 
     public static func isClosed(angle: Double) -> Bool { angle <= closedAngle }
@@ -31,7 +58,8 @@ public enum LidFold {
 ///
 /// A raw angle is noisy and a MacBook lid wobbles while you type, so an opening
 /// is only reported after the lid has genuinely been near-shut and then come
-/// back up past a much higher angle. One event per real open, never per wobble.
+/// back up past the angle where the fold begins. One event per real open, never
+/// per wobble.
 public struct LidFoldTracker: Equatable, Sendable {
     public enum Event: Equatable, Sendable {
         case none
@@ -41,15 +69,24 @@ public struct LidFoldTracker: Equatable, Sendable {
         case opened
     }
 
+    public private(set) var openAngle: Double
     /// Set once the lid has been seen low enough to count as shut.
     private var wasClosed = false
     /// Set while the fold is on screen, so folding is reported once per close.
     private var wasFolding = false
     public private(set) var angle: Double?
 
-    public init() {}
+    public init(openAngle: Double = LidFold.defaultOpenAngle) {
+        self.openAngle = LidFold.clampOpenAngle(openAngle)
+    }
 
-    public var progress: Double { angle.map(LidFold.progress(forAngle:)) ?? 0 }
+    public mutating func setOpenAngle(_ value: Double) {
+        openAngle = LidFold.clampOpenAngle(value)
+    }
+
+    public var progress: Double {
+        angle.map { LidFold.progress(forAngle: $0, openAngle: openAngle) } ?? 0
+    }
 
     public mutating func update(angle reading: Double?) -> Event {
         guard let reading else {
@@ -66,13 +103,13 @@ public struct LidFoldTracker: Equatable, Sendable {
             return .none
         }
 
-        if wasClosed, reading >= LidFold.greetingAngle {
+        if wasClosed, reading >= openAngle {
             wasClosed = false
             wasFolding = false
             return .opened
         }
 
-        let folding = reading < LidFold.openAngle
+        let folding = reading < openAngle
         if folding, !wasFolding, !wasClosed {
             wasFolding = true
             return .folding
