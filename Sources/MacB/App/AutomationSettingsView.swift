@@ -15,7 +15,7 @@ struct AutomationSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MacBDesign.contentSpacing) {
-            header
+            SettingsCard(title: "Kurallar", symbol: "wand.and.rays") { header }
             if preferences.automationEnabled {
                 if automation.rules.isEmpty, draft == nil {
                     emptyState
@@ -61,17 +61,17 @@ struct AutomationSettingsView: View {
     }()
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Toggle(isOn: $preferences.automationEnabled) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Kurallar çalışsın").font(.system(size: 13, weight: .medium))
-                    Text("MacB'nin zaten izlediği olaylara bağlanır. Ek izin istemez, arka planda bir şey açmaz.")
-                        .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        Toggle(isOn: $preferences.automationEnabled) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Kurallar çalışsın").font(.system(size: 13, weight: .medium))
+                Text("MacB'nin zaten izlediği olaylara bağlanır. Ek izin istemez, arka planda bir şey açmaz, hiçbir şey silmez.")
+                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .toggleStyle(.switch)
         }
+        .toggleStyle(.switch)
+        .controlSize(.small)
+        .accessibilityLabel("Kurallar çalışsın")
     }
 
     private var emptyState: some View {

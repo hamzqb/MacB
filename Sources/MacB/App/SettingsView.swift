@@ -1018,16 +1018,6 @@ struct SettingsView: View {
         if !spotify.isRunning && !appleMusic.isRunning && !browserMedia.isRunning { openDefaultBrowser() }
     }
 
-    /// A settings group: heading outside, content inside a card.
-    ///
-    /// The card is what separates one group from the next, so the page no longer
-    /// needs a divider between every section and stops reading as one long list.
-    /// One titled card.
-    ///
-    /// The heading carries a glyph in a tinted tile, which is what turns a page
-    /// of stacked grey boxes into a list somebody can scan. The glyph is passed
-    /// in rather than looked up from the title, so a renamed section cannot
-    /// silently lose it.
     private var currentHour: Int { Calendar.current.component(.hour, from: Date()) }
 
     /// One of the two lines the island says around a lid movement.
@@ -1051,35 +1041,11 @@ struct SettingsView: View {
         }
     }
 
+    /// The page's own spelling of `SettingsCard`, kept so the twenty-seven
+    /// call sites read as sentences rather than as view construction.
     private func section<Content: View>(_ title: String, _ symbol: String = "square.grid.2x2",
                                         @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(MacBDesign.accent)
-                    .frame(width: 22, height: 22)
-                    .background(MacBDesign.accent.opacity(0.13),
-                                in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                Text(title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-            }
-            VStack(alignment: .leading, spacing: 14, content: content)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(MacBDesign.cardFill, in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
-                // A light fall from the top edge, the same idea as the island
-                // cards, so the two halves of MacB read as one product.
-                .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
-                    .fill(LinearGradient(colors: [.white.opacity(0.05), .clear],
-                                         startPoint: .top, endPoint: .center))
-                    .allowsHitTesting(false))
-                .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
-                    .strokeBorder(MacBDesign.cardStroke))
-        }
+        SettingsCard(title: title, symbol: symbol) { content() }
     }
 
     private func settingToggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
