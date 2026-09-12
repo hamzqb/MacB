@@ -9,7 +9,7 @@ import Foundation
 /// an interruption but a confirmation.
 public struct IslandEvent: Equatable, Sendable {
     public enum Kind: String, Equatable, Sendable {
-        case volume, mute, brightness, nowPlaying, charging, unplugged, batteryLow, welcome, lidClosing, rule
+        case volume, mute, nowPlaying, charging, unplugged, batteryLow, welcome, lidClosing, rule
     }
 
     public let kind: Kind
@@ -31,11 +31,11 @@ public struct IslandEvent: Equatable, Sendable {
     /// How long the island stays open for this event.
     ///
     /// A level you are actively dragging should follow your finger, so volume and
-    /// brightness hold briefly and re-arm on every change. A track change is read
+    /// hold briefly and re-arm on every change. A track change is read
     /// once, so it stays long enough to read a title and no longer.
     public var duration: TimeInterval {
         switch kind {
-        case .volume, .mute, .brightness: return 1.2
+        case .volume, .mute: return 1.2
         case .nowPlaying: return 2.4
         case .charging, .unplugged: return 2.0
         case .batteryLow: return 3.0
@@ -63,7 +63,7 @@ public struct IslandEvent: Equatable, Sendable {
         case .welcome: return 3
         case .rule: return 3
         case .lidClosing: return 4
-        case .volume, .mute, .brightness: return 2
+        case .volume, .mute: return 2
         case .charging, .unplugged: return 1
         case .nowPlaying: return 0
         }
@@ -83,13 +83,6 @@ public extension IslandEvent {
         return IslandEvent(kind: .volume, title: "Ses",
                            detail: "\(Int((clamped * 100).rounded()))%",
                            progress: clamped, symbol: symbolForVolume(clamped))
-    }
-
-    static func brightness(_ level: Double) -> IslandEvent {
-        let clamped = min(1, max(0, level))
-        return IslandEvent(kind: .brightness, title: "Parlaklık",
-                           detail: "\(Int((clamped * 100).rounded()))%",
-                           progress: clamped, symbol: "sun.max.fill")
     }
 
     static func nowPlaying(title: String, artist: String) -> IslandEvent {
