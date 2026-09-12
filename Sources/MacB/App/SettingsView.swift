@@ -3,7 +3,7 @@ import MacBCore
 import SwiftUI
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case general = "Genel", windows = "Pencereler", widgets = "Widget'lar", tools = "Araçlar", appearance = "Görünüm", privacy = "Gizlilik", permissions = "İzinler"
+    case general = "Genel", windows = "Pencereler", widgets = "Widget'lar", tools = "Araçlar", automation = "Otomasyon", appearance = "Görünüm", privacy = "Gizlilik", permissions = "İzinler"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -11,6 +11,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .windows: return "rectangle.split.2x1"
         case .widgets: return "square.grid.2x2"
         case .tools: return "wrench.and.screwdriver"
+        case .automation: return "wand.and.rays"
         case .appearance: return "circle.lefthalf.filled"
         case .privacy: return "faceid"
         case .permissions: return "hand.raised"
@@ -22,6 +23,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .windows: return "Pencerelerini daha az uğraşla yerleştir."
         case .widgets: return "Island'da ne göründüğüne ve hangi sırada durduğuna sen karar ver."
         case .tools: return "Günlük işlerin için güvenli, yerel yardımcılar."
+        case .automation: return "Bir şey olunca MacB senin yerine yapsın."
         case .appearance: return "Küçük ayrıntılar, daha sakin bir masaüstü."
         case .privacy: return "Özel alanlarını neyin açacağına sen karar ver."
         case .permissions: return "Hangi özelliklerin erişimi olacağı senin elinde."
@@ -50,6 +52,7 @@ struct SettingsView: View {
     @ObservedObject var weather: WeatherService
     @ObservedObject var faceUnlock: FaceUnlockService
     @ObservedObject var launcher: AppLauncherStore
+    @ObservedObject var automation: AutomationService
     var openPanel: () -> Void
     @AppStorage("settingsPage") private var selectedPage: SettingsPage = .general
     @State private var showRemovalConfirmation = false
@@ -78,6 +81,7 @@ struct SettingsView: View {
                     case .windows: windowsPage
                     case .widgets: widgetsPage
                     case .tools: toolsPage
+                    case .automation: AutomationSettingsView(automation: automation, preferences: preferences)
                     case .appearance: appearancePage
                     case .privacy: PrivacySettingsView(faceUnlock: faceUnlock)
                     case .permissions: permissionsPage

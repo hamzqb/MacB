@@ -9,7 +9,7 @@ import Foundation
 /// an interruption but a confirmation.
 public struct IslandEvent: Equatable, Sendable {
     public enum Kind: String, Equatable, Sendable {
-        case volume, mute, brightness, nowPlaying, charging, unplugged, batteryLow, welcome, lidClosing
+        case volume, mute, brightness, nowPlaying, charging, unplugged, batteryLow, welcome, lidClosing, rule
     }
 
     public let kind: Kind
@@ -40,6 +40,7 @@ public struct IslandEvent: Equatable, Sendable {
         case .charging, .unplugged: return 2.0
         case .batteryLow: return 3.0
         case .welcome: return 2.8
+        case .rule: return 2.6
         // Long enough to survive a slow close: the island has to still be there
         // to fold, and it leaves with the screen either way.
         case .lidClosing: return 6.0
@@ -60,6 +61,7 @@ public struct IslandEvent: Equatable, Sendable {
         switch kind {
         case .batteryLow: return 3
         case .welcome: return 3
+        case .rule: return 3
         case .lidClosing: return 4
         case .volume, .mute, .brightness: return 2
         case .charging, .unplugged: return 1
@@ -134,6 +136,15 @@ public extension IslandEvent {
         IslandEvent(kind: .lidClosing, title: customTitle(custom) ?? farewellTitle(forHour: hour),
                     detail: batteryPercent.map { "%\($0)" },
                     progress: nil, symbol: "laptopcomputer.and.arrow.down")
+    }
+
+    /// A line one of the user's own rules asked for.
+    ///
+    /// Same machinery as every other island line, and the same limit on length,
+    /// because a rule is not allowed to make a wider island than the app does.
+    static func notice(_ text: String) -> IslandEvent {
+        IslandEvent(kind: .rule, title: customTitle(text) ?? "Kural", detail: nil,
+                    progress: nil, symbol: "wand.and.rays")
     }
 
     /// The most a hand-written line may be, in characters.

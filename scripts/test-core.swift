@@ -786,6 +786,83 @@ struct CoreTestRunner {
                 try expect(abs(LidFold.progress(forAngle: 18, openAngle: 20) - 0.333) < 0.01,
                            "The lowest starting angle had no room to animate")
             }),
+            ("Automation: an event runs only the rules waiting for it", {
+                func rule(_ trigger: AutomationTrigger, _ action: AutomationAction = .pauseMedia,
+                          enabled: Bool = true) -> AutomationRule {
+                    AutomationRule(title: "Kural", isEnabled: enabled, trigger: trigger, action: action)
+                }
+                var engine = AutomationEngine(rules: [
+                    rule(.lidOpened, .showNotice("merhaba")), rule(.lidClosing, .pauseMedia)
+                ])
+                try expect(engine.actions(for: .lidOpened) == [.showNotice("merhaba")], "Wrong rule ran")
+                try expect(engine.actions(for: .lidClosing) == [.pauseMedia], "Wrong rule ran")
+                try expect(engine.actions(for: .timerFinished).isEmpty, "An unrelated event ran a rule")
+                var off = AutomationEngine(rules: [rule(.timerFinished, enabled: false)])
+                try expect(off.actions(for: .timerFinished).isEmpty, "A switched-off rule ran")
+            }),
+            ("Automation: a rule rests before it can run again", {
+                let rule = AutomationRule(title: "Kural", trigger: .mediaStarted, action: .pauseMedia)
+                var engine = AutomationEngine(rules: [rule])
+                let start = Date()
+                try expect(engine.actions(for: .mediaStarted, now: start).count == 1, "The rule did not run")
+                try expect(engine.actions(for: .mediaStarted, now: start.addingTimeInterval(5)).isEmpty,
+                           "Skipping tracks ran the rule again")
+                try expect(engine.actions(for: .mediaStarted,
+                                          now: start.addingTimeInterval(AutomationEngine.cooldown + 1)).count == 1,
+                           "The rule never woke up again")
+            }),
+            ("Automation: a battery rule fires once on the way down", {
+                let rule = AutomationRule(title: "Kural", trigger: .batteryBelow(percent: 20), action: .pauseMedia)
+                var engine = AutomationEngine(rules: [rule])
+                let start = Date()
+                try expect(engine.actions(for: .batteryLevel(15), now: start).isEmpty,
+                           "A battery that was already low fired on launch")
+                try expect(engine.actions(for: .batteryLevel(60), now: start).isEmpty, "Charging fired a rule")
+                try expect(engine.actions(for: .batteryLevel(19), now: start.addingTimeInterval(600)).count == 1,
+                           "Crossing the line did nothing")
+                try expect(engine.actions(for: .batteryLevel(12), now: start.addingTimeInterval(1200)).isEmpty,
+                           "The same crossing fired twice")
+            }),
+            ("Automation: only the web and local files may be opened", {
+                try expect(AutomationAction.openLink("https://example.com").isSafe, "A web link was refused")
+                try expect(AutomationAction.openLink("file:///Users/x/notes.txt").isSafe, "A file was refused")
+                try expect(!AutomationAction.openLink("x-apple-shortcut://run?name=wipe").isSafe,
+                           "A custom scheme was allowed")
+                try expect(!AutomationAction.openLink("javascript:alert(1)").isSafe, "A script link was allowed")
+                try expect(!AutomationAction.openLink("https://").isSafe, "A link with no host was allowed")
+                try expect(AutomationAction.runShortcut(name: "Gece Modu").isSafe, "A shortcut name was refused")
+                try expect(!AutomationAction.runShortcut(name: "Gece\nrm -rf /").isSafe,
+                           "A shortcut name carried a second line")
+                try expect(!AutomationAction.startTimer(minutes: 0).isSafe, "A zero-minute timer was allowed")
+                try expect(!AutomationAction.showNotice("   ").isSafe, "A blank notice was allowed")
+                var engine = AutomationEngine(rules: [
+                    AutomationRule(title: "Kural", trigger: .lidOpened,
+                                   action: .openLink("javascript:alert(1)"))
+                ])
+                try expect(engine.actions(for: .lidOpened).isEmpty, "An unsafe action ran")
+            }),
+            ("Automation: an application rule ignores the case of the identifier", {
+                var engine = AutomationEngine(rules: [
+                    AutomationRule(title: "Kural", trigger: .appLaunched(bundleIdentifier: "com.spotify.client"),
+                                   action: .pauseMedia)
+                ])
+                try expect(engine.actions(for: .appLaunched("com.Spotify.Client")).count == 1,
+                           "Case stopped a rule from running")
+                var quitting = AutomationEngine(rules: [
+                    AutomationRule(title: "Kural", trigger: .appQuit(bundleIdentifier: "com.spotify.client"),
+                                   action: .pauseMedia)
+                ])
+                try expect(quitting.actions(for: .appLaunched("com.spotify.client")).isEmpty,
+                           "A quit rule ran on a launch")
+            }),
+            ("Automation: rules survive a restart", {
+                let rules = [AutomationRule(title: "Şarj", trigger: .chargerConnected, action: .startTimer(minutes: 25)),
+                             AutomationRule(title: "Safari", trigger: .appQuit(bundleIdentifier: "com.apple.Safari"),
+                                            action: .runShortcut(name: "Kapat"))]
+                let data = try JSONEncoder().encode(rules)
+                try expect(try JSONDecoder().decode([AutomationRule].self, from: data) == rules,
+                           "The rules changed across a restart")
+            }),
             ("LidScreenBlur: the screen is untouched until the fold starts", {
                 for index in 0..<LidScreenBlur.layerCount {
                     try expect(LidScreenBlur.layerAlpha(index, progress: 0) == 0, "A pane was already up")

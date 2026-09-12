@@ -185,6 +185,8 @@ private final class Flag: @unchecked Sendable {
     private let keyboardCleaning = KeyboardCleaningService()
     private let utilities = UtilityCoordinator()
     private let islandTimer = TimerService()
+    private lazy var automation = AutomationService(media: media, timer: islandTimer,
+                                                    systemMonitor: systemMonitor, lid: lid)
     private let launcher = AppLauncherStore()
     private let islandBackground = IslandBackgroundStore()
     private let weather = WeatherService()
@@ -290,6 +292,10 @@ private final class Flag: @unchecked Sendable {
         } else if CommandLine.arguments.contains("--preview-library") {
             widgetLayout.isEditing = true
             notch.showDevelopmentPreview(phase: .expanded, content: .home)
+        } else if CommandLine.arguments.contains("--preview-automation") {
+            preferences.automationEnabled = true
+            UserDefaults.standard.set("Otomasyon", forKey: "settingsPage")
+            showSettings()
         } else if CommandLine.arguments.contains("--preview-lid") {
             UserDefaults.standard.set("Görünüm", forKey: "settingsPage")
             UserDefaults.standard.set(SettingsView.hingeAnchor, forKey: "settingsAnchor")
@@ -378,6 +384,8 @@ private final class Flag: @unchecked Sendable {
         windowLayout.setEnabled(preferences.windowManagementEnabled)
         lid.setOpenAngle(preferences.lidHingeAngle)
         lid.setEnabled(preferences.lidHingeEnabled && preferences.notchEnabled)
+        automation.notice = { [weak self] text in self?.notch.showRuleNotice(text) }
+        automation.setEnabled(preferences.automationEnabled && preferences.notchEnabled)
         recentFiles.enabled = preferences.recentFilesEnabled
         clipboardShelf.enabled = preferences.clipboardShelfEnabled
         fileActivity.enabled = preferences.fileActivityEnabled
@@ -449,7 +457,7 @@ private final class Flag: @unchecked Sendable {
             utilities: utilities, aiActivity: aiActivity, systemMonitor: systemMonitor,
             processes: processes, lid: lid, keyboardCleaning: keyboardCleaning,
             updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
-            faceUnlock: faceUnlock, launcher: launcher,
+            faceUnlock: faceUnlock, launcher: launcher, automation: automation,
             openPanel: { [weak self] in self?.openNotch() }))
     }
 

@@ -126,6 +126,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     }
     /// Whether the whole screen blurs with the fold, or only the island.
     @Published var lidScreenBlur: Bool { didSet { defaults.set(lidScreenBlur, forKey: "lidScreenBlur") } }
+    /// Whether the user's rules are allowed to run.
+    @Published var automationEnabled: Bool { didSet { defaults.set(automationEnabled, forKey: "automationEnabled") } }
     /// What the island says when the lid opens. Empty means the greeting that
     /// fits the time of day.
     @Published var lidWelcomeText: String {
@@ -161,6 +163,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "lidHingeEnabled": true,
                                     "lidHingeAngle": LidFold.defaultOpenAngle,
                                     "lidScreenBlur": true,
+                                    "automationEnabled": false,
                                     "hidesSystemVolumeHUD": false,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
@@ -184,6 +187,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         lidHingeEnabled = defaults.bool(forKey: "lidHingeEnabled")
         lidHingeAngle = LidFold.clampOpenAngle(defaults.double(forKey: "lidHingeAngle"))
         lidScreenBlur = defaults.bool(forKey: "lidScreenBlur")
+        automationEnabled = defaults.bool(forKey: "automationEnabled")
         lidWelcomeText = defaults.string(forKey: "lidWelcomeText") ?? ""
         lidFarewellText = defaults.string(forKey: "lidFarewellText") ?? ""
         hidesSystemVolumeHUD = defaults.bool(forKey: "hidesSystemVolumeHUD")

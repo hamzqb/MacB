@@ -232,6 +232,15 @@ struct IslandToast: Equatable {
         lidBlur.apply(progress: progress)
     }
 
+    /// Shows a line one of the user's rules asked for.
+    ///
+    /// Goes through the same queue as every other island line, so a rule cannot
+    /// interrupt something the user is reading or shout over an open panel.
+    func showRuleNotice(_ text: String) {
+        guard state.phase != .expanded, !incomingDragActive, !developmentPreviewLocked else { return }
+        systemEvents.present(.notice(text))
+    }
+
     /// The lid has come back up. One line, read in the time it takes to sit down.
     private func greetAfterLidOpen() {
         lidBlur.hide()

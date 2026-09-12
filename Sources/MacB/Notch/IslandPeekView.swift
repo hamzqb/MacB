@@ -67,6 +67,14 @@ enum PeekModel {
             chips.append(PeekChip(id: "timer", leading: .symbol("timer"),
                                     text: input.timerText, detail: nil, isAccent: true))
         }
+        // A crowded strip squeezes the widest chip first, and the widest chip is
+        // the track. Losing the artist keeps the title readable; keeping both
+        // left "Ortaya Karışık · Stabil" as "Or… S".
+        let crowded = input.assistants.count + (input.timerActive ? 1 : 0) >= 2
+        if crowded, let media = chips.firstIndex(where: { $0.id == "media" }) {
+            chips[media] = PeekChip(id: "media", leading: .artwork, text: input.mediaTitle,
+                                    detail: nil, isAccent: false)
+        }
         for assistant in input.assistants.prefix(max(0, 3 - chips.count)) {
             chips.append(PeekChip(id: "assistant-\(assistant.name)", leading: .symbol("sparkles"),
                                     text: assistant.name, detail: assistant.detail, isAccent: true,
@@ -182,6 +190,8 @@ struct IslandPeekView: View {
                 quotaBar(progress)
             }
         }
+        // The track is the one chip allowed to shrink, but not to nothing.
+        .frame(minWidth: chip.id == "media" ? 112 : nil, alignment: .leading)
         .fixedSize(horizontal: chip.id != "media", vertical: false)
     }
 
@@ -215,6 +225,7 @@ struct IslandPeekView: View {
                 .foregroundStyle(MacBDesign.IslandToken.primaryText)
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .layoutPriority(1)
             if let detail = chip.detail {
                 Text(detail)
                     .font(.system(size: 11))
