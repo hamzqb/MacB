@@ -53,6 +53,7 @@ struct SettingsView: View {
     @ObservedObject var faceUnlock: FaceUnlockService
     @ObservedObject var launcher: AppLauncherStore
     @ObservedObject var automation: AutomationService
+    @ObservedObject var loginItem: LoginItemService
     var openPanel: () -> Void
     @AppStorage("settingsPage") private var selectedPage: SettingsPage = .general
     @State private var showRemovalConfirmation = false
@@ -361,6 +362,18 @@ struct SettingsView: View {
 
     private var generalPage: some View {
         VStack(alignment: .leading, spacing: 22) {
+            section("Açılış", "power") {
+                settingToggle("Mac açılınca MacB de açılsın",
+                              detail: "Giriş öğesi olarak macOS'a kaydedilir. Sistem Ayarları'ndaki Giriş Öğeleri listesinden MacB'ye sormadan kapatabilirsin.",
+                              isOn: Binding(get: { loginItem.isEnabled },
+                                            set: { loginItem.setEnabled($0) }))
+                if loginItem.needsApproval {
+                    message("macOS bu girişi bekletiyor. Sistem Ayarları'ndan izin vermen gerekiyor.", warning: true)
+                    Button("Giriş Öğeleri'ni aç") { loginItem.openSystemSettings() }
+                        .buttonStyle(.link)
+                }
+                if let error = loginItem.errorMessage { message(error, warning: true) }
+            }
             section("Çalışma alanı", "square.stack.3d.up") {
                 settingToggle("Dock önizlemeleri", detail: "Bir simgenin üzerinde bekle, istediğin pencereye geç.", isOn: $preferences.dockEnabled)
                 rowDivider

@@ -100,6 +100,18 @@ import MacBCore
             print("Kapatıldı.")
             return
         }
+        // Reports, and optionally sets, the macOS login item. Useful because
+        // registration can only really be proved against the running system.
+        if CommandLine.arguments.contains("--login-item") {
+            let service = LoginItemService()
+            if CommandLine.arguments.contains("--on") { service.setEnabled(true) }
+            if CommandLine.arguments.contains("--off") { service.setEnabled(false) }
+            service.refresh()
+            print("Açılışta başlat: \(service.isEnabled ? "açık" : "kapalı")")
+            if service.needsApproval { print("macOS onay bekliyor (Sistem Ayarları > Giriş Öğeleri)") }
+            if let error = service.errorMessage { print(error) }
+            return
+        }
         if CommandLine.arguments.contains("--top-processes") {
             let monitor = ProcessMonitorService()
             monitor.refresh()
@@ -197,6 +209,7 @@ private final class Flag: @unchecked Sendable {
             .appendingPathComponent("MacB"))
     private let quickNote = QuickNoteStore()
     private let updates = UpdateService()
+    private let loginItem = LoginItemService()
     private lazy var dock = DockController(windowService: windows, previewService: previews, preferences: preferences,
                                            favorites: favorites, recentTargets: recentTargets)
     private lazy var notch = NotchController(media: media, shelf: shelf, preferences: preferences,
@@ -458,6 +471,7 @@ private final class Flag: @unchecked Sendable {
             processes: processes, lid: lid, keyboardCleaning: keyboardCleaning,
             updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher, automation: automation,
+            loginItem: loginItem,
             openPanel: { [weak self] in self?.openNotch() }))
     }
 

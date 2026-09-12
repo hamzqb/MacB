@@ -16,6 +16,11 @@ if [[ "$app_dir" == "/" || "$app_dir" == "$HOME" || "$app_dir" == "/Applications
     echo "Refusing unsafe MACB_APP_DIR: $app_dir" >&2
     exit 1
 fi
+sdk="$(bash "$project_dir/scripts/select-sdk.sh")"
+if [[ -n "$sdk" ]]; then
+    export SDKROOT="$sdk"
+    echo "Using $sdk (this toolchain has no SwiftUI macro plugin)."
+fi
 build_args=(--configuration "$configuration")
 if [[ "${MACB_UNIVERSAL:-0}" == "1" ]]; then
     if ! xcodebuild -version >/dev/null 2>&1; then
