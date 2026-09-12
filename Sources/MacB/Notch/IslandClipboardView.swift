@@ -178,9 +178,9 @@ struct IslandClipboardView: View {
         VStack(spacing: 8) {
             ZStack {
                 Circle()
-                    .fill(RadialGradient(colors: [.white.opacity(0.13), .white.opacity(0.02)],
+                    .fill(RadialGradient(colors: [MacBDesign.IslandToken.Fill.raised, MacBDesign.IslandToken.Fill.hairline],
                                          center: .topLeading, startRadius: 1, endRadius: 40))
-                Circle().strokeBorder(.white.opacity(0.10), lineWidth: 0.8)
+                Circle().strokeBorder(MacBDesign.IslandToken.Fill.base, lineWidth: 0.8)
                 Image(systemName: filter.symbol)
                     .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)

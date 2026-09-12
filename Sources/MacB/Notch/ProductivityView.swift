@@ -30,7 +30,7 @@ struct ProductivityView: View {
                 Button { keyboardCleaning.start(duration: 60) } label: {
                     Label("Klavyeyi 1 dakika kilitle", systemImage: "keyboard")
                         .font(.system(size: 10, weight: .semibold)).frame(maxWidth: .infinity).frame(height: 32)
-                        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+                        .background(MacBDesign.IslandToken.Fill.low, in: RoundedRectangle(cornerRadius: 10))
                 }.buttonStyle(.plain)
             }
             if let error = keyboardCleaning.errorMessage {
@@ -51,17 +51,17 @@ struct ProductivityView: View {
                 .frame(width: 30, height: 30).background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 11, weight: .semibold))
-                Text(detail).font(.system(size: 9)).foregroundStyle(.white.opacity(0.42))
+                Text(detail).font(.system(size: 9)).foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
             }
             Spacer()
-        }.padding(8).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
+        }.padding(8).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func metric(_ title: String, value: String) -> some View {
         VStack(spacing: 2) {
             Text(value).font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
-            Text(title).font(.system(size: 8, weight: .medium)).foregroundStyle(.white.opacity(0.38))
-        }.frame(maxWidth: .infinity).frame(height: 42).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
+            Text(title).font(.system(size: 8, weight: .medium)).foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
+        }.frame(maxWidth: .infinity).frame(height: 42).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 11))
     }
 
     private func byteRatio(_ used: UInt64, _ total: UInt64) -> String {

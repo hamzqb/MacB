@@ -32,20 +32,47 @@ enum MacBDesign {
     enum IslandToken {
         static let accent = Color(nsColor: .systemOrange)
         static let widgetRadius: CGFloat = 18
-        static let widgetFill = Color.white.opacity(0.085)
-        static let widgetActiveFill = Color.white.opacity(0.13)
-        static let widgetStroke = Color.white.opacity(0.08)
+        static let widgetFill = Fill.low
+        static let widgetActiveFill = Fill.raised
+        static let widgetStroke = Fill.low
         static let navButton: CGFloat = 26
-        static let navFill = Color.white.opacity(0.10)
+        static let navFill = Fill.base
         static let navSelectedFill = Color.white
         static let pillHeight: CGFloat = 28
         static let dropCardRadius: CGFloat = 20
-        static let dropCardFill = Color.white.opacity(0.03)
-        static let dropCardStroke = Color.white.opacity(0.22)
+        static let dropCardFill = Fill.hairline
+        static let dropCardStroke = Fill.strong
         static let destructive = Color(nsColor: .systemRed)
         static let primaryText = Color.white
-        static let secondaryText = Color.white.opacity(0.55)
-        static let tertiaryText = Color.white.opacity(0.35)
+        static let secondaryText = Ink.secondary
+        static let tertiaryText = Ink.faint
+
+        /// Every surface the island lays over its own black, on one scale.
+        ///
+        /// There were twenty-five different white opacities in here, all within
+        /// a hair of each other and none of them agreeing. Five steps is enough
+        /// to say rest, quiet, normal, hovered and pressed, and a fixed set is
+        /// the only way two cards drawn a year apart look like one material.
+        enum Fill {
+            /// Hairlines, separators, the calmest resting surface.
+            static let hairline = Color.white.opacity(0.04)
+            /// A surface that should be felt rather than seen.
+            static let low = Color.white.opacity(0.07)
+            /// The ordinary fill for a card or a control.
+            static let base = Color.white.opacity(0.10)
+            /// Hovered, selected, or carrying something live.
+            static let raised = Color.white.opacity(0.14)
+            /// Pressed, or an edge that has to read against artwork.
+            static let strong = Color.white.opacity(0.20)
+        }
+
+        /// Text and glyphs, four steps, brightest first.
+        enum Ink {
+            static let primary = Color.white.opacity(0.82)
+            static let secondary = Color.white.opacity(0.55)
+            static let tertiary = Color.white.opacity(0.42)
+            static let faint = Color.white.opacity(0.32)
+        }
     }
 
     enum Island {
@@ -61,7 +88,7 @@ enum MacBDesign {
         static let contentSpacing: CGFloat = 12
         static let tabHeight: CGFloat = 34
         static let heroArtwork: CGFloat = 58
-        static let glassHighlight = Color.white.opacity(0.085)
-        static let glassStroke = Color.white.opacity(0.13)
+        static let glassHighlight = IslandToken.Fill.low
+        static let glassStroke = IslandToken.Fill.raised
     }
 }

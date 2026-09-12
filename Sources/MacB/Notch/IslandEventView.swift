@@ -70,7 +70,7 @@ struct IslandEventView: View {
     private func level(_ progress: Double) -> some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.16))
+                Capsule().fill(MacBDesign.IslandToken.Fill.raised)
                 Capsule()
                     .fill(tint)
                     .frame(width: proxy.size.width * min(1, max(0, progress)))

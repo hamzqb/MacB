@@ -84,13 +84,13 @@ struct IslandWidgetStrip: View {
             // where light would land and dark where it would not.
             .overlay {
                 RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
-                    .fill(LinearGradient(colors: [.white.opacity(0.07), .clear],
+                    .fill(LinearGradient(colors: [MacBDesign.IslandToken.Fill.low, .clear],
                                          startPoint: .top, endPoint: .center))
                     .allowsHitTesting(false)
             }
             .overlay {
                 RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
-                    .strokeBorder(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.04)],
+                    .strokeBorder(LinearGradient(colors: [MacBDesign.IslandToken.Fill.strong, MacBDesign.IslandToken.Fill.hairline],
                                                  startPoint: .top, endPoint: .bottom),
                                   lineWidth: 0.8)
                     .allowsHitTesting(false)
@@ -173,7 +173,7 @@ struct IslandWidgetStrip: View {
                             .font(.system(size: 9, weight: .bold))
                             .foregroundStyle(widget.size == size ? Color.black : .white)
                             .frame(width: 18, height: 18)
-                            .background(widget.size == size ? Color.white : Color.white.opacity(0.18), in: Circle())
+                            .background(widget.size == size ? Color.white : MacBDesign.IslandToken.Fill.strong, in: Circle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(widget.kind.title) \(sizeName(size))")
@@ -484,7 +484,7 @@ struct MediaWidget: View {
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .strokeBorder(.white.opacity(0.14), lineWidth: 0.5))
+            .strokeBorder(MacBDesign.IslandToken.Fill.raised, lineWidth: 0.5))
         // The cover throws a little of its own colour onto the card behind it.
         .shadow(color: (media.tint ?? .black).opacity(0.45), radius: 6, y: 2)
         .accessibilityHidden(true)
@@ -501,7 +501,7 @@ struct MediaWidget: View {
             ZStack {
                 Circle().fill(Color.black)
                 ForEach([0.74, 0.52], id: \.self) { scale in
-                    Circle().stroke(.white.opacity(0.13), lineWidth: 1).scaleEffect(scale)
+                    Circle().stroke(MacBDesign.IslandToken.Fill.raised, lineWidth: 1).scaleEffect(scale)
                 }
                 Group {
                     if let artwork = media.artwork {
@@ -540,7 +540,7 @@ struct MediaWidget: View {
                 // carries its own contrast rather than borrowing the card's.
                 .background(.black.opacity(0.34), in: Circle())
                 .background(tint.opacity(media.isPlaying ? 0.55 : 0.30), in: Circle())
-                .overlay(Circle().strokeBorder(.white.opacity(0.24), lineWidth: 0.5))
+                .overlay(Circle().strokeBorder(MacBDesign.IslandToken.Fill.strong, lineWidth: 0.5))
                 .animation(.easeOut(duration: 0.45), value: media.tint)
                 .contentTransition(.symbolEffect(.replace))
         }
@@ -564,7 +564,7 @@ struct MediaWidget: View {
             }
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.22))
+                    Capsule().fill(MacBDesign.IslandToken.Fill.strong)
                     Capsule().fill(tint)
                         .frame(width: proxy.size.width * min(1, max(0, media.position / max(1, media.duration))))
                         .animation(.easeOut(duration: 0.3), value: media.position)
@@ -611,7 +611,7 @@ struct TimerWidget: View {
                     Spacer(minLength: 0)
                     HStack(spacing: 8) {
                         roundButton("play.fill", label: "Başlat", tint: MacBDesign.IslandToken.accent) { timer.start() }
-                        roundButton("slider.horizontal.3", label: "Süre seç", tint: .white.opacity(0.18), action: open)
+                        roundButton("slider.horizontal.3", label: "Süre seç", tint: MacBDesign.IslandToken.Fill.strong, action: open)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -629,7 +629,7 @@ struct TimerWidget: View {
     private var progressRing: some View {
         let shape = RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
         return ZStack {
-            shape.strokeBorder(Color.white.opacity(0.07), lineWidth: 2)
+            shape.strokeBorder(MacBDesign.IslandToken.Fill.low, lineWidth: 2)
             shape
                 .inset(by: 1)
                 .trim(from: 0, to: max(0.001, 1 - timer.progress))
@@ -659,7 +659,7 @@ struct TimerWidget: View {
                             tint: MacBDesign.IslandToken.accent) {
                     timer.isRunning ? timer.pause() : timer.resume()
                 }
-                roundButton("xmark", label: "İptal", tint: .white.opacity(0.14)) { timer.cancel() }
+                roundButton("xmark", label: "İptal", tint: MacBDesign.IslandToken.Fill.raised) { timer.cancel() }
             }
             .frame(maxWidth: .infinity)
         }
@@ -1089,7 +1089,7 @@ struct Sparkline: View {
                     path(points, closingIn: nil)
                         .stroke(tint, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
                 } else {
-                    Capsule().fill(.white.opacity(0.08)).frame(height: 1.4)
+                    Capsule().fill(MacBDesign.IslandToken.Fill.low).frame(height: 1.4)
                         .frame(maxHeight: .infinity, alignment: .center)
                 }
             }
@@ -1197,9 +1197,9 @@ struct WidgetEmptyState: View {
         VStack(spacing: span >= 2 ? 7 : 5) {
             ZStack {
                 Circle()
-                    .fill(RadialGradient(colors: [.white.opacity(0.13), .white.opacity(0.02)],
+                    .fill(RadialGradient(colors: [MacBDesign.IslandToken.Fill.raised, MacBDesign.IslandToken.Fill.hairline],
                                          center: .topLeading, startRadius: 1, endRadius: diameter))
-                Circle().strokeBorder(.white.opacity(0.10), lineWidth: 0.8)
+                Circle().strokeBorder(MacBDesign.IslandToken.Fill.base, lineWidth: 0.8)
                 Image(systemName: symbol)
                     .font(.system(size: span >= 2 ? 14 : 12, weight: .medium))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)

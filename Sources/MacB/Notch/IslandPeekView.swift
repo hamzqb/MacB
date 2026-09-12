@@ -163,7 +163,7 @@ struct IslandPeekView: View {
             ForEach(Array(chips.enumerated()), id: \.element.id) { index, chip in
                 if index > 0 {
                     Rectangle()
-                        .fill(Color.white.opacity(0.12))
+                        .fill(MacBDesign.IslandToken.Fill.base)
                         .frame(width: 1, height: 14)
                         .padding(.horizontal, 9)
                 }
@@ -201,7 +201,7 @@ struct IslandPeekView: View {
         let tint: Color = value <= 0.1 ? MacBDesign.IslandToken.destructive : MacBDesign.IslandToken.accent
         return GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.14))
+                Capsule().fill(MacBDesign.IslandToken.Fill.raised)
                 Capsule().fill(tint).frame(width: proxy.size.width * value)
             }
         }
@@ -240,7 +240,7 @@ struct IslandPeekView: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(MacBDesign.IslandToken.primaryText)
                     .frame(width: 20, height: 20)
-                    .background(.white.opacity(0.10), in: Circle())
+                    .background(MacBDesign.IslandToken.Fill.base, in: Circle())
             }
         }
     }
@@ -254,7 +254,7 @@ struct IslandPeekView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
         } else {
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(Color.white.opacity(0.10))
+                .fill(MacBDesign.IslandToken.Fill.base)
                 .frame(width: 20, height: 20)
                 .overlay(Image(systemName: "music.note")
                     .font(.system(size: 9, weight: .semibold))

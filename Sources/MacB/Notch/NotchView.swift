@@ -118,7 +118,7 @@ struct NotchView: View {
         // the quietest way for the whole panel to know what is on.
         if media.isPlaying, let tint = media.tint { return tint.opacity(0.38) }
         return preferences.islandAppearance == .pureBlack
-            ? .white.opacity(0.04)
+            ? MacBDesign.IslandToken.Fill.hairline
             : MacBDesign.Island.glassStroke
     }
 
@@ -248,7 +248,7 @@ struct NotchView: View {
         if let status = collapsedStatus {
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.10))
+                    Capsule().fill(MacBDesign.IslandToken.Fill.base)
                     Capsule().fill(status.tint)
                         .frame(width: proxy.size.width * min(1, max(0, status.fraction)))
                 }
@@ -321,8 +321,8 @@ struct NotchView: View {
     }
 
     private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).font(.system(size: 11, weight: .semibold)).frame(width: 27, height: 27).background(.white.opacity(0.055), in: Circle()) }
-            .buttonStyle(.plain).foregroundStyle(.white.opacity(0.58)).help(label).accessibilityLabel(label)
+        Button(action: action) { Image(systemName: symbol).font(.system(size: 11, weight: .semibold)).frame(width: 27, height: 27).background(MacBDesign.IslandToken.Fill.hairline, in: Circle()) }
+            .buttonStyle(.plain).foregroundStyle(MacBDesign.IslandToken.Ink.secondary).help(label).accessibilityLabel(label)
     }
 
 
@@ -330,10 +330,10 @@ struct NotchView: View {
         VStack(spacing: 10) {
             if !recentTargets.items.isEmpty {
                 HStack(spacing: 7) {
-                    Text("Son hedefler").font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.35))
+                    Text("Son hedefler").font(.system(size: 9, weight: .semibold)).foregroundStyle(MacBDesign.IslandToken.Ink.faint)
                     ForEach(recentTargets.items.prefix(3)) { target in
                         Button { recentTargets.open(target) } label: {
-                            Text(target.appName).font(.system(size: 9, weight: .medium)).lineLimit(1).padding(.horizontal, 8).frame(height: 23).background(.white.opacity(0.06), in: Capsule())
+                            Text(target.appName).font(.system(size: 9, weight: .medium)).lineLimit(1).padding(.horizontal, 8).frame(height: 23).background(MacBDesign.IslandToken.Fill.low, in: Capsule())
                         }.buttonStyle(.plain).help("\(target.appName) uygulamasını aç")
                     }
                     Spacer()
@@ -344,7 +344,7 @@ struct NotchView: View {
                     HStack(spacing: 10) {
                         Image(systemName: presentation.isDropTarget ? "arrow.down" : "plus").font(.system(size: 15, weight: .semibold))
                         Text(presentation.isDropTarget ? "Bırak" : "Dosya ekle").font(.system(size: 12, weight: .semibold))
-                    }.frame(maxWidth: .infinity).frame(height: 64).background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 17))
+                    }.frame(maxWidth: .infinity).frame(height: 64).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 17))
                 }.buttonStyle(.plain)
             } else {
                 ScrollView {
@@ -356,7 +356,7 @@ struct NotchView: View {
             }
             HStack {
                 if let error = shelf.errorMessage { Text(error).foregroundStyle(.orange).lineLimit(1) }
-                else { Text("\(shelf.items.count) öğe").foregroundStyle(.white.opacity(0.32)) }
+                else { Text("\(shelf.items.count) öğe").foregroundStyle(MacBDesign.IslandToken.Ink.faint) }
                 Spacer()
                 Button(action: shelf.chooseFiles) { Image(systemName: "plus").frame(width: 26, height: 24) }.buttonStyle(.plain).help("Dosya ekle")
             }.font(.system(size: 10))
@@ -368,23 +368,23 @@ struct NotchView: View {
             NativeFileDragView(item: item).frame(height: 32)
             rowButton("doc.on.doc", "Kopyala") { shelf.copy(item: item); notify("doc.on.doc", "Kopyalandı") }
             rowButton("xmark", "Raftan kaldır") { shelf.remove(id: item.id) }
-        }.padding(.horizontal, 5).background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
+        }.padding(.horizontal, 5).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 9))
     }
 
     private func recentFileRow(_ item: RecentFileItem) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: item.isDirectory ? "folder.fill" : "doc.fill").frame(width: 18).foregroundStyle(.white.opacity(0.4))
+            Image(systemName: item.isDirectory ? "folder.fill" : "doc.fill").frame(width: 18).foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
             Text(item.name).font(.system(size: 11, weight: .medium)).lineLimit(1)
             Spacer()
             rowButton("plus", "Rafa ekle") { shelf.add(urls: [item.url]); notify("plus", "Rafa eklendi") }
-        }.padding(.horizontal, 8).frame(height: 32).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 9))
+        }.padding(.horizontal, 8).frame(height: 32).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 9))
     }
 
     private var cameraCard: some View {
         Button(action: cameraAction) {
             ZStack(alignment: .bottomTrailing) {
                 if camera.isRunning { CameraPreviewView(service: camera) }
-                else { Color.white.opacity(0.035).overlay(ProgressView().controlSize(.small)) }
+                else { MacBDesign.IslandToken.Fill.hairline.overlay(ProgressView().controlSize(.small)) }
                 Label("Büyüt", systemImage: "arrow.up.left.and.arrow.down.right").font(.system(size: 9, weight: .semibold))
                     .padding(.horizontal, 8).frame(height: 24).background(.black.opacity(0.6), in: Capsule()).padding(8)
             }.frame(height: 118).clipShape(RoundedRectangle(cornerRadius: 16))
@@ -394,13 +394,13 @@ struct NotchView: View {
     private func compactEmpty(_ title: String, symbol: String, detail: String) -> some View {
         HStack(spacing: 11) {
             Image(systemName: symbol).font(.system(size: 15, weight: .medium)).frame(width: 32, height: 32)
-                .background(.white.opacity(0.065), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .background(MacBDesign.IslandToken.Fill.low, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: 12, weight: .semibold))
-                Text(detail).font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
+                Text(detail).font(.system(size: 10)).foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
             }
             Spacer()
-        }.padding(10).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }.padding(10).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     /// True when the section needs an unlock before it shows anything.
@@ -432,33 +432,33 @@ struct NotchView: View {
             }
             .frame(maxWidth: .infinity)
             .frame(height: 112)
-            .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 17))
+            .background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 17))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(area.title) kilitli, açmak için seç")
     }
 
-    private func sectionLabel(_ title: String) -> some View { Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.35)).padding(.horizontal, 4) }
+    private func sectionLabel(_ title: String) -> some View { Text(title).font(.system(size: 9, weight: .semibold)).foregroundStyle(MacBDesign.IslandToken.Ink.faint).padding(.horizontal, 4) }
     private func rowButton(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) { Image(systemName: symbol).font(.system(size: 10, weight: .semibold)).frame(width: 25, height: 25) }
-            .buttonStyle(.plain).foregroundStyle(.white.opacity(0.48)).help(label).accessibilityLabel(label)
+            .buttonStyle(.plain).foregroundStyle(MacBDesign.IslandToken.Ink.tertiary).help(label).accessibilityLabel(label)
     }
     private func toastView(_ toast: IslandToast) -> some View {
         Label(toast.message, systemImage: toast.symbol).font(.system(size: 10, weight: .semibold))
-            .padding(.horizontal, 10).frame(height: 26).background(.white.opacity(0.14), in: Capsule())
-            .overlay(Capsule().strokeBorder(.white.opacity(0.08)))
+            .padding(.horizontal, 10).frame(height: 26).background(MacBDesign.IslandToken.Fill.raised, in: Capsule())
+            .overlay(Capsule().strokeBorder(MacBDesign.IslandToken.Fill.low))
     }
     private var mediaTitle: String { media.title.isEmpty ? media.source.title : media.title }
     private var mediaSubtitle: String { media.artist.isEmpty ? media.source.title : "\(media.artist) · \(media.source.title)" }
     private func cover(size: CGFloat, radius: CGFloat) -> some View {
         ZStack {
-            LinearGradient(colors: [.white.opacity(0.12), .white.opacity(0.04)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            LinearGradient(colors: [MacBDesign.IslandToken.Fill.base, MacBDesign.IslandToken.Fill.hairline], startPoint: .topLeading, endPoint: .bottomTrailing)
             if let artwork = media.artwork { Image(nsImage: artwork).resizable().scaledToFill() }
-            else { Image(systemName: media.source == .none ? "play.rectangle.fill" : media.source.symbol).font(.system(size: size * 0.3, weight: .semibold)).foregroundStyle(.white.opacity(0.5)) }
-        }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: radius)).overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(.white.opacity(0.08))).accessibilityHidden(true)
+            else { Image(systemName: media.source == .none ? "play.rectangle.fill" : media.source.symbol).font(.system(size: size * 0.3, weight: .semibold)).foregroundStyle(MacBDesign.IslandToken.Ink.secondary) }
+        }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: radius)).overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(MacBDesign.IslandToken.Fill.low)).accessibilityHidden(true)
     }
     private func playbackButton(_ icon: String, label: String, size: CGFloat, prominent: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: icon).font(.system(size: prominent ? 14 : 11, weight: .semibold)).foregroundStyle(prominent ? .black : .white.opacity(0.82)).frame(width: size, height: size).background(prominent ? .white : .white.opacity(0.07), in: Circle()) }
+        Button(action: action) { Image(systemName: icon).font(.system(size: prominent ? 14 : 11, weight: .semibold)).foregroundStyle(prominent ? .black : MacBDesign.IslandToken.Ink.primary).frame(width: size, height: size).background(prominent ? .white : MacBDesign.IslandToken.Fill.low, in: Circle()) }
             .buttonStyle(.plain).accessibilityLabel(label).help(label)
     }
 }
