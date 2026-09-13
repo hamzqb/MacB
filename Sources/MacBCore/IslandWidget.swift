@@ -133,11 +133,17 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
     }
 
     /// Widgets that cost nothing when the panel is closed can stay enabled by default.
+    /// Whether a fresh install starts with this widget on the strip.
+    ///
+    /// Four, and they answer the four questions somebody actually opens the
+    /// island for: what is playing, what is running, what the Mac is doing, and
+    /// what is eating the memory. Everything else is a deliberate choice from
+    /// the library, because a strip that arrives full is a strip nobody edits.
     public var isDefault: Bool {
         switch self {
-        case .media, .timer, .clipboard, .systemStats, .assistantActivity: return true
-        case .calendar, .weather, .quickLaunch, .tasks, .recentFiles,
-             .battery, .storage, .shelf, .notes, .worldClock, .topProcesses: return false
+        case .media, .assistantActivity, .systemStats, .topProcesses: return true
+        case .timer, .clipboard, .calendar, .weather, .quickLaunch, .tasks,
+             .recentFiles, .battery, .storage, .shelf, .notes, .worldClock: return false
         }
     }
 
@@ -252,9 +258,17 @@ public struct IslandWidgetLayout: Codable, Equatable, Sendable {
         guard let index = widgets.firstIndex(where: { $0.id == id }) else { return }
         widgets[index].isEnabled = true
         widgets[index].size = widgets[index].kind.defaultSize
-        let lastEnabled = widgets.lastIndex { $0.isEnabled && $0.id != id }
-        let destination = lastEnabled.map { $0 + 1 } ?? 0
-        if index > destination { move(from: index, to: destination) }
+        guard let lastEnabled = widgets.lastIndex(where: { $0.isEnabled && $0.id != id }) else {
+            move(from: index, to: 0)
+            return
+        }
+        // Moving forwards and moving backwards do not land in the same place:
+        // taking the widget out first shifts everything after it down by one.
+        // Only the forwards case used to be handled, so a widget that sat
+        // earlier in the catalogue than the last enabled one was switched on
+        // and quietly stayed where it was instead of joining the end.
+        let destination = index < lastEnabled ? lastEnabled : lastEnabled + 1
+        if index != destination { move(from: index, to: destination) }
     }
 
     /// The library, grouped the way it is browsed. Empty categories are dropped

@@ -52,6 +52,17 @@ import MacBCore
         apply(updated)
     }
 
+    /// Switches a widget on for this run only, leaving the stored layout alone.
+    ///
+    /// For the development previews, which exist to be photographed. They used
+    /// to go through the ordinary path and write the file, so taking a
+    /// screenshot rearranged the strip somebody had set up by hand.
+    func setEnabledWithoutSaving(id: UUID, _ isEnabled: Bool) {
+        var updated = layout
+        updated.setEnabled(id: id, isEnabled)
+        layout = updated
+    }
+
     func setEnabled(id: UUID, _ isEnabled: Bool) {
         var updated = layout
         updated.setEnabled(id: id, isEnabled)

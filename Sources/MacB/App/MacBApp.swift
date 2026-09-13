@@ -320,9 +320,12 @@ private final class Flag: @unchecked Sendable {
             UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
             showSettings()
         } else if CommandLine.arguments.contains("--preview-widgets") {
+            // Only for this run. Turning widgets on used to go through add(),
+            // which writes widgets.json, so every screenshot taken with this
+            // flag permanently rearranged the strip the user had set up.
             for kind in [IslandWidgetKind.battery, .storage, .shelf, .notes, .worldClock, .topProcesses] {
                 guard let widget = widgetLayout.layout.widgets.first(where: { $0.kind == kind }) else { continue }
-                widgetLayout.add(id: widget.id)
+                widgetLayout.setEnabledWithoutSaving(id: widget.id, true)
             }
             notch.showDevelopmentPreview(phase: .expanded, content: .home)
         } else if CommandLine.arguments.contains("--preview-active-timer") {
