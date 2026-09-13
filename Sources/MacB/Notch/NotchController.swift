@@ -77,6 +77,7 @@ struct IslandToast: Equatable {
     private var toastTask: Task<Void, Never>?
     private var cameraWindow: NSWindow?
     private let lidBlur = LidBlurOverlay()
+    private let glow = IslandGlowOverlay()
     var enabled = true {
         didSet { if enabled { start() } else { stop() } }
     }
@@ -310,6 +311,7 @@ struct IslandToast: Equatable {
         camera.stop()
         cameraWindow?.orderOut(nil); cameraWindow = nil
         lidBlur.hide()
+        glow.hide()
     }
 
     func openPanel() {
@@ -438,6 +440,9 @@ struct IslandToast: Equatable {
         }
         state.setDragging(sourceDragActive || incomingDragActive)
         if incoming {
+            // A tap the moment the island becomes a target, while the eyes are
+            // still on the file being dragged rather than on the notch.
+            if active, !presentation.isDropTarget { Haptics.targetEntered() }
             presentation.isDropTarget = active
             if !active { presentation.pendingDropURLs = [] }
         }
@@ -653,6 +658,18 @@ struct IslandToast: Equatable {
             render()
         }
     }
+    /// Lights the desktop under the island, in the colour the island is wearing.
+    ///
+    /// A collapsed island lights nothing: there is no object there to glow, and
+    /// a permanent smudge under the notch would be a defect rather than a
+    /// flourish.
+    private func updateGlow(frame: NSRect, on screen: NSScreen, phase: NotchPhase) {
+        guard preferences.islandGlow, phase != .collapsed else { return glow.hide() }
+        let tint = (media.isPlaying ? media.tint : nil) ?? MacBDesign.IslandToken.accent
+        glow.update(frame: frame, on: screen, tint: tint,
+                    strength: phase == .expanded ? 1 : 0.55)
+    }
+
     private func render(immediate: Bool = false) {
         guard let panel, let screen = display else { return }
         presentation.indicators = preferences.compactIndicators
@@ -675,8 +692,11 @@ struct IslandToast: Equatable {
             presentation.height = startHeight + (target.height - startHeight) * t
             presentation.radius = startRadius + (target.radius - startRadius) * t
             presentation.transition = fade
-            panel.setFrame(NSRect(x: screen.frame.midX - presentation.width / 2,
-                y: screen.frame.maxY - presentation.height, width: presentation.width, height: presentation.height), display: true)
+            let box = NSRect(x: screen.frame.midX - presentation.width / 2,
+                             y: screen.frame.maxY - presentation.height,
+                             width: presentation.width, height: presentation.height)
+            panel.setFrame(box, display: true)
+            updateGlow(frame: box, on: screen, phase: target.phase)
         }
         if immediate { apply(1, fade: 1); return }
         let duration = reduced ? 0.10 : (target.phase == .collapsed ? MacBDesign.closeDuration : MacBDesign.openDuration)

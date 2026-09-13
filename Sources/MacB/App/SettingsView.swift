@@ -799,6 +799,10 @@ struct SettingsView: View {
                               isOn: $preferences.islandEventsEnabled)
             }
             section("Island yüzeyi", "rectangle.topthird.inset.filled") {
+                settingToggle("Island ışığı",
+                              detail: "Island açıkken altındaki masaüstüne yumuşak bir ışık düşürür, çalan parçanın rengini alır. Kapalıyken hiçbir şey çizilmez.",
+                              isOn: $preferences.islandGlow)
+                rowDivider
                 Picker("Island yüzeyi", selection: $preferences.islandAppearance) {
                     ForEach(IslandAppearance.allCases) { Text($0.title).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("Island yüzeyi")

@@ -25,10 +25,12 @@ struct IslandDropView: View {
             HStack(spacing: IslandGeometry.gap) {
                 dropCard(title: "AirDrop", icon: Self.airDropIcon,
                          symbol: "dot.radiowaves.up.forward", tint: Color(nsColor: .systemBlue)) {
+                    Haptics.accepted()
                     sendToAirDrop(pendingURLs)
                 }
                 dropCard(title: "Dosya Rafı", icon: nil,
                          symbol: "arrow.down.document", tint: MacBDesign.IslandToken.accent) {
+                    Haptics.accepted()
                     addToShelf(pendingURLs)
                 }
             }
@@ -38,7 +40,7 @@ struct IslandDropView: View {
                         .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
                         .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                     ForEach(recentTargets.items.prefix(5)) { target in
-                        Button { openTarget(target) } label: {
+                        Button { Haptics.accepted(); openTarget(target) } label: {
                             HStack(spacing: MacBDesign.Space.snug) {
                                 if let icon = applicationIcon(for: target) {
                                     Image(nsImage: icon).resizable().frame(width: 14, height: 14)
@@ -112,7 +114,12 @@ struct IslandDropView: View {
             .motion(MacBDesign.Motion.snap, value: isHovered)
         }
         .buttonStyle(.plain)
-        .onHover { hovered = $0 ? title : (hovered == title ? nil : hovered) }
+        .onHover { inside in
+            hovered = inside ? title : (hovered == title ? nil : hovered)
+            // Only on the way in. A tap on the way out as well turns a sweep
+            // across three targets into a burst of six.
+            if inside { Haptics.targetEntered() }
+        }
         .accessibilityLabel("\(title): \(pendingLabel)")
     }
 }

@@ -58,6 +58,7 @@ struct IslandNavigation: View {
                             in: Circle())
         }
         .buttonStyle(.plain)
+        .islandFocusRing(in: Circle())
         .help(label)
         .accessibilityLabel(label)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
@@ -84,6 +85,7 @@ struct IslandPillRow<Value: Hashable>: View {
                                     in: Capsule())
                 }
                 .buttonStyle(.plain)
+                .islandFocusRing(in: Capsule())
                 .accessibilityLabel(title(value))
                 .accessibilityAddTraits(value == selected ? [.isButton, .isSelected] : .isButton)
             }

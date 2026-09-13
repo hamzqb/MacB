@@ -124,6 +124,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var lidHingeAngle: Double {
         didSet { defaults.set(LidFold.clampOpenAngle(lidHingeAngle), forKey: "lidHingeAngle") }
     }
+    /// Whether the island spills light onto the desktop behind it.
+    @Published var islandGlow: Bool { didSet { defaults.set(islandGlow, forKey: "islandGlow") } }
     /// Whether the whole screen blurs with the fold, or only the island.
     @Published var lidScreenBlur: Bool { didSet { defaults.set(lidScreenBlur, forKey: "lidScreenBlur") } }
     /// Whether the user's rules are allowed to run.
@@ -161,6 +163,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "islandEventsEnabled": true,
                                     "lidHingeEnabled": true,
                                     "lidHingeAngle": LidFold.defaultOpenAngle,
+                                    "islandGlow": true,
                                     "lidScreenBlur": true,
                                     "automationEnabled": false,
                                     "secondaryTimeZone": "America/New_York"])
@@ -184,6 +187,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         islandEventsEnabled = defaults.bool(forKey: "islandEventsEnabled")
         lidHingeEnabled = defaults.bool(forKey: "lidHingeEnabled")
         lidHingeAngle = LidFold.clampOpenAngle(defaults.double(forKey: "lidHingeAngle"))
+        islandGlow = defaults.bool(forKey: "islandGlow")
         lidScreenBlur = defaults.bool(forKey: "lidScreenBlur")
         automationEnabled = defaults.bool(forKey: "automationEnabled")
         lidWelcomeText = defaults.string(forKey: "lidWelcomeText") ?? ""

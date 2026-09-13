@@ -33,6 +33,8 @@ struct NotchView: View {
     var cameraAction: () -> Void
     var notify: (String, String) -> Void
     @State private var clipboardFilter: ClipboardFilter = .recent
+    /// Where the pointer is inside the panel, for the specular highlight.
+    @State private var pointer: CGPoint?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -53,6 +55,13 @@ struct NotchView: View {
         }
         .frame(width: presentation.width, height: presentation.height, alignment: .top)
         .clipShape(islandShape)
+        .overlay(specularHighlight)
+        .onContinuousHover(coordinateSpace: .local) { phase in
+            switch phase {
+            case .active(let point): pointer = point
+            case .ended: pointer = nil
+            }
+        }
         .overlay(islandShape.strokeBorder(surfaceStroke,
             lineWidth: presentation.layout.phase == .collapsed ? 0 : 0.5)
             .motion(MacBDesign.Motion.gentle, value: media.tint))
@@ -60,6 +69,34 @@ struct NotchView: View {
         .foregroundStyle(.white)
         .preferredColorScheme(.dark)
         .onExitCommand(perform: close)
+    }
+
+    /// The bright spot a sheet of glass carries under a light source.
+    ///
+    /// Apple's interactive glass already brightens the rim under the pointer,
+    /// which is felt more than seen. This is the other half of the same idea:
+    /// a soft pool of light on the face of the sheet, moving with the cursor,
+    /// so the panel reads as something with a surface rather than a hole cut in
+    /// the screen. It is deliberately faint. A highlight you notice as a
+    /// highlight has already failed.
+    ///
+    /// Only on glass, and never while collapsed: there is no sheet to light
+    /// when the island is a black bar, and a moving spot on pure black would
+    /// just look like a rendering fault.
+    @ViewBuilder private var specularHighlight: some View {
+        if let pointer, carriesGlass, presentation.layout.phase != .collapsed {
+            RadialGradient(colors: [.white.opacity(0.10), .white.opacity(0.03), .clear],
+                           center: .center, startRadius: 0, endRadius: 90)
+                .frame(width: 220, height: 220)
+                .position(pointer)
+                .blendMode(.plusLighter)
+                .allowsHitTesting(false)
+                .motion(MacBDesign.Motion.instant, value: pointer)
+        }
+    }
+
+    private var carriesGlass: Bool {
+        preferences.islandAppearance == .liquidGlass || preferences.islandAppearance == .blackGlass
     }
 
     @ViewBuilder private var islandSurface: some View {
@@ -94,12 +131,13 @@ struct NotchView: View {
     /// with a lit edge rather than pretending to refract.
     @ViewBuilder private func liquidGlass(tint: Color?) -> some View {
         if #available(macOS 26.0, *) {
-            // Interactive glass tracks the pointer: the rim brightens where the
-            // cursor is, which is what makes the panel feel like a physical
-            // sheet rather than a blurred screenshot.
-            Color.clear.glassEffect(
-                (tint.map { Glass.regular.tint($0) } ?? .regular).interactive(),
-                in: islandShape)
+            // Not .interactive(). That variant is built for a control: it swings
+            // the whole sheet's opacity on press, which on a button is the point
+            // and on a panel this size reads as the surface glitching. The
+            // pointer response lives in specularHighlight instead, where it is
+            // a light moving over a sheet that does not itself change.
+            Color.clear.glassEffect(tint.map { Glass.regular.tint($0) } ?? .regular,
+                                    in: islandShape)
         } else {
             Rectangle().fill(.ultraThinMaterial)
             if let tint { tint }
