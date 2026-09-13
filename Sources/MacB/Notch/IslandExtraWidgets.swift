@@ -26,20 +26,20 @@ struct BatteryWidget: View {
 
     var body: some View {
         WidgetCard {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.close) {
                 WidgetCaption("Pil", trailing: monitor.snapshot.isCharging ? "Şarjda" : nil)
                 if let percent {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: MacBDesign.Space.tight) {
                         Text("\(Int(percent))")
-                            .font(.system(size: 24, weight: .semibold, design: .rounded))
+                            .font(.system(size: MacBDesign.TypeScale.display, weight: .semibold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(MacBDesign.IslandToken.primaryText)
                         Text("%")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                             .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         if monitor.snapshot.isCharging {
                             Image(systemName: "bolt.fill")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: MacBDesign.TypeScale.caption, weight: .bold))
                                 .foregroundStyle(tint)
                         }
                         Spacer(minLength: 0)
@@ -47,12 +47,12 @@ struct BatteryWidget: View {
                     WidgetMeter(fraction: percent / 100, tint: tint)
                 } else {
                     Text("Pil yok")
-                        .font(.system(size: 11))
+                        .font(.system(size: MacBDesign.TypeScale.caption))
                         .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                 }
                 if monitor.snapshot.thermalState != .nominal {
                     Text(thermalTitle)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
                         .foregroundStyle(MacBDesign.IslandToken.destructive)
                 }
                 Spacer(minLength: 0)
@@ -91,10 +91,10 @@ struct StorageWidget: View {
 
     var body: some View {
         WidgetCard {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.close) {
                 WidgetCaption(isNarrow ? "Disk" : "Depolama")
                 if monitor.snapshot.totalDisk > 0 {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: MacBDesign.Space.tight) {
                         Text(Self.short(monitor.snapshot.availableDisk))
                             .font(.system(size: isNarrow ? 16 : 19, weight: .semibold, design: .rounded))
                             .monospacedDigit()
@@ -103,19 +103,19 @@ struct StorageWidget: View {
                             .minimumScaleFactor(0.7)
                         if !isNarrow {
                             Text("boş")
-                                .font(.system(size: 11))
+                                .font(.system(size: MacBDesign.TypeScale.caption))
                                 .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         }
                         Spacer(minLength: 0)
                     }
                     WidgetMeter(fraction: used, tint: tint)
                     Text(isNarrow ? "boş" : "\(Self.short(monitor.snapshot.totalDisk)) toplam")
-                        .font(.system(size: 10))
+                        .font(.system(size: MacBDesign.TypeScale.micro))
                         .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                         .lineLimit(1)
                 } else {
                     Text("Disk okunamadı")
-                        .font(.system(size: 11))
+                        .font(.system(size: MacBDesign.TypeScale.caption))
                         .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                 }
                 Spacer(minLength: 0)
@@ -143,13 +143,13 @@ struct ShelfWidget: View {
     var body: some View {
         Button(action: open) {
             WidgetCard {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                     WidgetCaption("Raf", trailing: shelf.items.isEmpty ? nil : "\(shelf.items.count)")
                     if shelf.items.isEmpty {
                         WidgetEmptyState(symbol: "tray.and.arrow.down", title: "Dosya sürükle",
                                          hint: "Çentiğin üstüne bırak")
                     } else {
-                        HStack(spacing: 7) {
+                        HStack(spacing: MacBDesign.Space.close) {
                             ForEach(shelf.items.prefix(4)) { item in
                                 Image(nsImage: icon(for: item))
                                     .resizable()
@@ -158,7 +158,7 @@ struct ShelfWidget: View {
                             }
                             if shelf.items.count > 4 {
                                 Text("+\(shelf.items.count - 4)")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                                     .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                             }
                             Spacer(minLength: 0)
@@ -188,7 +188,7 @@ struct NotesWidget: View {
 
     var body: some View {
         WidgetCard(isActive: isFocused) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
                 WidgetCaption("Not", trailing: note.isEmpty ? nil : "\(note.text.count)")
                 // A plain text view rather than a scrolling editor: the card is
                 // four lines tall, and a note that needs more than that belongs
@@ -196,7 +196,7 @@ struct NotesWidget: View {
                 TextField("Aklına geleni yaz", text: $note.text, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(4, reservesSpace: true)
-                    .font(.system(size: 11))
+                    .font(.system(size: MacBDesign.TypeScale.caption))
                     .foregroundStyle(MacBDesign.IslandToken.primaryText)
                     .focused($isFocused)
                     .accessibilityLabel("Hızlı not")
@@ -206,13 +206,13 @@ struct NotesWidget: View {
             if !note.isEmpty {
                 Button { note.clear() } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
                         .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         .frame(width: 16, height: 16)
                         .background(MacBDesign.IslandToken.navFill, in: Circle())
                 }
                 .buttonStyle(.plain)
-                .padding(8)
+                .padding(MacBDesign.Space.close)
                 .help("Notu temizle")
                 .accessibilityLabel("Notu temizle")
             }
@@ -254,7 +254,7 @@ struct WorldClockWidget: View {
     var body: some View {
         WidgetCard {
             TimelineView(.periodic(from: .now, by: 30)) { context in
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
                     WidgetCaption(name, trailing: isNarrow ? nil : Self.offsetLabel(zone))
                     Text(Self.time(context.date, in: zone))
                         .font(.system(size: isNarrow ? 18 : 22, weight: .semibold, design: .rounded))
@@ -263,7 +263,7 @@ struct WorldClockWidget: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                     Text(isNarrow ? Self.shortDay(context.date, in: zone) : Self.day(context.date, in: zone))
-                        .font(.system(size: 10))
+                        .font(.system(size: MacBDesign.TypeScale.micro))
                         .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                     Spacer(minLength: 0)
                 }
@@ -331,6 +331,6 @@ struct WidgetMeter: View {
             }
         }
         .frame(height: 5)
-        .animation(.easeOut(duration: 0.2), value: fraction)
+        .motion(MacBDesign.Motion.quick, value: fraction)
     }
 }

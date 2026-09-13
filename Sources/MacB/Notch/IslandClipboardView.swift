@@ -85,8 +85,8 @@ struct IslandClipboardView: View {
     private var removableCount: Int { clipboard.items.filter { !$0.isFavorite }.count }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
+            HStack(spacing: MacBDesign.Space.regular) {
                 filterRow
                 trashButton
             }
@@ -94,12 +94,12 @@ struct IslandClipboardView: View {
                 emptyState
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: MacBDesign.Space.regular) {
                         ForEach(visible) { item in
                             ClipboardCard(item: item, clipboard: clipboard, notify: notify)
                         }
                     }
-                    .padding(.bottom, 2)
+                    .padding(.bottom, MacBDesign.Space.hair)
                 }
                 .scrollClipDisabled()
             }
@@ -110,12 +110,12 @@ struct IslandClipboardView: View {
     /// a bug, and the row has to survive a narrow panel intact.
     private var filterRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
+            HStack(spacing: MacBDesign.Space.snug) {
                 ForEach(ClipboardFilter.allCases, id: \.self) { value in
                     pill(value)
                 }
             }
-            .padding(.trailing, 2)
+            .padding(.trailing, MacBDesign.Space.hair)
         }
         .scrollClipDisabled()
     }
@@ -124,14 +124,14 @@ struct IslandClipboardView: View {
         let isSelected = value == filter
         let total = count(value)
         return Button { filter = value } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: MacBDesign.Space.snug) {
                 Image(systemName: value.symbol)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                 Text(value.title)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
                 if total > 0 {
                     Text("\(total)")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                         .monospacedDigit()
                         .opacity(isSelected ? 0.55 : 0.45)
                 }
@@ -140,7 +140,7 @@ struct IslandClipboardView: View {
             .foregroundStyle(isSelected ? Color.black
                              : (total > 0 ? MacBDesign.IslandToken.primaryText
                                 : MacBDesign.IslandToken.tertiaryText))
-            .padding(.horizontal, 11)
+            .padding(.horizontal, MacBDesign.Space.comfortable)
             .frame(height: MacBDesign.IslandToken.pillHeight)
             .background(isSelected ? MacBDesign.IslandToken.navSelectedFill : MacBDesign.IslandToken.navFill,
                         in: Capsule())
@@ -160,7 +160,7 @@ struct IslandClipboardView: View {
             notify("trash", "\(removable.count) öğe silindi")
         } label: {
             Image(systemName: "trash")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
                 .foregroundStyle(removableCount > 0
                                  ? MacBDesign.IslandToken.destructive
                                  : MacBDesign.IslandToken.tertiaryText)
@@ -175,19 +175,19 @@ struct IslandClipboardView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: MacBDesign.Space.close) {
             ZStack {
                 Circle()
                     .fill(RadialGradient(colors: [MacBDesign.IslandToken.Fill.raised, MacBDesign.IslandToken.Fill.hairline],
                                          center: .topLeading, startRadius: 1, endRadius: 40))
                 Circle().strokeBorder(MacBDesign.IslandToken.Fill.base, lineWidth: 0.8)
                 Image(systemName: filter.symbol)
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: MacBDesign.TypeScale.title, weight: .medium))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             }
             .frame(width: 40, height: 40)
             Text(filter.emptyMessage)
-                .font(.system(size: 11))
+                .font(.system(size: MacBDesign.TypeScale.caption))
                 .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                 .multilineTextAlignment(.center)
         }
@@ -236,28 +236,28 @@ private struct ClipboardCard: View {
         } else {
             MacBDesign.IslandToken.widgetFill
             Text(item.text)
-                .font(.system(size: 10))
+                .font(.system(size: MacBDesign.TypeScale.micro))
                 .foregroundStyle(MacBDesign.IslandToken.primaryText.opacity(0.8))
                 .lineLimit(6)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(8)
+                .padding(MacBDesign.Space.close)
         }
     }
 
     @ViewBuilder private var badge: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: MacBDesign.Space.tight) {
             if let icon = sourceIcon {
                 Image(nsImage: icon).resizable().frame(width: 12, height: 12)
             }
             Text(item.colorHex ?? relativeTime)
-                .font(.system(size: 9, weight: item.colorHex == nil ? .regular : .bold))
+                .font(.system(size: MacBDesign.TypeScale.micro, weight: item.colorHex == nil ? .regular : .bold))
         }
         .foregroundStyle(labelColor)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
+        .padding(.horizontal, MacBDesign.Space.snug)
+        .padding(.vertical, MacBDesign.Space.tight)
         .background(item.colorHex == nil ? AnyShapeStyle(.black.opacity(0.55)) : AnyShapeStyle(.clear), in: Capsule())
-        .padding(7)
+        .padding(MacBDesign.Space.close)
     }
 
     private var actions: some View {
@@ -269,29 +269,29 @@ private struct ClipboardCard: View {
             }
             Spacer()
         }
-        .padding(6)
+        .padding(MacBDesign.Space.snug)
     }
 
     private var favoriteMark: some View {
         VStack {
             HStack {
                 Image(systemName: "star.fill")
-                    .font(.system(size: 9))
+                    .font(.system(size: MacBDesign.TypeScale.micro))
                     .foregroundStyle(.yellow)
-                    .padding(4)
+                    .padding(MacBDesign.Space.tight)
                     .background(.black.opacity(0.45), in: Circle())
                 Spacer()
             }
             Spacer()
         }
-        .padding(6)
+        .padding(MacBDesign.Space.snug)
         .allowsHitTesting(false)
     }
 
     private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 20, height: 20)
                 .background(.black.opacity(0.55), in: Circle())

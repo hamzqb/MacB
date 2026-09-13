@@ -7,12 +7,12 @@ struct ProductivityView: View {
     @ObservedObject var keyboardCleaning: KeyboardCleaningService
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: MacBDesign.Space.close) {
             ForEach(visibleActivities) { activity in
                 statusRow(symbol: activity.kind.symbol, title: activity.kind.rawValue,
                           detail: "\(activity.source) · \(activity.elapsedText)", tint: .orange)
             }
-            HStack(spacing: 7) {
+            HStack(spacing: MacBDesign.Space.close) {
                 metric("CPU", value: "\(Int(systemMonitor.snapshot.cpuUsage))%")
                 metric("RAM", value: byteRatio(systemMonitor.snapshot.usedMemory, systemMonitor.snapshot.totalMemory))
                 if let battery = systemMonitor.snapshot.batteryPercent {
@@ -23,18 +23,18 @@ struct ProductivityView: View {
                 Button(action: keyboardCleaning.stop) {
                     Label(keyboardCleaning.remainingSeconds > 0 ? "Kilidi aç · \(keyboardCleaning.remainingSeconds) sn" : "Kilidi aç",
                           systemImage: "keyboard.badge.ellipsis")
-                        .font(.system(size: 10, weight: .semibold)).frame(maxWidth: .infinity).frame(height: 32)
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold)).frame(maxWidth: .infinity).frame(height: 32)
                         .background(.orange.opacity(0.16), in: RoundedRectangle(cornerRadius: 10))
                 }.buttonStyle(.plain)
             } else {
                 Button { keyboardCleaning.start(duration: 60) } label: {
                     Label("Klavyeyi 1 dakika kilitle", systemImage: "keyboard")
-                        .font(.system(size: 10, weight: .semibold)).frame(maxWidth: .infinity).frame(height: 32)
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold)).frame(maxWidth: .infinity).frame(height: 32)
                         .background(MacBDesign.IslandToken.Fill.low, in: RoundedRectangle(cornerRadius: 10))
                 }.buttonStyle(.plain)
             }
             if let error = keyboardCleaning.errorMessage {
-                Text(error).font(.system(size: 9)).foregroundStyle(.orange).lineLimit(2)
+                Text(error).font(.system(size: MacBDesign.TypeScale.micro)).foregroundStyle(.orange).lineLimit(2)
             }
         }
     }
@@ -46,21 +46,21 @@ struct ProductivityView: View {
     }
 
     private func statusRow(symbol: String, title: String, detail: String, tint: Color) -> some View {
-        HStack(spacing: 9) {
-            Image(systemName: symbol).font(.system(size: 13, weight: .semibold)).foregroundStyle(tint)
+        HStack(spacing: MacBDesign.Space.regular) {
+            Image(systemName: symbol).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold)).foregroundStyle(tint)
                 .frame(width: 30, height: 30).background(tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 11, weight: .semibold))
-                Text(detail).font(.system(size: 9)).foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
+            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                Text(title).font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                Text(detail).font(.system(size: MacBDesign.TypeScale.micro)).foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
             }
             Spacer()
-        }.padding(8).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 12))
+        }.padding(MacBDesign.Space.close).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 12))
     }
 
     private func metric(_ title: String, value: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value).font(.system(size: 12, weight: .semibold, design: .rounded)).monospacedDigit()
-            Text(title).font(.system(size: 8, weight: .medium)).foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
+        VStack(spacing: MacBDesign.Space.hair) {
+            Text(value).font(.system(size: MacBDesign.TypeScale.body, weight: .semibold, design: .rounded)).monospacedDigit()
+            Text(title).font(.system(size: MacBDesign.TypeScale.micro, weight: .medium)).foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
         }.frame(maxWidth: .infinity).frame(height: 42).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 11))
     }
 

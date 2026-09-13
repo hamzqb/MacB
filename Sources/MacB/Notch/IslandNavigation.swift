@@ -33,7 +33,7 @@ struct IslandNavigation: View {
     var openSettings: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: MacBDesign.Space.close) {
             ForEach(NotchContent.allCases, id: \.rawValue) { section in
                 circleButton(section.symbol, label: section.title,
                              isSelected: section == selected) { select(section) }
@@ -51,7 +51,7 @@ struct IslandNavigation: View {
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
                 .foregroundStyle(isSelected ? Color.black : MacBDesign.IslandToken.primaryText)
                 .frame(width: MacBDesign.IslandToken.navButton, height: MacBDesign.IslandToken.navButton)
                 .background(isSelected ? MacBDesign.IslandToken.navSelectedFill : MacBDesign.IslandToken.navFill,
@@ -72,13 +72,13 @@ struct IslandPillRow<Value: Hashable>: View {
     var select: (Value) -> Void
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: MacBDesign.Space.snug) {
             ForEach(values, id: \.self) { value in
                 Button { select(value) } label: {
                     Text(title(value))
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
                         .foregroundStyle(value == selected ? Color.black : MacBDesign.IslandToken.primaryText)
-                        .padding(.horizontal, 12)
+                        .padding(.horizontal, MacBDesign.Space.comfortable)
                         .frame(height: MacBDesign.IslandToken.pillHeight)
                         .background(value == selected ? MacBDesign.IslandToken.navSelectedFill : MacBDesign.IslandToken.navFill,
                                     in: Capsule())

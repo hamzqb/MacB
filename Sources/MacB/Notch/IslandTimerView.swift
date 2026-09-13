@@ -8,11 +8,11 @@ struct IslandTimerView: View {
     private let minuteSpacing: CGFloat = 8
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
             ruler
-            HStack(spacing: 12) {
+            HStack(spacing: MacBDesign.Space.comfortable) {
                 Text(timer.isActive ? timer.remainingText : timer.selectionText)
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+                    .font(.system(size: MacBDesign.TypeScale.display, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(MacBDesign.IslandToken.accent)
                     .frame(minWidth: 120, alignment: .leading)
@@ -20,9 +20,9 @@ struct IslandTimerView: View {
                 ForEach(TimerService.presets, id: \.self) { minutes in
                     Button { timer.selectedMinutes = Double(minutes) } label: {
                         Text("\(minutes) dk")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
                             .foregroundStyle(Int(timer.selectedMinutes) == minutes ? Color.black : .white)
-                            .padding(.horizontal, 12)
+                            .padding(.horizontal, MacBDesign.Space.comfortable)
                             .frame(height: MacBDesign.IslandToken.pillHeight)
                             .background(Int(timer.selectedMinutes) == minutes ? Color.white : MacBDesign.IslandToken.navFill,
                                         in: Capsule())
@@ -38,7 +38,7 @@ struct IslandTimerView: View {
 
     @ViewBuilder private var primaryAction: some View {
         if timer.isActive {
-            HStack(spacing: 8) {
+            HStack(spacing: MacBDesign.Space.close) {
                 actionPill(timer.isRunning ? "Duraklat" : "Sürdür") {
                     timer.isRunning ? timer.pause() : timer.resume()
                 }
@@ -52,9 +52,9 @@ struct IslandTimerView: View {
     private func actionPill(_ title: String, isDestructive: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
                 .foregroundStyle(isDestructive ? MacBDesign.IslandToken.destructive : MacBDesign.IslandToken.accent)
-                .padding(.horizontal, 16)
+                .padding(.horizontal, MacBDesign.Space.loose)
                 .frame(height: MacBDesign.IslandToken.pillHeight + 2)
                 .background((isDestructive ? MacBDesign.IslandToken.destructive : MacBDesign.IslandToken.accent).opacity(0.18),
                             in: Capsule())
@@ -110,10 +110,10 @@ struct IslandTimerView: View {
     }
 
     @ViewBuilder private func tick(minute: Int, isMajor: Bool) -> some View {
-        VStack(spacing: 4) {
+        VStack(spacing: MacBDesign.Space.tight) {
             if isMajor {
                 Text("\(minute)")
-                    .font(.system(size: 10, weight: minute == Int(timer.selectedMinutes) ? .bold : .regular))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: minute == Int(timer.selectedMinutes) ? .bold : .regular))
                     .foregroundStyle(minute == Int(timer.selectedMinutes) ? Color.white : MacBDesign.IslandToken.accent)
                     .fixedSize()
             } else {

@@ -140,7 +140,7 @@ struct IslandWidgetStrip: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
                         .strokeBorder(MacBDesign.IslandToken.accent, lineWidth: 1.5))
-                .overlay(alignment: .topTrailing) { editingControls(widget).padding(6) }
+                .overlay(alignment: .topTrailing) { editingControls(widget).padding(MacBDesign.Space.snug) }
         }
     }
 
@@ -149,7 +149,7 @@ struct IslandWidgetStrip: View {
     /// width the three size letters collapse into one menu instead of sliding
     /// on top of each other and of the title underneath.
     private func editingControls(_ widget: IslandWidget) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: MacBDesign.Space.tight) {
             if widget.size == .small {
                 Menu {
                     ForEach(IslandWidgetSize.allCases, id: \.rawValue) { size in
@@ -157,7 +157,7 @@ struct IslandWidgetStrip: View {
                     }
                 } label: {
                     Text(sizeLabel(widget.size))
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
                         .foregroundStyle(Color.black)
                         .frame(width: 18, height: 18)
                         .background(Color.white, in: Circle())
@@ -170,7 +170,7 @@ struct IslandWidgetStrip: View {
                 ForEach(IslandWidgetSize.allCases, id: \.rawValue) { size in
                     Button { store.resize(id: widget.id, to: size) } label: {
                         Text(sizeLabel(size))
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
                             .foregroundStyle(widget.size == size ? Color.black : .white)
                             .frame(width: 18, height: 18)
                             .background(widget.size == size ? Color.white : MacBDesign.IslandToken.Fill.strong, in: Circle())
@@ -181,7 +181,7 @@ struct IslandWidgetStrip: View {
             }
             Button { store.setEnabled(id: widget.id, false) } label: {
                 Image(systemName: "minus")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
                     .foregroundStyle(Color.white)
                     .frame(width: 18, height: 18)
                     .background(MacBDesign.IslandToken.destructive, in: Circle())
@@ -189,7 +189,7 @@ struct IslandWidgetStrip: View {
             .buttonStyle(.plain)
             .accessibilityLabel("\(widget.kind.title) widget'ını kaldır")
         }
-        .padding(3)
+        .padding(MacBDesign.Space.tight)
         .background(Capsule().fill(Color.black.opacity(0.62)))
     }
 
@@ -264,12 +264,12 @@ struct WidgetCaption: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: MacBDesign.Space.snug) {
             Text(title)
             Spacer(minLength: 0)
             if let trailing { Text(trailing).fontWeight(.semibold) }
         }
-        .font(.system(size: 10, weight: .medium))
+        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
         .foregroundStyle(MacBDesign.IslandToken.secondaryText)
         .lineLimit(1)
         .minimumScaleFactor(0.8)
@@ -286,7 +286,7 @@ struct WidgetCard<Content: View>: View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.horizontal, span <= 1 ? 9 : 12)
-            .padding(.vertical, 10)
+            .padding(.vertical, MacBDesign.Space.regular)
             .background(cardSurface)
     }
 
@@ -390,79 +390,79 @@ struct MediaWidget: View {
     /// lines of text, and skip is the control people reach for most.
     private var compact: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 7) {
+            HStack(spacing: MacBDesign.Space.close) {
                 // With the cover already filling the card, a second copy of it
                 // is just a smaller hole in the artwork.
                 if style != .artwork { cover(size: 26, radius: 6) }
                 VStack(alignment: .leading, spacing: 0) {
                     Text(media.title.isEmpty ? media.source.title : media.title)
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .bold))
                         .lineLimit(1).minimumScaleFactor(0.8)
                     Text(media.artist.isEmpty ? media.source.title : media.artist)
-                        .font(.system(size: 9))
+                        .font(.system(size: MacBDesign.TypeScale.micro))
                         .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         .lineLimit(1).minimumScaleFactor(0.8)
                 }
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 2)
-            transport(glyph: 10, diameter: 24, spacing: 9)
+            transport(glyph: 10, diameter: 24, spacing: MacBDesign.Space.regular)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
+        .padding(.horizontal, MacBDesign.Space.regular)
+        .padding(.vertical, MacBDesign.Space.regular)
     }
 
     private var full: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 10) {
+            HStack(alignment: .center, spacing: MacBDesign.Space.regular) {
                 if style != .artwork { cover(size: 38, radius: 9) }
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
                     Text(media.title.isEmpty ? media.source.title : media.title)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .bold))
                         .lineLimit(1).minimumScaleFactor(0.85)
                     Text(media.artist.isEmpty ? media.source.title : media.artist)
-                        .font(.system(size: 10))
+                        .font(.system(size: MacBDesign.TypeScale.micro))
                         .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: media.source.symbol)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                     .accessibilityHidden(true)
             }
             Spacer(minLength: 4)
             if media.duration > 0 { progress }
-            transport(glyph: 12, diameter: 30, spacing: 20)
+            transport(glyph: 12, diameter: 30, spacing: MacBDesign.Space.section)
                 .padding(.top, media.duration > 0 ? 5 : 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, MacBDesign.Space.comfortable)
+        .padding(.vertical, MacBDesign.Space.regular)
     }
 
     private var record: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: MacBDesign.Space.comfortable) {
             vinyl
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
                 Text(media.title.isEmpty ? media.source.title : media.title)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .bold))
                     .lineLimit(1).minimumScaleFactor(0.85)
                 Text(media.artist.isEmpty ? media.source.title : media.artist)
-                    .font(.system(size: 10))
+                    .font(.system(size: MacBDesign.TypeScale.micro))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                     .lineLimit(1)
                 Spacer(minLength: 0)
-                transport(glyph: 11, diameter: 28, spacing: 16, alignment: .leading)
+                transport(glyph: 11, diameter: 28, spacing: MacBDesign.Space.loose, alignment: .leading)
             }
-            .padding(.vertical, 12)
+            .padding(.vertical, MacBDesign.Space.comfortable)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, MacBDesign.Space.comfortable)
     }
 
     private var idle: some View {
         WidgetEmptyState(symbol: "music.note", title: "Çalan bir şey yok",
                          hint: "Spotify, Müzik veya tarayıcı")
-            .padding(10)
+            .padding(MacBDesign.Space.regular)
     }
 
     // MARK: - Pieces
@@ -511,7 +511,7 @@ struct MediaWidget: View {
                     }
                 }
                 .clipShape(Circle())
-                .padding(20)
+                .padding(MacBDesign.Space.section)
                 .rotationEffect(angle)
             }
         }
@@ -541,7 +541,7 @@ struct MediaWidget: View {
                 .background(.black.opacity(0.34), in: Circle())
                 .background(tint.opacity(media.isPlaying ? 0.55 : 0.30), in: Circle())
                 .overlay(Circle().strokeBorder(MacBDesign.IslandToken.Fill.strong, lineWidth: 0.5))
-                .animation(.easeOut(duration: 0.45), value: media.tint)
+                .motion(MacBDesign.Motion.gentle, value: media.tint)
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.plain)
@@ -551,14 +551,14 @@ struct MediaWidget: View {
     /// The bar alone at narrow widths; the times join it once there is room,
     /// because a clipped timestamp is worse than no timestamp.
     private var progress: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: MacBDesign.Space.tight) {
             if span >= 3 {
                 HStack {
                     Text(TimerService.format(media.position))
                     Spacer(minLength: 6)
                     Text("-" + TimerService.format(max(0, media.duration - media.position)))
                 }
-                .font(.system(size: 9))
+                .font(.system(size: MacBDesign.TypeScale.micro))
                 .monospacedDigit()
                 .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             }
@@ -567,7 +567,7 @@ struct MediaWidget: View {
                     Capsule().fill(MacBDesign.IslandToken.Fill.strong)
                     Capsule().fill(tint)
                         .frame(width: proxy.size.width * min(1, max(0, media.position / max(1, media.duration))))
-                        .animation(.easeOut(duration: 0.3), value: media.position)
+                        .motion(MacBDesign.Motion.normal, value: media.position)
                 }
             }
             .frame(height: 2)
@@ -601,15 +601,15 @@ struct TimerWidget: View {
             if timer.isActive {
                 activeTimer
             } else {
-                VStack(spacing: 4) {
+                VStack(spacing: MacBDesign.Space.tight) {
                     WidgetCaption("Zamanlayıcı")
                     Spacer(minLength: 0)
                     Text(timer.selectionText)
-                        .font(.system(size: 24, weight: .semibold, design: .rounded))
+                        .font(.system(size: MacBDesign.TypeScale.display, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(MacBDesign.IslandToken.accent)
                     Spacer(minLength: 0)
-                    HStack(spacing: 8) {
+                    HStack(spacing: MacBDesign.Space.close) {
                         roundButton("play.fill", label: "Başlat", tint: MacBDesign.IslandToken.accent) { timer.start() }
                         roundButton("slider.horizontal.3", label: "Süre seç", tint: MacBDesign.IslandToken.Fill.strong, action: open)
                     }
@@ -635,25 +635,25 @@ struct TimerWidget: View {
                 .trim(from: 0, to: max(0.001, 1 - timer.progress))
                 .stroke(MacBDesign.IslandToken.accent,
                         style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .animation(.linear(duration: 0.25), value: timer.progress)
+                .motion(MacBDesign.Motion.progress, value: timer.progress)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 
     private var activeTimer: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
             WidgetCaption(timer.isRunning ? "Zamanlayıcı" : "Duraklatıldı")
             Spacer(minLength: 0)
             Text(timer.remainingText)
-                .font(.system(size: 26, weight: .semibold, design: .rounded))
+                .font(.system(size: MacBDesign.TypeScale.display, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
                 .foregroundStyle(MacBDesign.IslandToken.accent)
                 .frame(maxWidth: .infinity)
             Spacer(minLength: 0)
-            HStack(spacing: 8) {
+            HStack(spacing: MacBDesign.Space.close) {
                 roundButton(timer.isRunning ? "pause.fill" : "play.fill",
                             label: timer.isRunning ? "Duraklat" : "Sürdür",
                             tint: MacBDesign.IslandToken.accent) {
@@ -671,7 +671,7 @@ struct TimerWidget: View {
     private func roundButton(_ symbol: String, label: String, tint: Color, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .bold))
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .bold))
                 .foregroundStyle(.white)
                 .frame(width: 26, height: 26)
                 .background(tint, in: Circle())
@@ -689,17 +689,17 @@ struct ClipboardWidget: View {
     var body: some View {
         Button(action: open) {
             WidgetCard {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.close) {
                     WidgetCaption("Pano", trailing: clipboard.items.isEmpty ? nil : "\(clipboard.items.count)")
                     if let latest = clipboard.items.first {
                         Text(latest.text)
-                            .font(.system(size: 11))
+                            .font(.system(size: MacBDesign.TypeScale.caption))
                             .foregroundStyle(MacBDesign.IslandToken.primaryText)
                             .lineLimit(4)
                             .multilineTextAlignment(.leading)
                     } else {
                         Text("Kopyaladıkların burada birikir.")
-                            .font(.system(size: 11))
+                            .font(.system(size: MacBDesign.TypeScale.caption))
                             .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                     }
                     Spacer(minLength: 0)
@@ -718,14 +718,14 @@ struct CalendarWidget: View {
     var body: some View {
         WidgetCard {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(spacing: 5) {
+                HStack(spacing: MacBDesign.Space.snug) {
                     Text(weekday).foregroundStyle(MacBDesign.IslandToken.destructive)
                     Text(month).foregroundStyle(MacBDesign.IslandToken.primaryText)
                 }
-                .font(.system(size: 15, weight: .bold))
+                .font(.system(size: MacBDesign.TypeScale.title, weight: .bold))
                 Spacer(minLength: 0)
                 Text(day)
-                    .font(.system(size: 46, weight: .bold))
+                    .font(.system(size: MacBDesign.TypeScale.giant, weight: .bold))
                     .foregroundStyle(MacBDesign.IslandToken.primaryText)
             }
         }
@@ -777,7 +777,7 @@ struct WeatherWidget: View {
 
     private func weatherReading(_ snapshot: WeatherSnapshot, isNarrow: Bool) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
+            HStack(spacing: MacBDesign.Space.tight) {
                 Text(snapshot.place)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -785,7 +785,7 @@ struct WeatherWidget: View {
                 Image(systemName: snapshot.symbol)
                     .symbolRenderingMode(.hierarchical)
             }
-            .font(.system(size: 10, weight: .medium))
+            .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
             .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             Spacer(minLength: 0)
             Text("\(snapshot.temperature)°")
@@ -797,7 +797,7 @@ struct WeatherWidget: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text("Hissedilen \(snapshot.feelsLike)°")
-                .font(.system(size: 10))
+                .font(.system(size: MacBDesign.TypeScale.micro))
                 .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                 .lineLimit(1)
             Spacer(minLength: 0)
@@ -813,18 +813,18 @@ struct WeatherWidget: View {
             WidgetCaption("Hava")
             Spacer(minLength: 0)
             Button(action: openSettings) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                     Image(systemName: "location.magnifyingglass")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
                         .foregroundStyle(MacBDesign.IslandToken.accent)
                     Text(weather.errorMessage ?? "Şehir seç")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                         .foregroundStyle(MacBDesign.IslandToken.accent)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                     if !isNarrow {
                         Text("Ayarlar, Widget'lar")
-                            .font(.system(size: 10))
+                            .font(.system(size: MacBDesign.TypeScale.micro))
                             .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                             .lineLimit(1)
                     }
@@ -843,21 +843,21 @@ struct AssistantWidget: View {
 
     var body: some View {
         WidgetCard(isActive: activity.isActive) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                 WidgetCaption("Asistanlar")
                 if activity.statuses.isEmpty {
                     WidgetEmptyState(symbol: "sparkles", title: "Çalışan görev yok",
                                      hint: "Claude ve Codex burada görünür")
                 } else {
                     ForEach(activity.statuses.prefix(3)) { item in
-                        HStack(spacing: 6) {
+                        HStack(spacing: MacBDesign.Space.snug) {
                             Image(systemName: item.kind.symbol)
-                                .font(.system(size: 10))
+                                .font(.system(size: MacBDesign.TypeScale.micro))
                                 .foregroundStyle(MacBDesign.IslandToken.accent)
-                            Text(item.kind.rawValue).font(.system(size: 11, weight: .medium))
+                            Text(item.kind.rawValue).font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
                             Spacer(minLength: 0)
                             Text(item.detail)
-                                .font(.system(size: 10))
+                                .font(.system(size: MacBDesign.TypeScale.micro))
                                 .monospacedDigit()
                                 .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         }
@@ -876,7 +876,7 @@ struct SystemStatsWidget: View {
 
     var body: some View {
         WidgetCard {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                 WidgetCaption("Sistem")
                 row("CPU", "\(Int(monitor.snapshot.cpuUsage))%")
                 Sparkline(values: monitor.cpuHistory, tint: MacBDesign.IslandToken.accent)
@@ -900,7 +900,7 @@ struct SystemStatsWidget: View {
             Spacer()
             Text(value).foregroundStyle(MacBDesign.IslandToken.primaryText).monospacedDigit()
         }
-        .font(.system(size: 11, weight: .medium))
+        .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
         .lineLimit(1)
         .minimumScaleFactor(0.72)
     }
@@ -918,13 +918,13 @@ struct QuickLaunchWidget: View {
     var body: some View {
         Button(action: open) {
             WidgetCard {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                     WidgetCaption("Hızlı erişim")
                     if launcher.items.isEmpty {
                         WidgetEmptyState(symbol: "square.grid.2x2", title: "Uygulama ekle",
                                          hint: "Sık açtıklarını buraya sabitle")
                     } else {
-                        HStack(spacing: 7) {
+                        HStack(spacing: MacBDesign.Space.close) {
                             ForEach(quickItems.prefix(4)) { item in
                                 Image(nsImage: item.icon)
                                     .resizable()
@@ -933,7 +933,7 @@ struct QuickLaunchWidget: View {
                             }
                             if quickItems.count > 4 {
                                 Text("+\(quickItems.count - 4)")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                                     .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                             }
                             Spacer(minLength: 0)
@@ -955,18 +955,18 @@ struct TasksWidget: View {
 
     var body: some View {
         WidgetCard {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                 WidgetCaption("Yapılacaklar")
                 if tasks.items.isEmpty {
                     WidgetEmptyState(symbol: "checklist", title: "Liste boş",
                                      hint: "Yapılacak eklemek için dokun")
                 } else {
                     ForEach(tasks.items.prefix(3)) { item in
-                        HStack(spacing: 6) {
+                        HStack(spacing: MacBDesign.Space.snug) {
                             Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 11))
+                                .font(.system(size: MacBDesign.TypeScale.caption))
                                 .foregroundStyle(item.isCompleted ? MacBDesign.IslandToken.accent : MacBDesign.IslandToken.tertiaryText)
-                            Text(item.title).font(.system(size: 11)).lineLimit(1)
+                            Text(item.title).font(.system(size: MacBDesign.TypeScale.caption)).lineLimit(1)
                             Spacer(minLength: 0)
                         }
                     }
@@ -984,17 +984,17 @@ struct RecentFilesWidget: View {
     var body: some View {
         Button(action: open) {
             WidgetCard {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                     WidgetCaption("Son dosyalar")
                     if recentFiles.items.isEmpty {
                         WidgetEmptyState(symbol: "clock.arrow.circlepath", title: "Yeni dosya yok",
                                          hint: "Son dokunduklarım burada")
                     } else {
                         ForEach(recentFiles.items.prefix(3)) { item in
-                            HStack(spacing: 6) {
+                            HStack(spacing: MacBDesign.Space.snug) {
                                 Image(nsImage: NSWorkspace.shared.icon(forFile: item.url.path))
                                     .resizable().frame(width: 14, height: 14)
-                                Text(item.name).font(.system(size: 11)).lineLimit(1)
+                                Text(item.name).font(.system(size: MacBDesign.TypeScale.caption)).lineLimit(1)
                                 Spacer(minLength: 0)
                             }
                         }
@@ -1026,11 +1026,11 @@ struct TopProcessesWidget: View {
                 Spacer(minLength: 3)
                 if processes.byMemory.isEmpty {
                     Text("Ölçülüyor…")
-                        .font(.system(size: 11))
+                        .font(.system(size: MacBDesign.TypeScale.caption))
                         .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                     Spacer(minLength: 0)
                 } else {
-                    VStack(spacing: 3) {
+                    VStack(spacing: MacBDesign.Space.tight) {
                         ForEach(processes.byMemory.prefix(rows)) { usage in
                             row(usage)
                         }
@@ -1042,27 +1042,27 @@ struct TopProcessesWidget: View {
     }
 
     private func row(_ usage: ProcessUsage) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: MacBDesign.Space.snug) {
             if let icon = processes.icon(for: usage) {
                 Image(nsImage: icon).resizable().frame(width: 13, height: 13)
             } else {
                 Image(systemName: "gearshape")
-                    .font(.system(size: 9))
+                    .font(.system(size: MacBDesign.TypeScale.micro))
                     .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                     .frame(width: 13)
             }
             Text(usage.name)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
                 .foregroundStyle(MacBDesign.IslandToken.primaryText)
                 .lineLimit(1).minimumScaleFactor(0.8)
             Spacer(minLength: 4)
             if span >= 4, usage.cpuPercent >= 1 {
                 Text("\(Int(usage.cpuPercent))%")
-                    .font(.system(size: 10)).monospacedDigit()
+                    .font(.system(size: MacBDesign.TypeScale.micro)).monospacedDigit()
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             }
             Text(ByteCountFormatter.string(fromByteCount: Int64(usage.memoryBytes), countStyle: .memory))
-                .font(.system(size: 11, weight: .semibold)).monospacedDigit()
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold)).monospacedDigit()
                 .foregroundStyle(MacBDesign.IslandToken.primaryText)
         }
     }
@@ -1173,8 +1173,8 @@ private struct EntranceEffect: ViewModifier {
                 .opacity(isVisible ? 1 : 0)
                 .scaleEffect(isVisible ? 1 : 0.94, anchor: .top)
                 .offset(y: isVisible ? 0 : 8)
-                .animation(.spring(response: 0.40, dampingFraction: 0.80)
-                    .delay(min(0.24, Double(index) * 0.03)), value: isVisible)
+                .motion(MacBDesign.Motion.settle.delay(min(0.24, Double(index) * 0.03)),
+                        value: isVisible)
         )
     }
 }
@@ -1205,13 +1205,13 @@ struct WidgetEmptyState: View {
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             }
             .frame(width: diameter, height: diameter)
-            VStack(spacing: 1) {
+            VStack(spacing: MacBDesign.Space.hair) {
                 Text(title)
                     .font(.system(size: span >= 2 ? 11 : 10, weight: .medium))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                 if let hint, span >= 2 {
                     Text(hint)
-                        .font(.system(size: 9))
+                        .font(.system(size: MacBDesign.TypeScale.micro))
                         .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                 }
             }

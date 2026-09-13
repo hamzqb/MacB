@@ -165,7 +165,7 @@ struct IslandPeekView: View {
                     Rectangle()
                         .fill(MacBDesign.IslandToken.Fill.base)
                         .frame(width: 1, height: 14)
-                        .padding(.horizontal, 9)
+                        .padding(.horizontal, MacBDesign.Space.regular)
                 }
                 Button(action: chip.id == "media" ? toggleMedia : open) {
                     chipView(chip)
@@ -184,7 +184,7 @@ struct IslandPeekView: View {
     }
 
     @ViewBuilder private func chipView(_ chip: PeekChip) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
             chipRow(chip)
             if let progress = chip.progress {
                 quotaBar(progress)
@@ -210,25 +210,25 @@ struct IslandPeekView: View {
     }
 
     @ViewBuilder private func chipRow(_ chip: PeekChip) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: MacBDesign.Space.snug) {
             switch chip.leading {
             case .artwork:
                 artworkView
             case .symbol(let symbol):
                 Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
                     .foregroundStyle(chip.isAccent ? MacBDesign.IslandToken.accent : MacBDesign.IslandToken.secondaryText)
                     .frame(width: 16)
             }
             Text(chip.text)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                 .foregroundStyle(MacBDesign.IslandToken.primaryText)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
             if let detail = chip.detail {
                 Text(detail)
-                    .font(.system(size: 11))
+                    .font(.system(size: MacBDesign.TypeScale.caption))
                     .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -237,7 +237,7 @@ struct IslandPeekView: View {
             if chip.id == "media" {
                 if mediaIsPlaying { PeekEqualizer() }
                 Image(systemName: mediaIsPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
                     .foregroundStyle(MacBDesign.IslandToken.primaryText)
                     .frame(width: 20, height: 20)
                     .background(MacBDesign.IslandToken.Fill.base, in: Circle())
@@ -257,7 +257,7 @@ struct IslandPeekView: View {
                 .fill(MacBDesign.IslandToken.Fill.base)
                 .frame(width: 20, height: 20)
                 .overlay(Image(systemName: "music.note")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText))
         }
     }
@@ -274,7 +274,7 @@ private struct PeekEqualizer: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 18.0)) { context in
             let time = context.date.timeIntervalSinceReferenceDate
-            HStack(alignment: .center, spacing: 2) {
+            HStack(alignment: .center, spacing: MacBDesign.Space.hair) {
                 ForEach(Array(phases.enumerated()), id: \.offset) { _, phase in
                     let wave = (sin(time * 5.4 + phase * .pi * 2) + 1) / 2
                     Capsule()

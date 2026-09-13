@@ -21,12 +21,12 @@ struct IslandFaceScanView: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: MacBDesign.Space.comfortable) {
             outline
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 13, weight: .semibold))
+            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                Text(title).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
                     .foregroundStyle(MacBDesign.IslandToken.primaryText)
-                Text(detail).font(.system(size: 10))
+                Text(detail).font(.system(size: MacBDesign.TypeScale.micro))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             }
             Spacer(minLength: 0)
@@ -80,15 +80,15 @@ struct IslandFaceScanView: View {
                     .shadow(color: tint.opacity(0.7), radius: 5)
             case .success:
                 Image(systemName: "checkmark")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .bold))
                     .foregroundStyle(tint)
             case .failure:
                 Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: MacBDesign.TypeScale.body, weight: .bold))
                     .foregroundStyle(tint)
             case .idle:
                 Image(systemName: "faceid")
-                    .font(.system(size: 14, weight: .regular))
+                    .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .regular))
                     .foregroundStyle(tint.opacity(0.6))
             }
         }
@@ -114,11 +114,11 @@ struct IslandFaceScanView: View {
         case .scanning:
             sweep = -11
             guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { sweep = 11 }
+            withAnimation(MacBDesign.Motion.breathe(0.9)) { sweep = 11 }
         case .failure:
             guard !reduceMotion else { return }
-            withAnimation(.spring(response: 0.12, dampingFraction: 0.25)) { shake = 6 }
-            withAnimation(.spring(response: 0.22, dampingFraction: 0.4).delay(0.12)) { shake = 0 }
+            withAnimation(MacBDesign.Motion.rejectOut) { shake = 6 }
+            withAnimation(MacBDesign.Motion.rejectBack.delay(0.12)) { shake = 0 }
         default:
             sweep = 0
             shake = 0

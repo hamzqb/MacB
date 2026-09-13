@@ -29,7 +29,7 @@ struct IslandWidgetLibrary: View {
                         card(widget)
                     }
                 }
-                .padding(.horizontal, 2)
+                .padding(.horizontal, MacBDesign.Space.hair)
             }
             .scrollClipDisabled()
             .frame(height: IslandGeometry.libraryCardHeight)
@@ -42,30 +42,30 @@ struct IslandWidgetLibrary: View {
         Button {
             if widget.isEnabled { store.setEnabled(id: widget.id, false) } else { store.add(id: widget.id) }
         } label: {
-            HStack(alignment: .top, spacing: 9) {
+            HStack(alignment: .top, spacing: MacBDesign.Space.regular) {
                 Image(systemName: widget.kind.symbol)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
                     .foregroundStyle(widget.isEnabled ? Color.black : MacBDesign.IslandToken.accent)
                     .frame(width: 26, height: 26)
                     .background(widget.isEnabled ? MacBDesign.IslandToken.accent : MacBDesign.IslandToken.navFill,
                                 in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
                     Text(widget.kind.title)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
                         .foregroundStyle(MacBDesign.IslandToken.primaryText)
                         .lineLimit(1)
                     Text(widget.kind.summary)
-                        .font(.system(size: 10))
+                        .font(.system(size: MacBDesign.TypeScale.micro))
                         .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     Spacer(minLength: 0)
                 }
                 Image(systemName: widget.isEnabled ? "checkmark" : "plus")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
                     .foregroundStyle(widget.isEnabled ? MacBDesign.IslandToken.accent : MacBDesign.IslandToken.tertiaryText)
             }
-            .padding(10)
+            .padding(MacBDesign.Space.regular)
             .frame(width: IslandGeometry.libraryCardWidth, height: IslandGeometry.libraryCardHeight,
                    alignment: .topLeading)
             .background(MacBDesign.IslandToken.widgetFill,

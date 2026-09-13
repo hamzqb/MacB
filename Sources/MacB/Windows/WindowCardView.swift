@@ -40,14 +40,14 @@ struct WindowCardView: View {
                                 Spacer()
                                 HStack {
                                     Text(window.isMinimized ? "Küçültülmüş" : "Son görüntü")
-                                        .font(.system(size: 9, weight: .medium))
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 4)
+                                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+                                        .padding(.horizontal, MacBDesign.Space.close)
+                                        .padding(.vertical, MacBDesign.Space.tight)
                                         .background(.ultraThinMaterial, in: Capsule())
                                     Spacer()
                                 }
                             }
-                            .padding(8)
+                            .padding(MacBDesign.Space.close)
                         }
                     }
                     .frame(height: density.cardHeight)
@@ -56,20 +56,20 @@ struct WindowCardView: View {
                     .contentShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
                 }.buttonStyle(.plain).focused($focused)
                     .accessibilityLabel("\(window.appName), \(window.title), pencereye geç")
-                HStack(spacing: 5) {
+                HStack(spacing: MacBDesign.Space.snug) {
                     actionButton(symbol: isFavorite ? "star.fill" : "star", label: isFavorite ? "Favoriden kaldır" : "Favoriye ekle", enabled: true, action: onToggleFavorite)
                     actionButton(symbol: window.isMinimized ? "arrow.up.right.and.arrow.down.left" : "minus", label: window.isMinimized ? "Geri yükle" : "Küçült", enabled: window.canMinimize, action: onMinimize)
                     actionButton(symbol: "xmark", label: "Pencereyi kapat", enabled: window.canClose, action: onClose)
-                }.padding(7).opacity(emphasized ? 1 : 0.001)
+                }.padding(MacBDesign.Space.close).opacity(emphasized ? 1 : 0.001)
                     .accessibilityHidden(false).accessibilityFocused($accessibilityFocused)
             }
-            HStack(spacing: 7) {
+            HStack(spacing: MacBDesign.Space.close) {
                 if let icon = window.appIcon { Image(nsImage: icon).resizable().frame(width: 18, height: 18).accessibilityHidden(true) }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(window.title).font(.system(size: 12, weight: .medium)).lineLimit(1)
+                VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                    Text(window.title).font(.system(size: MacBDesign.TypeScale.body, weight: .medium)).lineLimit(1)
                 }
                 Spacer(minLength: 0)
-            }.padding(.horizontal, 3)
+            }.padding(.horizontal, MacBDesign.Space.tight)
         }.padding(density == .compact ? 7 : 8).frame(width: density.cardWidth)
             .background(emphasized ? MacBDesign.selectedBackground.opacity(0.34) : Color.clear,
                         in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
@@ -77,11 +77,11 @@ struct WindowCardView: View {
                 .strokeBorder(isSelected ? MacBDesign.focusRing : (emphasized ? MacBDesign.separator : .clear),
                               lineWidth: isSelected ? 2 : 0.5))
             .onHover { hovered = $0; onHover($0) }
-            .animation(animationsEnabled && !reduceMotion ? .easeOut(duration: 0.16) : nil, value: emphasized)
+            .animation(animationsEnabled && !reduceMotion ? MacBDesign.Motion.quick : nil, value: emphasized)
     }
 
     private func actionButton(symbol: String, label: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).font(.system(size: 10, weight: .semibold)).frame(width: 26, height: 26).background(.regularMaterial, in: Circle()) }
+        Button(action: action) { Image(systemName: symbol).font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold)).frame(width: 26, height: 26).background(.regularMaterial, in: Circle()) }
             .buttonStyle(.plain).focused($controlFocused).disabled(!enabled).help(label).accessibilityLabel(label)
     }
 }
@@ -103,7 +103,7 @@ struct WindowPreviewPlaceholder: View {
                     .accessibilityHidden(true)
             }
             VStack(alignment: .leading, spacing: compact ? 7 : 9) {
-                HStack(spacing: 6) {
+                HStack(spacing: MacBDesign.Space.snug) {
                     Circle().fill(.red.opacity(0.7)).frame(width: 6, height: 6)
                     Circle().fill(.yellow.opacity(0.7)).frame(width: 6, height: 6)
                     Circle().fill(.green.opacity(0.7)).frame(width: 6, height: 6)
@@ -111,10 +111,10 @@ struct WindowPreviewPlaceholder: View {
                     if let icon = window.appIcon {
                         Image(nsImage: icon).resizable().frame(width: 16, height: 16).accessibilityHidden(true)
                     } else {
-                        Image(systemName: "macwindow").font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.42))
+                        Image(systemName: "macwindow").font(.system(size: MacBDesign.TypeScale.body, weight: .medium)).foregroundStyle(.white.opacity(0.42))
                     }
                 }
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                     Text(window.appName)
                         .font(.system(size: compact ? 11 : 12, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.78))
@@ -125,17 +125,17 @@ struct WindowPreviewPlaceholder: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                     placeholderLine(width: 0.82, opacity: 0.22)
                     placeholderLine(width: 0.58, opacity: 0.15)
-                    HStack(spacing: 5) {
+                    HStack(spacing: MacBDesign.Space.snug) {
                         placeholderPill(width: 0.28)
                         placeholderPill(width: 0.22)
                         Spacer()
                     }
                 }
                 Text(window.isMinimized ? "Küçültülmüş pencere" : "Canlı önizleme hazırlanıyor")
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
                     .foregroundStyle(.white.opacity(0.34))
                     .lineLimit(1)
             }

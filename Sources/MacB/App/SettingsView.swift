@@ -67,12 +67,12 @@ struct SettingsView: View {
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: MacBDesign.contentSpacing) {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.close) {
                         Text(selectedPage.rawValue)
-                            .font(.system(size: 27, weight: .semibold))
+                            .font(.system(size: MacBDesign.TypeScale.display, weight: .semibold))
                             .accessibilityAddTraits(.isHeader)
                         Text(selectedPage.subtitle)
-                            .font(.system(size: 12))
+                            .font(.system(size: MacBDesign.TypeScale.body))
                             .foregroundStyle(MacBDesign.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -178,15 +178,15 @@ struct SettingsView: View {
                     message("Açık masaüstü veya terminal oturumu bulunmadı.")
                 } else {
                     ForEach(aiActivity.statuses.prefix(5)) { status in
-                        HStack(spacing: 10) {
+                        HStack(spacing: MacBDesign.Space.regular) {
                             Image(systemName: status.kind.symbol).foregroundStyle(MacBDesign.accent).frame(width: 22)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(status.kind.rawValue).font(.system(size: 13, weight: .medium))
+                            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                                Text(status.kind.rawValue).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
                                 // The badge already says it is running, so the line
                                 // below carries only what the badge cannot: where it
                                 // is running and how much allowance is left.
                                 Text([status.source, status.usage?.compactText].compactMap { $0 }.joined(separator: " · "))
-                                    .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                             }
                             Spacer(minLength: 8)
                             if status.isRunning { runningBadge }
@@ -195,7 +195,7 @@ struct SettingsView: View {
                 }
             }
             section("Sistem", "gauge.with.dots.needle.67percent") {
-                HStack(spacing: 10) {
+                HStack(spacing: MacBDesign.Space.regular) {
                     systemMetric("CPU", "\(Int(systemMonitor.snapshot.cpuUsage))%",
                                  fraction: systemMonitor.snapshot.cpuUsage / 100)
                     systemMetric("RAM", percentage(systemMonitor.snapshot.usedMemory, systemMonitor.snapshot.totalMemory),
@@ -206,15 +206,15 @@ struct SettingsView: View {
                                  fraction: systemMonitor.snapshot.batteryPercent.map { $0 / 100 })
                 }
                 Label(thermalText, systemImage: "thermometer.medium")
-                    .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
             }
             section("Klavye temizleme", "keyboard") {
                 Text("Klavye girişini geçici olarak durdurur. Fare çalışır; üç kez Esc acil çıkıştır.")
-                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
-                HStack(spacing: 9) {
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
+                HStack(spacing: MacBDesign.Space.regular) {
                     if keyboardCleaning.isActive {
                         Button("Kilidi aç", action: keyboardCleaning.stop)
-                        Text("\(keyboardCleaning.remainingSeconds) sn").font(.system(size: 11, design: .monospaced)).foregroundStyle(MacBDesign.muted)
+                        Text("\(keyboardCleaning.remainingSeconds) sn").font(.system(size: MacBDesign.TypeScale.caption, design: .monospaced)).foregroundStyle(MacBDesign.muted)
                     } else {
                         Button("30 saniye") { keyboardCleaning.start(duration: 30) }
                         Button("1 dakika") { keyboardCleaning.start(duration: 60) }
@@ -225,8 +225,8 @@ struct SettingsView: View {
             }
             section("Arşiv", "doc.zipper") {
                 Text("Dosyaları MacB içinde ZIP olarak sıkıştır veya güvenli biçimde çıkar.")
-                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
-                HStack(spacing: 9) {
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
+                HStack(spacing: MacBDesign.Space.regular) {
                     Button("ZIP oluştur…", action: utilities.createArchive)
                     Button("ZIP çıkar…", action: utilities.extractArchive)
                 }
@@ -234,7 +234,7 @@ struct SettingsView: View {
             section("Uygulama kaldırma", "trash") {
                 Color.clear.frame(height: 0).id(Self.removalAnchor)
                 Text("Uygulamayı, yardımcılarını ve kullanıcı kalıntılarını arar. Hiçbir şey silinmez, hepsi Çöp Sepeti'ne taşınır.")
-                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 Button("Uygulama seç…") {
                     Task {
@@ -245,7 +245,7 @@ struct SettingsView: View {
                     }
                 }
                 if !utilities.removalCandidates.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.comfortable) {
                         removalHeader
                         if utilities.inspectedIsRunning { removalRunningNotice }
                         ForEach(utilities.removalGroups, id: \.confidence) { group in
@@ -254,13 +254,13 @@ struct SettingsView: View {
                         Button("Seçilenleri Çöp Sepeti’ne taşı", role: .destructive) { showRemovalConfirmation = true }
                             .disabled(utilities.selectedRemovalCandidates.isEmpty)
                     }
-                    .padding(12)
+                    .padding(MacBDesign.Space.comfortable)
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
             section("Kaynak kullanımı", "chart.bar.xaxis") {
                 Text("Belleği ve işlemciyi en çok kim kullanıyor. Yardımcı süreçler kendi uygulamalarının altında toplanır.")
-                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 Picker("", selection: $processSort) {
                     Text("Bellek").tag(ProcessSort.memory)
@@ -275,20 +275,20 @@ struct SettingsView: View {
                     }
                 }
                 .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
-                HStack(spacing: 9) {
+                HStack(spacing: MacBDesign.Space.regular) {
                     Button("Yenile", action: processes.refresh)
                     Text("Her 6 saniyede bir kendiliğinden yenilenir.")
-                        .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                 }
             }
             section("Önbellek temizliği", "sparkles.rectangle.stack") {
                 Color.clear.frame(height: 0).id(Self.cacheAnchor)
                 Text("Uygulamaların yeniden oluşturabildiği geçici klasörleri arar. Belgeler, ayarlar ve uygulama verileri hiç taranmaz.")
-                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 Button(utilities.hasScannedCaches ? "Yeniden tara" : "Önbellekleri tara", action: utilities.scanCaches)
                 if !utilities.cacheItems.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.comfortable) {
                         cacheHeader
                         ForEach(utilities.cacheGroups, id: \.group) { group in
                             cacheGroupView(group.group, group.items)
@@ -296,13 +296,13 @@ struct SettingsView: View {
                         Button("Seçilenleri Çöp Sepeti’ne taşı", role: .destructive) { showCacheConfirmation = true }
                             .disabled(utilities.selectedCacheItems.isEmpty)
                     }
-                    .padding(12)
+                    .padding(MacBDesign.Space.comfortable)
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
             section("MacWhisper", "waveform") {
                 Text(utilities.macWhisperInstalled ? "Ses veya video dosyasını MacWhisper’a gönder." : "MacWhisper kurulu değil.")
-                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                 Button("Dosya gönder…", action: utilities.sendAudioToMacWhisper).disabled(!utilities.macWhisperInstalled)
             }
             if utilities.isWorking { ProgressView().controlSize(.small) }
@@ -313,30 +313,30 @@ struct SettingsView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 30) {
-            HStack(spacing: 10) {
+            HStack(spacing: MacBDesign.Space.regular) {
                 Image(systemName: "rectangle.topthird.inset.filled")
-                    .font(.system(size: 19, weight: .medium))
+                    .font(.system(size: MacBDesign.TypeScale.heading, weight: .medium))
                     .foregroundStyle(Color(nsColor: .windowBackgroundColor))
                     .frame(width: 36, height: 36)
                     .background(Color.primary, in: RoundedRectangle(cornerRadius: 10))
                     .accessibilityHidden(true)
-                Text("MacB").font(.system(size: 21, weight: .semibold))
+                Text("MacB").font(.system(size: MacBDesign.TypeScale.heading, weight: .semibold))
             }
-            .padding(.horizontal, 10)
-            VStack(spacing: 5) {
+            .padding(.horizontal, MacBDesign.Space.regular)
+            VStack(spacing: MacBDesign.Space.snug) {
                 ForEach(SettingsPage.allCases) { page in
                     Button { selectedPage = page } label: {
-                        HStack(spacing: 10) {
+                        HStack(spacing: MacBDesign.Space.regular) {
                             Image(systemName: page.icon)
-                                .font(.system(size: 15, weight: .medium))
+                                .font(.system(size: MacBDesign.TypeScale.title, weight: .medium))
                                 .foregroundStyle(selectedPage == page ? MacBDesign.accent : MacBDesign.muted)
                                 .frame(width: 19)
                                 .accessibilityHidden(true)
-                            Text(page.rawValue).font(.system(size: 13, weight: selectedPage == page ? .medium : .regular))
+                            Text(page.rawValue).font(.system(size: MacBDesign.TypeScale.emphasis, weight: selectedPage == page ? .medium : .regular))
                             Spacer(minLength: 0)
                         }
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 10)
+                        .padding(.horizontal, MacBDesign.Space.comfortable)
+                        .padding(.vertical, MacBDesign.Space.regular)
                         .contentShape(Rectangle())
                         .background(selectedPage == page ? MacBDesign.accent.opacity(0.11) : .clear,
                                     in: RoundedRectangle(cornerRadius: 9))
@@ -346,16 +346,16 @@ struct SettingsView: View {
                 }
             }
             Spacer(minLength: 24)
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Ücretsiz ve açık kaynak").font(.system(size: 10))
-                Text("Sürüm \(AppVersion.current)").font(.system(size: 10, design: .monospaced))
+            VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+                Text("Ücretsiz ve açık kaynak").font(.system(size: MacBDesign.TypeScale.micro))
+                Text("Sürüm \(AppVersion.current)").font(.system(size: MacBDesign.TypeScale.micro, design: .monospaced))
             }
             .foregroundStyle(MacBDesign.muted)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, MacBDesign.Space.regular)
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, MacBDesign.Space.comfortable)
         .padding(.top, 29)
-        .padding(.bottom, 24)
+        .padding(.bottom, MacBDesign.Space.wide)
         .frame(width: MacBDesign.sidebarWidth)
         .background(Color.primary.opacity(0.025))
     }
@@ -381,8 +381,8 @@ struct SettingsView: View {
                 rowDivider
                 settingToggle("Pencere seçici", detail: "Kısayolu basılı tut, Tab ile ilerle, bırakarak seç.", isOn: $preferences.switcherEnabled)
                 if preferences.switcherEnabled {
-                    HStack(spacing: 12) {
-                        Text("Klavye kısayolu").font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    HStack(spacing: MacBDesign.Space.comfortable) {
+                        Text("Klavye kısayolu").font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                         Spacer(minLength: 4)
                         Picker("Klavye kısayolu", selection: $preferences.shortcut) {
                             ForEach(SwitcherShortcut.allCases) { Text($0.title).tag($0) }
@@ -390,7 +390,7 @@ struct SettingsView: View {
                         .labelsHidden()
                         .frame(width: 144)
                     }
-                    .padding(.top, 2)
+                    .padding(.top, MacBDesign.Space.hair)
                 }
                 if let shortcutError = hotKey.registrationError { message(shortcutError, warning: true) }
             }
@@ -404,14 +404,14 @@ struct SettingsView: View {
                 settingToggle("Odak modu", detail: "Seçtiğin pencere öne gelirken diğer uygulamaları gizle.", isOn: $preferences.focusModeEnabled)
             }
             section("Dosya rafı", "tray.full") {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                     Text(shelf.items.isEmpty ? "Dosyaların için küçük bir yer." : "\(shelf.items.count) öğe elinin altında.")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
                     Text("Dosyalar yerinde kalır. Raftan kaldırmak dosyayı silmez.")
-                        .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                        .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                HStack(spacing: 10) {
+                HStack(spacing: MacBDesign.Space.regular) {
                     Button("Dosya ekle…", action: shelf.chooseFiles)
                     Button("Paneli aç", action: openPanel).disabled(!preferences.notchEnabled)
                 }
@@ -422,10 +422,10 @@ struct SettingsView: View {
                 if let error = shelf.errorMessage { message(error, warning: true) }
             }
             section("Güncellemeler", "arrow.triangle.2.circlepath") {
-                HStack(spacing: 10) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(updateTitle).font(.system(size: 13, weight: .medium))
-                        Text(updateDetail).font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                HStack(spacing: MacBDesign.Space.regular) {
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
+                        Text(updateTitle).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                        Text(updateDetail).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                     }
                     Spacer()
                     if case .checking = updates.state { ProgressView().controlSize(.small) }
@@ -461,7 +461,7 @@ struct SettingsView: View {
             section("Şeritte (\(widgets.layout.enabledWidgets.count))", "rectangle.grid.1x2") {
                 if widgets.layout.enabledWidgets.isEmpty {
                     Text("Şerit boş. Aşağıdaki kütüphaneden widget ekle.")
-                        .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                        .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                 } else {
                     ForEach(Array(widgets.layout.enabledWidgets.enumerated()), id: \.element.id) { index, widget in
                         if index > 0 { rowDivider }
@@ -487,7 +487,7 @@ struct SettingsView: View {
                     }
                     .frame(maxWidth: 320)
                     Text("Widget yerel saatin yanında bu şehri gösterir. Kartın üstünde sağ tıklayarak da değiştirebilirsin.")
-                        .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -496,7 +496,7 @@ struct SettingsView: View {
                     ForEach(WeatherWidgetStyle.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
-                HStack(spacing: 10) {
+                HStack(spacing: MacBDesign.Space.regular) {
                     TextField("Şehir", text: Binding(
                         get: { weather.placeQuery },
                         set: { weather.placeQuery = $0 }
@@ -508,11 +508,11 @@ struct SettingsView: View {
                     Spacer()
                 }
                 Text("Şehir adı Open-Meteo üzerinden çözülür. Konum izni istenmez, sorgu yalnızca panel açıkken ve en fazla 15 dakikada bir yapılır.")
-                    .font(.system(size: 11))
+                    .font(.system(size: MacBDesign.TypeScale.caption))
                     .foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if let error = weather.errorMessage {
-                    Text(error).font(.system(size: 11)).foregroundStyle(.orange)
+                    Text(error).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(.orange)
                 }
             }
             section("Medya görünümü", "music.note") {
@@ -523,7 +523,7 @@ struct SettingsView: View {
             }
             HStack {
                 Text("Şeride sığmayan widget'lar alt satıra iner, hiçbiri kırpılmaz.")
-                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                 Spacer()
                 Button("Varsayılana dön", action: widgets.reset)
             }
@@ -532,11 +532,11 @@ struct SettingsView: View {
 
     /// A widget already on the strip: order, width and a way off the strip.
     private func activeWidgetRow(_ widget: IslandWidget, index: Int, count: Int) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: MacBDesign.Space.comfortable) {
             widgetGlyph(widget.kind, isActive: true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(widget.kind.title).font(.system(size: 13, weight: .medium))
-                Text(widget.kind.summary).font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                Text(widget.kind.title).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                Text(widget.kind.summary).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
             }
             Spacer()
             Picker("", selection: Binding(
@@ -551,7 +551,7 @@ struct SettingsView: View {
             .pickerStyle(.segmented)
             .frame(width: 180)
             .accessibilityLabel("\(widget.kind.title) boyutu")
-            VStack(spacing: 2) {
+            VStack(spacing: MacBDesign.Space.hair) {
                 stepButton("chevron.up", label: "Yukarı taşı", enabled: index > 0) {
                     widgets.moveVisible(id: widget.id, by: -1)
                 }
@@ -562,33 +562,33 @@ struct SettingsView: View {
             Button("Çıkar") { widgets.setEnabled(id: widget.id, false) }
                 .accessibilityLabel("\(widget.kind.title) widget'ını çıkar")
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, MacBDesign.Space.tight)
     }
 
     /// A widget the strip does not have yet. One button, and it lands at the end.
     private func libraryWidgetRow(_ widget: IslandWidget) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: MacBDesign.Space.comfortable) {
             widgetGlyph(widget.kind, isActive: widget.isEnabled)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(widget.kind.title).font(.system(size: 13, weight: .medium))
-                Text(widget.kind.summary).font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                Text(widget.kind.title).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                Text(widget.kind.summary).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
             }
             Spacer()
             if widget.isEnabled {
                 Label("Şeritte", systemImage: "checkmark")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
                     .foregroundStyle(MacBDesign.accent)
             } else {
                 Button("Ekle") { widgets.add(id: widget.id) }
                     .accessibilityLabel("\(widget.kind.title) widget'ını ekle")
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, MacBDesign.Space.tight)
     }
 
     private func widgetGlyph(_ kind: IslandWidgetKind, isActive: Bool) -> some View {
         Image(systemName: kind.symbol)
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
             .foregroundStyle(isActive ? MacBDesign.accent : MacBDesign.muted)
             .frame(width: 26, height: 26)
             .background(MacBDesign.cardFill, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
@@ -602,60 +602,60 @@ struct SettingsView: View {
     static let hingeAnchor = "lid-hinge"
 
     private var removalHeader: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(utilities.selectedApplicationName).font(.system(size: 13, weight: .semibold))
+        VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+            Text(utilities.selectedApplicationName).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
             Text("\(utilities.removalCandidates.count) öğe bulundu · \(utilities.selectedRemovalCandidates.count) seçili · \(ByteCountFormatter.string(fromByteCount: utilities.removalSize, countStyle: .file))")
-                .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
         }
     }
 
     private var removalRunningNotice: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: MacBDesign.Space.regular) {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
             Text("Uygulama açık. Kapatılmadan kendi paketi taşınamaz.")
-                .font(.system(size: 11))
+                .font(.system(size: MacBDesign.TypeScale.caption))
             Spacer()
             Button("Kapat", action: utilities.quitInspectedApplication)
         }
-        .padding(9)
+        .padding(MacBDesign.Space.regular)
         .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
     }
 
     @ViewBuilder
     private func removalGroup(_ confidence: AppLeftoverConfidence,
                               _ candidates: [AppRemovalCandidate]) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
-                Text(confidence.title).font(.system(size: 12, weight: .semibold))
+        VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+            HStack(spacing: MacBDesign.Space.snug) {
+                Text(confidence.title).font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
                 Text("\(candidates.count)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+                    .padding(.horizontal, MacBDesign.Space.snug).padding(.vertical, MacBDesign.Space.hair)
                     .background(Color.primary.opacity(0.08), in: Capsule())
                 Spacer()
             }
-            Text(confidence.detail).font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+            Text(confidence.detail).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
             ForEach(candidates) { candidate in removalRow(candidate) }
         }
     }
 
     private func removalRow(_ candidate: AppRemovalCandidate) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: MacBDesign.Space.close) {
             Toggle(isOn: Binding(get: { utilities.isSelected(candidate) },
                                  set: { _ in utilities.toggleRemoval(candidate) })) {
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text(candidate.kind.title).font(.system(size: 11, weight: .medium))
+                VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                    HStack(spacing: MacBDesign.Space.snug) {
+                        Text(candidate.kind.title).font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
                         Text(candidate.sizeText)
-                            .font(.system(size: 10)).foregroundStyle(MacBDesign.muted)
+                            .font(.system(size: MacBDesign.TypeScale.micro)).foregroundStyle(MacBDesign.muted)
                         if candidate.requiresAdministrator {
                             Text("yönetici gerekir")
-                                .font(.system(size: 9, weight: .medium))
-                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+                                .padding(.horizontal, MacBDesign.Space.snug).padding(.vertical, MacBDesign.Space.hair)
                                 .background(Color.orange.opacity(0.18), in: Capsule())
                         }
                     }
                     Text(candidate.displayPath)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.system(size: MacBDesign.TypeScale.micro, design: .monospaced))
                         .foregroundStyle(MacBDesign.muted)
                         .lineLimit(2)
                         .help(candidate.url.path)
@@ -667,7 +667,7 @@ struct SettingsView: View {
             Button {
                 NSWorkspace.shared.activateFileViewerSelecting([candidate.url])
             } label: {
-                Image(systemName: "folder").font(.system(size: 10))
+                Image(systemName: "folder").font(.system(size: MacBDesign.TypeScale.micro))
             }
             .buttonStyle(.borderless)
             .help("Finder'da göster")
@@ -678,81 +678,81 @@ struct SettingsView: View {
     private static let cacheAnchor = "cache-review"
 
     private func processRow(_ usage: ProcessUsage) -> some View {
-        HStack(spacing: 9) {
+        HStack(spacing: MacBDesign.Space.regular) {
             if let icon = processes.icon(for: usage) {
                 Image(nsImage: icon).resizable().frame(width: 18, height: 18)
             } else {
-                Image(systemName: "gearshape").font(.system(size: 12))
+                Image(systemName: "gearshape").font(.system(size: MacBDesign.TypeScale.body))
                     .foregroundStyle(MacBDesign.muted).frame(width: 18)
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(usage.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
+            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                Text(usage.name).font(.system(size: MacBDesign.TypeScale.body, weight: .medium)).lineLimit(1)
                 if usage.processCount > 1 {
                     Text("\(usage.processCount) süreç")
-                        .font(.system(size: 10)).foregroundStyle(MacBDesign.muted)
+                        .font(.system(size: MacBDesign.TypeScale.micro)).foregroundStyle(MacBDesign.muted)
                 }
             }
             Spacer(minLength: 8)
             Text("\(usage.cpuPercent, specifier: "%.1f")%")
-                .font(.system(size: 11)).monospacedDigit()
+                .font(.system(size: MacBDesign.TypeScale.caption)).monospacedDigit()
                 .foregroundStyle(MacBDesign.muted)
                 .frame(width: 52, alignment: .trailing)
             Text(ByteCountFormatter.string(fromByteCount: Int64(usage.memoryBytes), countStyle: .memory))
-                .font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold)).monospacedDigit()
                 .frame(width: 76, alignment: .trailing)
             // Only a real application is ever asked to quit, and it is asked the
             // way the Dock asks: unsaved work still gets to object.
             Button("Kapat") { processes.quit(usage) }
                 .disabled(!processes.canQuit(usage))
         }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 7)
+        .padding(.horizontal, MacBDesign.Space.comfortable)
+        .padding(.vertical, MacBDesign.Space.close)
     }
 
     private var cacheHeader: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Geri kazanılabilir alan").font(.system(size: 13, weight: .semibold))
+        VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+            Text("Geri kazanılabilir alan").font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
             Text("\(utilities.cacheItems.count) klasör · \(utilities.selectedCacheItems.count) seçili · \(ByteCountFormatter.string(fromByteCount: utilities.cacheSize, countStyle: .file))")
-                .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
         }
     }
 
     @ViewBuilder
     private func cacheGroupView(_ group: CacheSweepGroup, _ items: [CacheSweepItem]) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
-                Image(systemName: group.symbol).font(.system(size: 11))
-                Text(group.title).font(.system(size: 12, weight: .semibold))
+        VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+            HStack(spacing: MacBDesign.Space.snug) {
+                Image(systemName: group.symbol).font(.system(size: MacBDesign.TypeScale.caption))
+                Text(group.title).font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
                 Text("\(items.count)")
-                    .font(.system(size: 10, weight: .semibold))
-                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+                    .padding(.horizontal, MacBDesign.Space.snug).padding(.vertical, MacBDesign.Space.hair)
                     .background(Color.primary.opacity(0.08), in: Capsule())
                 Spacer()
             }
-            Text(group.summary).font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+            Text(group.summary).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(items) { item in cacheRow(item) }
         }
     }
 
     private func cacheRow(_ item: CacheSweepItem) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: MacBDesign.Space.close) {
             Toggle(isOn: Binding(get: { utilities.isSelected(item) },
                                  set: { _ in utilities.toggleCache(item) })) {
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text(item.owner).font(.system(size: 11, weight: .medium)).lineLimit(1)
+                VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                    HStack(spacing: MacBDesign.Space.snug) {
+                        Text(item.owner).font(.system(size: MacBDesign.TypeScale.caption, weight: .medium)).lineLimit(1)
                         Text(item.sizeText)
-                            .font(.system(size: 10)).foregroundStyle(MacBDesign.muted)
+                            .font(.system(size: MacBDesign.TypeScale.micro)).foregroundStyle(MacBDesign.muted)
                         if item.isInUse {
                             Text("uygulama açık")
-                                .font(.system(size: 9, weight: .medium))
-                                .padding(.horizontal, 5).padding(.vertical, 1)
+                                .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+                                .padding(.horizontal, MacBDesign.Space.snug).padding(.vertical, MacBDesign.Space.hair)
                                 .background(Color.orange.opacity(0.18), in: Capsule())
                         }
                     }
                     Text(item.displayPath)
-                        .font(.system(size: 10, design: .monospaced))
+                        .font(.system(size: MacBDesign.TypeScale.micro, design: .monospaced))
                         .foregroundStyle(MacBDesign.muted)
                         .lineLimit(1)
                         // The end of the path is the folder name, which is the
@@ -766,7 +766,7 @@ struct SettingsView: View {
             Button {
                 NSWorkspace.shared.activateFileViewerSelecting([item.url])
             } label: {
-                Image(systemName: "folder").font(.system(size: 10))
+                Image(systemName: "folder").font(.system(size: MacBDesign.TypeScale.micro))
             }
             .buttonStyle(.borderless)
             .help("Finder'da göster")
@@ -776,7 +776,7 @@ struct SettingsView: View {
 
     private func stepButton(_ symbol: String, label: String, enabled: Bool,
                             action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).font(.system(size: 9, weight: .bold)) }
+        Button(action: action) { Image(systemName: symbol).font(.system(size: MacBDesign.TypeScale.micro, weight: .bold)) }
             .buttonStyle(.borderless)
             .disabled(!enabled)
             .help(label)
@@ -803,9 +803,9 @@ struct SettingsView: View {
                     ForEach(IslandAppearance.allCases) { Text($0.title).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("Island yüzeyi")
                 if preferences.islandAppearance == .customImage {
-                    HStack(spacing: 10) {
+                    HStack(spacing: MacBDesign.Space.regular) {
                         Text(background.name ?? "Henüz bir görsel seçilmedi.")
-                            .font(.system(size: 12))
+                            .font(.system(size: MacBDesign.TypeScale.body))
                             .foregroundStyle(MacBDesign.muted)
                             .lineLimit(1)
                         Spacer()
@@ -814,9 +814,9 @@ struct SettingsView: View {
                             Button("Kaldır", role: .destructive, action: background.clear)
                         }
                     }
-                    .padding(.top, 8)
+                    .padding(.top, MacBDesign.Space.close)
                     if let error = background.errorMessage {
-                        Text(error).font(.system(size: 11)).foregroundStyle(.orange)
+                        Text(error).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(.orange)
                     }
                 }
             }
@@ -829,13 +829,13 @@ struct SettingsView: View {
                     settingToggle("Tüm ekran bulanıklaşsın",
                                   detail: "Kapak inerken masaüstü de island ile birlikte bulanıklaşır. Ekran görüntüsü alınmaz, ekran kaydı izni istenmez. Harici ekran bağlıysa yalnızca MacBook ekranı bulanıklaşır.",
                                   isOn: $preferences.lidScreenBlur)
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                         HStack {
                             Text("Katlanma açısı")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                             Spacer(minLength: 8)
                             Text("\(Int(preferences.lidHingeAngle))°")
-                                .font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                                .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold)).monospacedDigit()
                                 .foregroundStyle(MacBDesign.accent)
                         }
                         Slider(value: $preferences.lidHingeAngle,
@@ -844,7 +844,7 @@ struct SettingsView: View {
                                 lid.setOpenAngle(value)
                             }
                         Text("Kapak bu açının altına inince katlanma ve bulanıklık başlar, her derecede eşit miktarda artar.")
-                            .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                            .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     lidLine("Açılış yazısı", text: $preferences.lidWelcomeText,
@@ -854,13 +854,13 @@ struct SettingsView: View {
                             placeholder: IslandEvent.farewellTitle(forHour: currentHour),
                             label: "Kapak kapanırken görünen yazı")
                     Text("Boş bırakırsan saate göre değişir. En fazla \(IslandEvent.customTitleLimit) karakter.")
-                        .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(lid.isAvailable
                      ? "\(lid.diagnostic)\(lid.angle.map { String(format: "  Şu an %.0f°.", $0) } ?? "")"
                      : lid.diagnostic)
-                    .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                 if !lid.isAvailable {
                     message("Menteşe açısı sensörü yalnızca Apple silikon MacBook'larda bulunur ve her modelde okunamaz.")
                 }
@@ -874,13 +874,13 @@ struct SettingsView: View {
             }
             section("Hızlı erişim", "square.grid.2x2") {
                 Text("Island'daki Uygulamalar bölümünde yalnızca buraya eklediklerin görünür. MacB kurulu uygulamaları taramaz.")
-                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                HStack(spacing: 10) {
+                HStack(spacing: MacBDesign.Space.regular) {
                     Button("Uygulama veya klasör ekle…", action: launcher.choose)
                     Spacer()
                     Text("\(launcher.items.count) öğe")
-                        .font(.system(size: 11))
+                        .font(.system(size: MacBDesign.TypeScale.caption))
                         .foregroundStyle(MacBDesign.muted)
                 }
             }
@@ -902,15 +902,15 @@ struct SettingsView: View {
                 .labelsHidden()
                 .accessibilityLabel("Görünüm yoğunluğu")
             }
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "accessibility").font(.system(size: 16)).accessibilityHidden(true)
+            HStack(alignment: .top, spacing: MacBDesign.Space.regular) {
+                Image(systemName: "accessibility").font(.system(size: MacBDesign.TypeScale.title)).accessibilityHidden(true)
                 Text(reduceMotion
                      ? "macOS’ta Hareketi Azalt açık. MacB bu tercihe uyar ve animasyonları kapalı tutar."
                      : "macOS’ta Hareketi Azalt açıldığında, MacB animasyonları otomatik olarak kapatır.")
-                    .font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
+                    .font(.system(size: MacBDesign.TypeScale.body)).fixedSize(horizontal: false, vertical: true)
             }
             .foregroundStyle(MacBDesign.muted)
-            .padding(16)
+            .padding(MacBDesign.Space.loose)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
         }
@@ -938,9 +938,9 @@ struct SettingsView: View {
                           granted: camera.isAuthorized, actionTitle: "İzin ver", action: camera.requestAuthorization)
             if let error = camera.errorMessage { message(error, warning: true) }
             Text("Bir izin kapalıyken diğer özellikler çalışmaya devam eder. macOS yeniden başlatma isterse MacB’yi kapatıp aç.")
-                .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 4)
+                .padding(.top, MacBDesign.Space.tight)
         }
     }
 
@@ -948,10 +948,10 @@ struct SettingsView: View {
 
     private var runningBadge: some View {
         Text("çalışıyor")
-            .font(.system(size: 10, weight: .medium))
+            .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
             .foregroundStyle(Color(nsColor: .systemGreen))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
+            .padding(.horizontal, MacBDesign.Space.close)
+            .padding(.vertical, MacBDesign.Space.tight)
             .background(Color(nsColor: .systemGreen).opacity(0.14), in: Capsule())
             .accessibilityLabel("Çalışıyor")
     }
@@ -961,12 +961,12 @@ struct SettingsView: View {
     private func systemMetric(_ title: String, _ value: String, fraction: Double?) -> some View {
         let level = fraction ?? 0
         let tint: Color = level >= 0.85 ? Color(nsColor: .systemRed) : MacBDesign.accent
-        return VStack(spacing: 5) {
+        return VStack(spacing: MacBDesign.Space.snug) {
             Text(value)
-                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold, design: .rounded))
                 .monospacedDigit()
             Text(title)
-                .font(.system(size: 10))
+                .font(.system(size: MacBDesign.TypeScale.micro))
                 .foregroundStyle(MacBDesign.muted)
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
@@ -978,8 +978,8 @@ struct SettingsView: View {
             .frame(height: 3)
             .opacity(fraction == nil ? 0 : 1)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
+        .padding(.horizontal, MacBDesign.Space.regular)
+        .padding(.vertical, MacBDesign.Space.regular)
         .frame(maxWidth: .infinity)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
         .accessibilityElement(children: .combine)
@@ -1034,9 +1034,9 @@ struct SettingsView: View {
     /// field empty, so it shows the default rather than describing it.
     private func lidLine(_ title: String, text: Binding<String>,
                          placeholder: String, label: String) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: MacBDesign.Space.regular) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                 .frame(width: 104, alignment: .leading)
             TextField(placeholder, text: Binding(
                 get: { text.wrappedValue },
@@ -1058,9 +1058,9 @@ struct SettingsView: View {
 
     private func settingToggle(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
         Toggle(isOn: isOn) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title).font(.system(size: 13, weight: .medium))
-                Text(detail).font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+            VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+                Text(title).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                Text(detail).font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -1071,19 +1071,19 @@ struct SettingsView: View {
     }
 
     private func shortcutRow(_ title: String, symbol: String, keys: String) -> some View {
-        HStack(spacing: 11) {
+        HStack(spacing: MacBDesign.Space.comfortable) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .medium))
+                .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
                 .foregroundStyle(MacBDesign.muted)
                 .frame(width: 20)
                 .accessibilityHidden(true)
-            Text(title).font(.system(size: 12, weight: .medium))
+            Text(title).font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
             Spacer(minLength: 10)
             Text(keys)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium, design: .rounded))
                 .foregroundStyle(MacBDesign.muted)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
+                .padding(.horizontal, MacBDesign.Space.close)
+                .padding(.vertical, MacBDesign.Space.snug)
                 .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 6))
         }
         .accessibilityElement(children: .combine)
@@ -1092,14 +1092,14 @@ struct SettingsView: View {
 
     private func permissionRow(_ title: String, detail: String, granted: Bool,
                                actionTitle: String = "İzin ver", action: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(title).font(.system(size: 13, weight: .semibold))
-            Text(detail).font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+        VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
+            Text(title).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+            Text(detail).font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Label(granted ? "İzin verildi" : "İzin bekleniyor",
                       systemImage: granted ? "checkmark.circle.fill" : "circle.dashed")
-                    .font(.system(size: 11))
+                    .font(.system(size: MacBDesign.TypeScale.caption))
                     .foregroundStyle(granted ? MacBDesign.accent : MacBDesign.muted)
                 Spacer(minLength: 8)
                 if !granted {
@@ -1108,13 +1108,13 @@ struct SettingsView: View {
                         .accessibilityLabel("\(title): \(actionTitle)")
                 }
             }
-            .padding(.top, 2)
+            .padding(.top, MacBDesign.Space.hair)
         }
         .accessibilityElement(children: .contain)
     }
 
     private func message(_ text: String, warning: Bool = false) -> some View {
-        Text(text).font(.system(size: 11))
+        Text(text).font(.system(size: MacBDesign.TypeScale.caption))
             .foregroundStyle(warning ? Color(nsColor: .systemOrange) : MacBDesign.muted)
             .fixedSize(horizontal: false, vertical: true)
     }

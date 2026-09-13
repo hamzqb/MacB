@@ -596,11 +596,11 @@ struct IslandToast: Equatable {
 
     private func showToast(symbol: String, message: String) {
         toastTask?.cancel()
-        withAnimation(.easeOut(duration: 0.16)) { presentation.toast = IslandToast(symbol: symbol, message: message) }
+        withAnimation(MacBDesign.Motion.quick) { presentation.toast = IslandToast(symbol: symbol, message: message) }
         toastTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(1.5))
             guard !Task.isCancelled, let self else { return }
-            withAnimation(.easeIn(duration: 0.14)) { self.presentation.toast = nil }
+            withAnimation(MacBDesign.Motion.quick) { self.presentation.toast = nil }
         }
     }
 
@@ -636,7 +636,7 @@ struct IslandToast: Equatable {
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.contentView = NSHostingView(rootView: CameraPreviewView(service: camera)
-            .background(.black).clipShape(RoundedRectangle(cornerRadius: 14)).padding(12).background(.black))
+            .background(.black).clipShape(RoundedRectangle(cornerRadius: 14)).padding(MacBDesign.Space.comfortable).background(.black))
         window.center()
         cameraWindow = window
         NSApp.activate(ignoringOtherApps: true)

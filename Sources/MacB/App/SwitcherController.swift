@@ -306,17 +306,17 @@ private struct SwitcherView: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: MacBDesign.Space.regular) {
             if model.isLoading {
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let message = model.message {
                 Label(message, systemImage: "macwindow")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let selected = model.selectedWindow {
                 selectionHeader(selected)
-                HStack(spacing: 12) {
+                HStack(spacing: MacBDesign.Space.comfortable) {
                     SwitcherSelectedPreview(window: selected, previews: previews) {
                         onChoose(selected)
                     }
@@ -336,29 +336,29 @@ private struct SwitcherView: View {
             }
         }
         .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.panel).strokeBorder(MacBDesign.separator, lineWidth: 0.5))
-        .animation(animationsEnabled && !reduceMotion ? .easeOut(duration: 0.13) : nil, value: model.selectedID)
+        .animation(animationsEnabled && !reduceMotion ? MacBDesign.Motion.instant : nil, value: model.selectedID)
     }
 
     private var desktopRail: some View {
         ScrollViewReader { proxy in
-            VStack(spacing: 7) {
+            VStack(spacing: MacBDesign.Space.close) {
                 if model.desktopSections.count > 1 {
-                    HStack(spacing: 5) {
+                    HStack(spacing: MacBDesign.Space.snug) {
                         ForEach(model.desktopSections) { section in
                             Button {
                                 if animationsEnabled && !reduceMotion {
-                                    withAnimation(.easeOut(duration: 0.16)) { proxy.scrollTo(section.id, anchor: .top) }
+                                    withAnimation(MacBDesign.Motion.quick) { proxy.scrollTo(section.id, anchor: .top) }
                                 } else {
                                     proxy.scrollTo(section.id, anchor: .top)
                                 }
                             } label: {
-                                HStack(spacing: 4) {
+                                HStack(spacing: MacBDesign.Space.tight) {
                                     Image(systemName: section.isCurrent ? "rectangle.fill" : "rectangle")
                                     Text(section.title)
                                     Text("\(section.windows.count)").monospacedDigit().foregroundStyle(.secondary)
                                 }
-                                .font(.system(size: 8.5, weight: .semibold))
-                                .padding(.horizontal, 7).padding(.vertical, 5)
+                                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+                                .padding(.horizontal, MacBDesign.Space.close).padding(.vertical, MacBDesign.Space.snug)
                                 .background(section.isCurrent ? MacBDesign.selectedBackground.opacity(0.42) : Color.primary.opacity(0.055),
                                             in: Capsule())
                             }
@@ -367,7 +367,7 @@ private struct SwitcherView: View {
                     }
                 }
                 ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 9) {
+                    VStack(spacing: MacBDesign.Space.regular) {
                         ForEach(Array(model.desktopSections.enumerated()), id: \.element.id) { index, section in
                             if index > 0 { Divider().opacity(0.55) }
                             windowSection(title: section.title,
@@ -380,7 +380,7 @@ private struct SwitcherView: View {
                 .onChange(of: model.selectedID) { _, selectedID in
                     guard let selectedID else { return }
                     if animationsEnabled && !reduceMotion {
-                        withAnimation(.easeOut(duration: 0.13)) { proxy.scrollTo(selectedID, anchor: .center) }
+                        withAnimation(MacBDesign.Motion.instant) { proxy.scrollTo(selectedID, anchor: .center) }
                     } else {
                         proxy.scrollTo(selectedID, anchor: .center)
                     }
@@ -391,18 +391,18 @@ private struct SwitcherView: View {
 
     @ViewBuilder private func windowSection(title: String, systemImage: String, windows: [WindowRecord]) -> some View {
         if !windows.isEmpty {
-            VStack(spacing: 6) {
-                HStack(spacing: 5) {
-                    Image(systemName: systemImage).font(.system(size: 9, weight: .semibold))
-                    Text(title).font(.system(size: 9.5, weight: .semibold))
+            VStack(spacing: MacBDesign.Space.snug) {
+                HStack(spacing: MacBDesign.Space.snug) {
+                    Image(systemName: systemImage).font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+                    Text(title).font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                     Spacer(minLength: 4)
                     Text("\(windows.count)")
-                        .font(.system(size: 8.5, weight: .semibold, design: .rounded)).monospacedDigit()
-                        .padding(.horizontal, 5).padding(.vertical, 2)
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold, design: .rounded)).monospacedDigit()
+                        .padding(.horizontal, MacBDesign.Space.snug).padding(.vertical, MacBDesign.Space.hair)
                         .background(Color.primary.opacity(0.07), in: Capsule())
                 }
                 .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, MacBDesign.Space.tight)
                 ForEach(windows) { window in
                     SwitcherWindowCard(window: window, selected: window.id == model.selectedID,
                         position: (model.windows.firstIndex { $0.id == window.id } ?? 0) + 1,
@@ -416,21 +416,21 @@ private struct SwitcherView: View {
     }
 
     private func selectionHeader(_ window: WindowRecord) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: MacBDesign.Space.close) {
             if let icon = window.appIcon {
                 Image(nsImage: icon).resizable().frame(width: 20, height: 20).accessibilityHidden(true)
             }
-            Text(window.appName).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
+            Text(window.appName).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold)).foregroundStyle(.primary)
             if !switcherTitlesMatch(window.appName, window.title) {
-                Text(window.title).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                Text(window.title).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 8)
             Text("\(model.selectedIndex + 1) / \(model.windows.count)")
-                .font(.system(size: 9, weight: .semibold, design: .rounded)).monospacedDigit()
+                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold, design: .rounded)).monospacedDigit()
                 .foregroundStyle(.tertiary)
         }
         .frame(height: 24)
-        .padding(.horizontal, 2)
+        .padding(.horizontal, MacBDesign.Space.hair)
     }
 
 }
@@ -451,23 +451,23 @@ private struct SwitcherSelectedPreview: View {
                 }
                 LinearGradient(colors: [.clear, .black.opacity(0.62)], startPoint: .center, endPoint: .bottom)
                     .allowsHitTesting(false)
-                HStack(spacing: 8) {
+                HStack(spacing: MacBDesign.Space.close) {
                     if let icon = window.appIcon {
                         Image(nsImage: icon).resizable().frame(width: 22, height: 22)
                     }
-                    Text(window.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                    Text(window.title).font(.system(size: MacBDesign.TypeScale.body, weight: .semibold)).lineLimit(1)
                     Spacer(minLength: 0)
                     if window.isMinimized {
                         Label("Küçültülmüş", systemImage: "minus.circle.fill")
-                            .font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+                            .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium)).foregroundStyle(.secondary)
                     }
                     if window.desktopLocation == .other {
                         Label(window.desktopName ?? "Diğer masaüstü", systemImage: "square.stack.3d.up.fill")
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.82))
                     }
                 }
-                .padding(10)
+                .padding(MacBDesign.Space.regular)
             }
             .clipShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
@@ -488,12 +488,12 @@ private struct SwitcherWindowCard: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: MacBDesign.Space.regular) {
                 ZStack {
                     if let image = previews.images[window.id] {
                         Image(nsImage: image).resizable().scaledToFill()
                     } else if let icon = window.appIcon {
-                        Image(nsImage: icon).resizable().scaledToFit().padding(9)
+                        Image(nsImage: icon).resizable().scaledToFit().padding(MacBDesign.Space.regular)
                     } else {
                         Image(systemName: "macwindow").foregroundStyle(.secondary)
                     }
@@ -501,22 +501,22 @@ private struct SwitcherWindowCard: View {
                 .frame(width: 56, height: 40)
                 .background(Color.black.opacity(0.35))
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
                     Text(window.title)
-                        .font(.system(size: 11, weight: selected ? .semibold : .medium))
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: selected ? .semibold : .medium))
                         .foregroundStyle(.primary).lineLimit(1)
                     if !switcherTitlesMatch(window.appName, window.title) {
                         Text(window.appName)
-                            .font(.system(size: 9.5)).foregroundStyle(.secondary).lineLimit(1)
+                            .font(.system(size: MacBDesign.TypeScale.micro)).foregroundStyle(.secondary).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
                 if selected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 12)).foregroundStyle(MacBDesign.accent)
+                        .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.accent)
                 }
             }
-            .padding(7)
+            .padding(MacBDesign.Space.close)
             .frame(height: 54)
             .background(selected ? MacBDesign.selectedBackground.opacity(0.48) : Color.primary.opacity(0.035),
                         in: RoundedRectangle(cornerRadius: 11, style: .continuous))

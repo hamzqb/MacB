@@ -11,13 +11,13 @@ struct IslandLauncherView: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            HStack(spacing: MacBDesign.Space.regular) {
                 ForEach(launcher.items) { item in
                     tile(item)
                 }
                 addTile
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, MacBDesign.Space.hair)
         }
         .scrollClipDisabled()
         .accessibilityLabel("Hızlı erişim")
@@ -28,13 +28,13 @@ struct IslandLauncherView: View {
             launcher.open(item)
             if let message = launcher.errorMessage { notify("exclamationmark", message) }
         } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: MacBDesign.Space.snug) {
                 Image(nsImage: item.icon)
                     .resizable()
                     .frame(width: 34, height: 34)
                     .opacity(item.isAvailable ? 1 : 0.35)
                 Text(item.name)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
                     .foregroundStyle(item.isAvailable
                                      ? MacBDesign.IslandToken.primaryText
                                      : MacBDesign.IslandToken.tertiaryText)
@@ -62,13 +62,13 @@ struct IslandLauncherView: View {
             launcher.choose()
             if let message = launcher.errorMessage { notify("exclamationmark", message) }
         } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: MacBDesign.Space.snug) {
                 Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
                     .foregroundStyle(MacBDesign.IslandToken.accent)
                     .frame(width: 34, height: 34)
                 Text("Ekle")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             }
             .frame(width: 74, height: IslandGeometry.launcherTileHeight)

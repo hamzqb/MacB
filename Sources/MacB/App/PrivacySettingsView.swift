@@ -17,10 +17,10 @@ struct PrivacySettingsView: View {
                     get: { faceUnlock.settings.isEnabled },
                     set: { value in faceUnlock.update { $0.isEnabled = value } }
                 )) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("Yüzümle aç").font(.system(size: 13, weight: .medium))
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+                        Text("Yüzümle aç").font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
                         Text("Sadece MacB'nin kendi özel alanlarını açar. Mac oturumunu açmaz, Mac parolanı istemez, saklamaz.")
-                            .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                            .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -49,7 +49,7 @@ struct PrivacySettingsView: View {
                             }
                         )) {
                             Label(area.title, systemImage: area.symbol)
-                                .font(.system(size: 13, weight: .medium))
+                                .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
                         }
                         .toggleStyle(.switch)
                         .controlSize(.small)
@@ -57,8 +57,8 @@ struct PrivacySettingsView: View {
                 }
 
                 section("Eşleşme ve kilit") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Eşleşme sıkılığı").font(.system(size: 13, weight: .medium))
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+                        Text("Eşleşme sıkılığı").font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
                         Picker("", selection: Binding(
                             get: { faceUnlock.settings.strictness },
                             set: { value in faceUnlock.update { $0.strictness = value } }
@@ -71,11 +71,11 @@ struct PrivacySettingsView: View {
                         .pickerStyle(.segmented)
                         .frame(width: 260)
                         Text("Sıkı seçenek yanlış eşleşmeyi zorlaştırır, karanlıkta biraz daha çok deneme ister.")
-                            .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                            .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Boşta kalınca kilitle").font(.system(size: 13, weight: .medium))
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+                        Text("Boşta kalınca kilitle").font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
                         Picker("", selection: Binding(
                             get: { faceUnlock.settings.idleRelockSeconds },
                             set: { value in faceUnlock.update { $0.idleRelockSeconds = value } }
@@ -93,17 +93,17 @@ struct PrivacySettingsView: View {
                 section("Kayıtlı yüzler") {
                     if faceUnlock.isVaultUnlocked {
                         ForEach(faceUnlock.identities) { identity in
-                            HStack(spacing: 12) {
+                            HStack(spacing: MacBDesign.Space.comfortable) {
                                 Toggle("", isOn: Binding(
                                     get: { identity.isEnabled },
                                     set: { faceUnlock.setIdentity(identity.id, enabled: $0) }
                                 ))
                                 .labelsHidden()
                                 .accessibilityLabel(identity.name)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(identity.name).font(.system(size: 13, weight: .medium))
+                                VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                                    Text(identity.name).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
                                     Text("\(identity.samples.count) örnek · \(identity.embedderIdentifier)")
-                                        .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                                 }
                                 Spacer()
                                 Button("Sil", role: .destructive) { faceUnlock.remove(identity.id) }
@@ -116,7 +116,7 @@ struct PrivacySettingsView: View {
                         }
                             .controlSize(.small)
                         Text("Kayıtlar şifreli. Görmek için Touch ID ya da Mac parolan gerekir; ikisini de macOS sorar, MacB görmez.")
-                            .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                            .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -127,22 +127,22 @@ struct PrivacySettingsView: View {
                     get: { faceUnlock.settings.allowsExperimentalModel },
                     set: { value in faceUnlock.update { $0.allowsExperimentalModel = value } }
                 )) {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text("Deneysel: kendi modelimi kullan").font(.system(size: 13, weight: .medium))
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+                        Text("Deneysel: kendi modelimi kullan").font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
                         Text("MacB yüz tanıma modeli dağıtmaz. Kendi derlediğin Core ML modelini Application Support/MacB/Models içine koyarsan burada açabilirsin. Lisansı senin sorumluluğunda.")
-                            .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                            .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .toggleStyle(.switch)
                 .controlSize(.small)
                 Text("Şu an kullanılan: \(faceUnlock.embedderName)")
-                    .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
             }
 
             section("Veri") {
                 Text("Kamera yalnızca tarama sırasında çalışır. Kare hiçbir zaman diske yazılmaz, hiçbir yere gönderilmez. Sadece yüzün sayısal karşılığı AES-GCM ile şifrelenip saklanır; anahtar Anahtar Zinciri'nde, Touch ID ya da Mac parolası arkasında durur ve bu Mac'ten çıkmaz.")
-                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if faceUnlock.isEnrolled {
                     Button("Yüz kaydını sil", role: .destructive) { showDeleteConfirmation = true }
@@ -152,7 +152,7 @@ struct PrivacySettingsView: View {
 
             if let message = faceUnlock.errorMessage {
                 Text(message)
-                    .font(.system(size: 12))
+                    .font(.system(size: MacBDesign.TypeScale.body))
                     .foregroundStyle(Color(nsColor: .systemRed))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -169,7 +169,7 @@ struct PrivacySettingsView: View {
 
     @ViewBuilder private var enrollment: some View {
         if faceUnlock.isEnrolling {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
                 FaceEnrollmentCameraView(frame: faceUnlock.previewFrame,
                                          faceVisible: faceUnlock.isFaceVisible,
                                          pose: faceUnlock.enrollmentPose,
@@ -179,7 +179,7 @@ struct PrivacySettingsView: View {
                     .controlSize(.small)
             }
         } else {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
                 TextField("Ad", text: $enrollmentName)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 220)
@@ -188,19 +188,19 @@ struct PrivacySettingsView: View {
                 }
                 .controlSize(.small)
                 Text("Dokuz açıdan kısa bir tarama. Kamera sadece bu sırada açılır.")
-                    .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
             }
         }
     }
 
     @ViewBuilder private var enrolledSummary: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: MacBDesign.Space.regular) {
             Image(systemName: "checkmark.seal.fill")
                 .foregroundStyle(MacBDesign.accent)
-            Text("Yüz kaydın hazır.").font(.system(size: 12))
+            Text("Yüz kaydın hazır.").font(.system(size: MacBDesign.TypeScale.body))
             if faceUnlock.isExperimentalModel {
-                Text("Deneysel model").font(.system(size: 11))
-                    .padding(.horizontal, 8).padding(.vertical, 3)
+                Text("Deneysel model").font(.system(size: MacBDesign.TypeScale.caption))
+                    .padding(.horizontal, MacBDesign.Space.close).padding(.vertical, MacBDesign.Space.tight)
                     .background(MacBDesign.accent.opacity(0.18), in: Capsule())
             }
         }
@@ -212,9 +212,9 @@ struct PrivacySettingsView: View {
 
     /// Matches the grouping used by every other settings page.
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
                 .foregroundStyle(MacBDesign.muted)
                 .accessibilityAddTraits(.isHeader)
             VStack(alignment: .leading, spacing: 14, content: content)
@@ -249,30 +249,30 @@ private struct FaceEnrollmentCameraView: View {
             faceGuide
 
             VStack {
-                HStack(spacing: 6) {
+                HStack(spacing: MacBDesign.Space.snug) {
                     Circle()
                         .fill(faceVisible ? Color.green : Color.orange)
                         .frame(width: 7, height: 7)
                     Text(faceVisible ? "Yüz algılandı" : "Yüzünü çerçeveye getir")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
+                .padding(.horizontal, MacBDesign.Space.regular)
+                .padding(.vertical, MacBDesign.Space.snug)
                 .background(.black.opacity(0.48), in: Capsule())
 
                 Spacer()
 
-                VStack(spacing: 3) {
+                VStack(spacing: MacBDesign.Space.tight) {
                     Text(pose?.title ?? "Karşıya bak")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
                     Text("\(completed) / \(total) açı tamam")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
                         .foregroundStyle(.white.opacity(0.72))
                 }
                 .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 9)
+                .padding(.horizontal, MacBDesign.Space.loose)
+                .padding(.vertical, MacBDesign.Space.regular)
                 .background(.ultraThinMaterial.opacity(0.72), in: Capsule())
             }
             .padding(14)
@@ -298,11 +298,11 @@ private struct FaceEnrollmentCameraView: View {
         } else {
             ZStack {
                 Color(nsColor: .controlBackgroundColor)
-                VStack(spacing: 8) {
+                VStack(spacing: MacBDesign.Space.close) {
                     Image(systemName: "camera.fill")
-                        .font(.system(size: 26, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.display, weight: .medium))
                     Text("Kamera hazırlanıyor…")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                 }
                 .foregroundStyle(.secondary)
             }
@@ -318,7 +318,7 @@ private struct FaceEnrollmentCameraView: View {
                 .stroke(faceVisible ? Color.green : Color.orange,
                         style: StrokeStyle(lineWidth: 5, lineCap: .round))
                 .rotationEffect(.degrees(-90))
-                .animation(.spring(response: 0.38, dampingFraction: 0.82), value: progress)
+                .motion(MacBDesign.Motion.settle, value: progress)
 
             ForEach(0..<total, id: \.self) { index in
                 Capsule()
@@ -343,7 +343,7 @@ private struct FaceEnrollmentCameraView: View {
             return
         }
         scanOffset = -72
-        withAnimation(.easeInOut(duration: 1.25).repeatForever(autoreverses: true)) {
+        withAnimation(MacBDesign.Motion.breathe(1.25)) {
             scanOffset = 72
         }
     }

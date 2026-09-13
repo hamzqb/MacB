@@ -374,10 +374,10 @@ private struct DockPreviewView: View {
     private var hiddenCount: Int { max(0, windows.count - visibleWindows.count) }
     private var favoriteCount: Int { windows.filter { favorites.isFavorite($0) }.count }
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
             header
             ScrollView(horizontal ? .horizontal : .vertical) {
-                let layout = horizontal ? AnyLayout(HStackLayout(alignment: .top, spacing: 8)) : AnyLayout(VStackLayout(spacing: 8))
+                let layout = horizontal ? AnyLayout(HStackLayout(alignment: .top, spacing: MacBDesign.Space.close)) : AnyLayout(VStackLayout(spacing: MacBDesign.Space.close))
                 layout {
                     ForEach(visibleWindows) { window in
                         WindowCardView(window: window, previewService: previewService,
@@ -389,10 +389,10 @@ private struct DockPreviewView: View {
                             })
                     }
                     if hiddenCount > 0 { moreCard }
-                }.padding(.horizontal, 14).padding(.bottom, 12)
+                }.padding(.horizontal, 14).padding(.bottom, MacBDesign.Space.comfortable)
             }.scrollIndicators(.hidden)
             if let error = previewService.errorMessage { Text(error).font(.caption2).foregroundStyle(.secondary).padding([.horizontal, .bottom], 10) }
-            else { footer.padding(.horizontal, 14).padding(.bottom, 12) }
+            else { footer.padding(.horizontal, 14).padding(.bottom, MacBDesign.Space.comfortable) }
         }.coordinateSpace(name: "panel").onPreferenceChange(CardFramesKey.self, perform: onFrames)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: MacBDesign.corner))
             .overlay(RoundedRectangle(cornerRadius: MacBDesign.corner).strokeBorder(MacBDesign.separator, lineWidth: 0.5))
@@ -409,22 +409,22 @@ private struct DockPreviewView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: MacBDesign.Space.regular) {
             if let icon = visibleWindows.first?.appIcon {
                 Image(nsImage: icon).resizable().frame(width: 22, height: 22).accessibilityHidden(true)
             }
-            VStack(alignment: .leading, spacing: 1) {
-                Text(windows.first?.appName ?? "Pencereler").font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                Text(summary).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                Text(windows.first?.appName ?? "Pencereler").font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold)).lineLimit(1)
+                Text(summary).font(.system(size: MacBDesign.TypeScale.micro)).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer(minLength: 8)
             Text("\(windows.count)")
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .padding(.horizontal, 7).frame(height: 22)
+                .padding(.horizontal, MacBDesign.Space.close).frame(height: 22)
                 .background(MacBDesign.controlBackground, in: Capsule())
         }
-        .padding(.horizontal, 15).padding(.top, 13)
+        .padding(.horizontal, MacBDesign.Space.loose).padding(.top, MacBDesign.Space.comfortable)
     }
 
     private var summary: String {
@@ -433,10 +433,10 @@ private struct DockPreviewView: View {
     }
 
     private var footer: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "cursorarrow.motionlines").font(.system(size: 10, weight: .medium))
+        HStack(spacing: MacBDesign.Space.close) {
+            Image(systemName: "cursorarrow.motionlines").font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
             Text("Bekle: konumu vurgula · Tıkla: öne getir")
-                .font(.system(size: 10))
+                .font(.system(size: MacBDesign.TypeScale.micro))
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
@@ -444,14 +444,14 @@ private struct DockPreviewView: View {
     }
 
     private var moreCard: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: MacBDesign.Space.close) {
             Image(systemName: "ellipsis")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
             Text("+\(hiddenCount)")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold, design: .rounded))
                 .monospacedDigit()
             Text("daha fazla")
-                .font(.system(size: 10))
+                .font(.system(size: MacBDesign.TypeScale.micro))
                 .foregroundStyle(.secondary)
         }
         .frame(width: preferences.interfaceDensity == .compact ? 74 : 84)

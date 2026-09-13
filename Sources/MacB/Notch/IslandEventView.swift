@@ -19,18 +19,18 @@ struct IslandEventView: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: MacBDesign.Space.regular) {
             leading
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
                 Text(event.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
                     .foregroundStyle(MacBDesign.IslandToken.primaryText)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .fixedSize(horizontal: true, vertical: false)
                 if let detail = event.detail, event.progress == nil {
                     Text(detail)
-                        .font(.system(size: 10))
+                        .font(.system(size: MacBDesign.TypeScale.micro))
                         .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         .lineLimit(1)
                 }
@@ -40,7 +40,7 @@ struct IslandEventView: View {
                 level(progress)
                 if let detail = event.detail {
                     Text(detail)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
                         .monospacedDigit()
                         .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         .frame(width: IslandGeometry.eventLevelDetailWidth, alignment: .trailing)
@@ -60,7 +60,7 @@ struct IslandEventView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
         } else {
             Image(systemName: event.symbol)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
                 .foregroundStyle(tint)
                 .frame(width: 22)
                 .contentTransition(.symbolEffect(.replace))
@@ -77,6 +77,6 @@ struct IslandEventView: View {
             }
         }
         .frame(width: IslandGeometry.eventLevelWidth, height: 4)
-        .animation(.easeOut(duration: 0.12), value: progress)
+        .motion(MacBDesign.Motion.instant, value: progress)
     }
 }

@@ -21,7 +21,7 @@ struct IslandDropView: View {
     }
 
     var body: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: MacBDesign.Space.regular) {
             HStack(spacing: IslandGeometry.gap) {
                 dropCard(title: "AirDrop", icon: Self.airDropIcon,
                          symbol: "dot.radiowaves.up.forward", tint: Color(nsColor: .systemBlue)) {
@@ -33,19 +33,19 @@ struct IslandDropView: View {
                 }
             }
             if !recentTargets.items.isEmpty {
-                HStack(spacing: 8) {
+                HStack(spacing: MacBDesign.Space.close) {
                     Text("Son hedefler")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
                         .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
                     ForEach(recentTargets.items.prefix(5)) { target in
                         Button { openTarget(target) } label: {
-                            HStack(spacing: 5) {
+                            HStack(spacing: MacBDesign.Space.snug) {
                                 if let icon = applicationIcon(for: target) {
                                     Image(nsImage: icon).resizable().frame(width: 14, height: 14)
                                 }
-                                Text(target.appName).font(.system(size: 11)).lineLimit(1)
+                                Text(target.appName).font(.system(size: MacBDesign.TypeScale.caption)).lineLimit(1)
                             }
-                            .padding(.horizontal, 10)
+                            .padding(.horizontal, MacBDesign.Space.regular)
                             .frame(height: 26)
                             .background(MacBDesign.IslandToken.navFill, in: Capsule())
                         }
@@ -79,23 +79,23 @@ struct IslandDropView: View {
                           action: @escaping () -> Void) -> some View {
         let isHovered = hovered == title
         return Button(action: action) {
-            VStack(spacing: 8) {
+            VStack(spacing: MacBDesign.Space.close) {
                 Group {
                     if let icon {
                         Image(nsImage: icon).resizable().aspectRatio(contentMode: .fit)
                     } else {
                         Image(systemName: symbol)
-                            .font(.system(size: 32, weight: .regular))
+                            .font(.system(size: MacBDesign.TypeScale.hero, weight: .regular))
                             .foregroundStyle(tint)
                     }
                 }
                 .frame(width: 38, height: 38)
                 .offset(y: isHovered ? -2 : 0)
                 .shadow(color: tint.opacity(isHovered ? 0.55 : 0), radius: 10)
-                VStack(spacing: 1) {
-                    Text(title).font(.system(size: 12, weight: .semibold))
+                VStack(spacing: MacBDesign.Space.hair) {
+                    Text(title).font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
                     Text(isHovered ? pendingLabel : "buraya bırak")
-                        .font(.system(size: 9))
+                        .font(.system(size: MacBDesign.TypeScale.micro))
                         .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -109,7 +109,7 @@ struct IslandDropView: View {
                                     lineWidth: isHovered ? 1.6 : 1,
                                     isFast: isHovered))
             .scaleEffect(isHovered ? 1.03 : 1)
-            .animation(.spring(response: 0.28, dampingFraction: 0.72), value: isHovered)
+            .motion(MacBDesign.Motion.snap, value: isHovered)
         }
         .buttonStyle(.plain)
         .onHover { hovered = $0 ? title : (hovered == title ? nil : hovered) }

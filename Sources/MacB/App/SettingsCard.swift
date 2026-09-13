@@ -12,23 +12,23 @@ struct SettingsCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
+            HStack(spacing: MacBDesign.Space.close) {
                 Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
                     .foregroundStyle(MacBDesign.accent)
                     .frame(width: 22, height: 22)
                     .background(MacBDesign.accent.opacity(0.13),
                                 in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
                     .foregroundStyle(.primary)
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 0)
             }
             VStack(alignment: .leading, spacing: 14) { content }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+                .padding(MacBDesign.Space.loose)
                 .background(MacBDesign.cardFill,
                             in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
                 // A light fall from the top edge, the same idea as the island

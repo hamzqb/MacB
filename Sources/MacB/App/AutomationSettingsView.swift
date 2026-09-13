@@ -40,14 +40,14 @@ struct AutomationSettingsView: View {
                         draft = AutomationRule(title: "", trigger: .chargerConnected, action: .pauseMedia)
                     } label: {
                         Label("Kural ekle", systemImage: "plus")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(MacBDesign.accent)
                 }
                 if let last = automation.lastRun {
                     Text("Son çalışan: \(last.title) · \(Self.time.string(from: last.at))")
-                        .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                 }
             }
         }
@@ -62,10 +62,10 @@ struct AutomationSettingsView: View {
 
     private var header: some View {
         Toggle(isOn: $preferences.automationEnabled) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Kurallar çalışsın").font(.system(size: 13, weight: .medium))
+            VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+                Text("Kurallar çalışsın").font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
                 Text("MacB'nin zaten izlediği olaylara bağlanır. Ek izin istemez, arka planda bir şey açmaz, hiçbir şey silmez.")
-                    .font(.system(size: 12)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -75,10 +75,10 @@ struct AutomationSettingsView: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Henüz kural yok.").font(.system(size: 12, weight: .medium))
+        VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
+            Text("Henüz kural yok.").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
             Text("Örnek: şarj takılınca 25 dakikalık zamanlayıcı başlasın. Ya da kapak kapanırken müzik dursun.")
-                .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
@@ -87,22 +87,22 @@ struct AutomationSettingsView: View {
     }
 
     private func ruleRow(_ rule: AutomationRule) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(alignment: .top, spacing: MacBDesign.Space.comfortable) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
                 Text(rule.title.isEmpty ? AutomationText.title(rule.trigger) : rule.title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
                 Text("\(AutomationText.title(rule.trigger)) → \(AutomationText.title(rule.action))")
-                    .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if !rule.action.isSafe {
                     Text("Bu eylem çalıştırılmaz, alanları eksik ya da güvenli değil.")
-                        .font(.system(size: 11)).foregroundStyle(.orange)
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(.orange)
                 }
             }
             Spacer(minLength: 0)
             Button("Dene") { automation.test(rule) }
                 .buttonStyle(.plain)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
                 .foregroundStyle(MacBDesign.accent)
                 .disabled(!rule.action.isSafe)
             Button { draft = rule } label: { Image(systemName: "pencil") }
@@ -116,7 +116,7 @@ struct AutomationSettingsView: View {
                 .labelsHidden().toggleStyle(.switch).controlSize(.mini)
                 .accessibilityLabel("\(rule.title) kuralı")
         }
-        .padding(12)
+        .padding(MacBDesign.Space.comfortable)
         .background(MacBDesign.cardFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
@@ -316,7 +316,7 @@ struct AutomationRuleEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: MacBDesign.Space.comfortable) {
             TextField("Kural adı", text: $rule.title)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 280)
@@ -329,12 +329,12 @@ struct AutomationRuleEditor: View {
             }
             if triggerKind == .batteryBelow {
                 labelled("Eşik") {
-                    HStack(spacing: 10) {
+                    HStack(spacing: MacBDesign.Space.regular) {
                         Slider(value: $batteryPercent,
                                in: Double(AutomationTrigger.batteryRange.lowerBound)...Double(AutomationTrigger.batteryRange.upperBound),
                                step: 5)
                             .frame(maxWidth: 200)
-                        Text("%\(Int(batteryPercent))").font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                        Text("%\(Int(batteryPercent))").font(.system(size: MacBDesign.TypeScale.body, weight: .semibold)).monospacedDigit()
                     }
                 }
             }
@@ -365,12 +365,12 @@ struct AutomationRuleEditor: View {
                 }
             case .startTimer:
                 labelled("Süre") {
-                    HStack(spacing: 10) {
+                    HStack(spacing: MacBDesign.Space.regular) {
                         Slider(value: $minutes,
                                in: Double(AutomationAction.timerRange.lowerBound)...Double(AutomationAction.timerRange.upperBound),
                                step: 1)
                             .frame(maxWidth: 200)
-                        Text("\(Int(minutes)) dk").font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                        Text("\(Int(minutes)) dk").font(.system(size: MacBDesign.TypeScale.body, weight: .semibold)).monospacedDigit()
                     }
                 }
             case .runShortcut:
@@ -384,10 +384,10 @@ struct AutomationRuleEditor: View {
 
             if actionKind == .openLink {
                 Text("Yalnızca http, https ve bu Mac'teki dosyalar açılır.")
-                    .font(.system(size: 11)).foregroundStyle(MacBDesign.muted)
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: MacBDesign.Space.comfortable) {
                 Button("Kaydet") {
                     var saved = rule
                     saved.trigger = trigger
@@ -407,9 +407,9 @@ struct AutomationRuleEditor: View {
     }
 
     private func labelled<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: MacBDesign.Space.regular) {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                 .frame(width: 92, alignment: .leading)
             content()
             Spacer(minLength: 0)
