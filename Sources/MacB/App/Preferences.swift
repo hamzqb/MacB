@@ -137,7 +137,6 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var lidFarewellText: String {
         didSet { defaults.set(lidFarewellText, forKey: "lidFarewellText") }
     }
-    @Published var hidesSystemVolumeHUD: Bool { didSet { defaults.set(hidesSystemVolumeHUD, forKey: "hidesSystemVolumeHUD") } }
     @Published var mediaWidgetStyle: MediaWidgetStyle { didSet { defaults.set(mediaWidgetStyle.rawValue, forKey: "mediaWidgetStyle") } }
     @Published var weatherWidgetStyle: WeatherWidgetStyle { didSet { defaults.set(weatherWidgetStyle.rawValue, forKey: "weatherWidgetStyle") } }
     /// The city the world-clock widget shows next to local time. An identifier
@@ -164,7 +163,6 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "lidHingeAngle": LidFold.defaultOpenAngle,
                                     "lidScreenBlur": true,
                                     "automationEnabled": false,
-                                    "hidesSystemVolumeHUD": false,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
         notchEnabled = defaults.bool(forKey: "notchEnabled")
@@ -190,7 +188,6 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         automationEnabled = defaults.bool(forKey: "automationEnabled")
         lidWelcomeText = defaults.string(forKey: "lidWelcomeText") ?? ""
         lidFarewellText = defaults.string(forKey: "lidFarewellText") ?? ""
-        hidesSystemVolumeHUD = defaults.bool(forKey: "hidesSystemVolumeHUD")
         let storedZone = defaults.string(forKey: "secondaryTimeZone") ?? "America/New_York"
         secondaryTimeZone = TimeZone(identifier: storedZone) == nil ? "America/New_York" : storedZone
         mediaWidgetStyle = MediaWidgetStyle(rawValue: defaults.string(forKey: "mediaWidgetStyle") ?? "") ?? .artwork

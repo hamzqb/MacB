@@ -245,6 +245,9 @@ private final class Flag: @unchecked Sendable {
             return
         }
         NSApp.setActivationPolicy(.accessory)
+        // An older MacB could leave the macOS indicator helper stopped. Undo it
+        // once, before anything else, so nobody is left without indicators.
+        SystemHUDRepair.resumeIndicatorHelper()
         buildMenu()
         hotKey.onPress = { [weak self] backwards in
             guard let self, self.preferences.switcherEnabled else { return }
@@ -571,9 +574,6 @@ private final class Flag: @unchecked Sendable {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        // Put the macOS panel back before anything else, so a slow teardown
-        // cannot leave the Mac without its own indicators.
-        systemEvents.restoreSystemHUD()
         hotKey.unregister()
         windowLayout.stop()
         switcher.dismiss()

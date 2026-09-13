@@ -795,13 +795,8 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 22) {
             section("Anlık bildirimler", "bell.badge") {
                 settingToggle("Sistem değişikliklerini göster",
-                              detail: "Sesi değiştirince, şarkı geçince ya da şarj takılınca island kısa süre açılıp gösterir.",
+                              detail: "Şarkı geçince ya da şarj takılınca island kısa süre açılıp gösterir.",
                               isOn: $preferences.islandEventsEnabled)
-                rowDivider
-                settingToggle("Ses göstergesini MacB devralsın",
-                              detail: "Mac'in kendi hoparlörlerinde macOS'un panelini duraklatır, yerini island alır. Parlaklık ve Caps Lock da aynı panelden geldiği için onlar da görünmez olur. AirPods gibi Bluetooth çıkışlarda macOS paneli Control Center'dan çiziyor ve durdurulamıyor; orada MacB kenara çekilir. İki gösterge birden hiçbir zaman çıkmaz. MacB kapanınca her şey eski haline döner.",
-                              isOn: $preferences.hidesSystemVolumeHUD)
-                    .disabled(!preferences.islandEventsEnabled)
             }
             section("Island yüzeyi", "rectangle.topthird.inset.filled") {
                 Picker("Island yüzeyi", selection: $preferences.islandAppearance) {

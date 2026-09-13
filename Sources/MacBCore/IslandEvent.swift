@@ -9,7 +9,7 @@ import Foundation
 /// an interruption but a confirmation.
 public struct IslandEvent: Equatable, Sendable {
     public enum Kind: String, Equatable, Sendable {
-        case volume, mute, nowPlaying, charging, unplugged, batteryLow, welcome, lidClosing, rule
+        case nowPlaying, charging, unplugged, batteryLow, welcome, lidClosing, rule
     }
 
     public let kind: Kind
@@ -30,12 +30,10 @@ public struct IslandEvent: Equatable, Sendable {
 
     /// How long the island stays open for this event.
     ///
-    /// A level you are actively dragging should follow your finger, so volume and
-    /// hold briefly and re-arm on every change. A track change is read
-    /// once, so it stays long enough to read a title and no longer.
+    /// Long enough to read, and no longer. A track change is one title; a
+    /// warning is worth a beat more.
     public var duration: TimeInterval {
         switch kind {
-        case .volume, .mute: return 1.2
         case .nowPlaying: return 2.4
         case .charging, .unplugged: return 2.0
         case .batteryLow: return 3.0
@@ -48,22 +46,20 @@ public struct IslandEvent: Equatable, Sendable {
     }
 
     /// Whether a newer event of the same kind simply replaces this one rather
-    /// than queueing behind it. Dragging the volume slider must not queue
-    /// thirty panels.
+    /// than queueing behind it. A run of changes must not queue thirty panels.
     public func supersedes(_ other: IslandEvent) -> Bool {
         kind == other.kind
     }
 
     /// An event only outranks what is already showing when it is at least as
     /// important. Otherwise the quieter one waits, and a charger notice cannot
-    /// steal the panel while the volume is being dragged.
+    /// push a low-battery warning off the screen.
     public var priority: Int {
         switch kind {
         case .batteryLow: return 3
         case .welcome: return 3
         case .rule: return 3
         case .lidClosing: return 4
-        case .volume, .mute: return 2
         case .charging, .unplugged: return 1
         case .nowPlaying: return 0
         }
@@ -75,16 +71,6 @@ public struct IslandEvent: Equatable, Sendable {
 }
 
 public extension IslandEvent {
-    static func volume(_ level: Double, isMuted: Bool) -> IslandEvent {
-        let clamped = min(1, max(0, level))
-        if isMuted || clamped == 0 {
-            return IslandEvent(kind: .mute, title: "Sessiz", progress: 0, symbol: "speaker.slash.fill")
-        }
-        return IslandEvent(kind: .volume, title: "Ses",
-                           detail: "\(Int((clamped * 100).rounded()))%",
-                           progress: clamped, symbol: symbolForVolume(clamped))
-    }
-
     static func nowPlaying(title: String, artist: String) -> IslandEvent {
         IslandEvent(kind: .nowPlaying, title: title,
                     detail: artist.isEmpty ? nil : artist,
@@ -111,7 +97,7 @@ public extension IslandEvent {
 
     /// The moment the lid comes back up.
     ///
-    /// Shown with the same machinery as a volume nudge, because that is exactly
+    /// Shown with the same machinery as a charger notice, because that is exactly
     /// what it is: a line that appears, is read, and leaves on its own.
     static func welcome(hour: Int, time: String, batteryPercent: Int?,
                         custom: String? = nil) -> IslandEvent {
@@ -183,15 +169,6 @@ public extension IslandEvent {
         case 11..<18: return "sun.max.fill"
         case 18..<23: return "sunset.fill"
         default: return "moon.stars.fill"
-        }
-    }
-
-    private static func symbolForVolume(_ level: Double) -> String {
-        switch level {
-        case ..<0.01: return "speaker.slash.fill"
-        case ..<0.34: return "speaker.wave.1.fill"
-        case ..<0.67: return "speaker.wave.2.fill"
-        default: return "speaker.wave.3.fill"
         }
     }
 }

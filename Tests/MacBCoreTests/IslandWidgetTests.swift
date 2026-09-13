@@ -175,37 +175,8 @@ final class IslandWidgetTests: XCTestCase {
         XCTAssertGreaterThan(IslandGeometry.expandedHeight(bodyHeight: height), height)
     }
 
-    func testLevelEventReplacesItsOwnKind() {
-        let first = IslandEvent.volume(0.3, isMuted: false)
-        let second = IslandEvent.volume(0.4, isMuted: false)
-        XCTAssertTrue(second.supersedes(first))
-        XCTAssertTrue(second.outranks(first))
-    }
-
-    func testQuietEventCannotInterruptALouderOne() {
-        let volume = IslandEvent.volume(0.5, isMuted: false)
-        let track = IslandEvent.nowPlaying(title: "Kill Bill", artist: "SZA")
-        XCTAssertFalse(track.outranks(volume))
-        XCTAssertTrue(volume.outranks(track))
-        XCTAssertTrue(IslandEvent.batteryLow(8).outranks(volume))
-    }
-
-    func testMutingReadsAsMute() {
-        let muted = IslandEvent.volume(0.7, isMuted: true)
-        XCTAssertEqual(muted.kind, .mute)
-        XCTAssertEqual(muted.progress, 0)
-        XCTAssertEqual(IslandEvent.volume(0, isMuted: false).kind, .mute)
-    }
-
-    func testEventLevelsStayInRange() {
-        for raw in [-3.0, 0.0, 0.42, 1.0, 7.5] {
-            guard let progress = IslandEvent.volume(raw, isMuted: false).progress else { continue }
-            XCTAssertTrue(progress >= 0 && progress <= 1, "Volume \(raw) produced \(progress)")
-        }
-    }
-
     func testEventStripIsSizedByItsContent() {
-        let short = IslandGeometry.eventWidth(title: "Ses", detail: "40%", hasProgress: true)
+        let short = IslandGeometry.eventWidth(title: "Şarj", detail: "%80", hasProgress: true)
         let long = IslandGeometry.eventWidth(title: "Çok uzun bir şarkı adı burada",
                                              detail: "Bir sanatçı", hasProgress: false)
         XCTAssertLessThan(short, long)

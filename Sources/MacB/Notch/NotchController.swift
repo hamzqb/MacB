@@ -152,7 +152,6 @@ struct IslandToast: Equatable {
             self?.dragHandedOff = true; self?.closePanel(immediate: true)
         }
         preferences.objectWillChange.sink { [weak self] _ in
-            DispatchQueue.main.async { self?.applyHUDSuppression() }
             DispatchQueue.main.async { self?.render() }
         }.store(in: &subscriptions)
         // Opening the library and adding a widget both change how much room home
@@ -216,7 +215,6 @@ struct IslandToast: Equatable {
             if !enabled { self?.lidBlur.hide() }
         }.store(in: &subscriptions)
         systemEvents.start()
-        applyHUDSuppression()
     }
 
     /// The hinge moved. Redraw the island and take the screen blur with it.
@@ -271,15 +269,10 @@ struct IslandToast: Equatable {
                                        custom: preferences.lidFarewellText))
     }
 
-    /// macOS only stops drawing its panel while MacB is actually replacing it.
-    private func applyHUDSuppression() {
-        systemEvents.setSuppressesSystemHUD(preferences.islandEventsEnabled && preferences.hidesSystemVolumeHUD)
-    }
-
     /// Shows an event, or takes the island back down once it has passed.
     ///
-    /// An open panel is never interrupted: the user put it there, and a volume
-    /// nudge is not a reason to replace what they are reading.
+    /// An open panel is never interrupted: the user put it there, and a passing
+    /// notice is not a reason to replace what they are reading.
     private func systemEventChanged(_ event: IslandEvent?) {
         guard preferences.islandEventsEnabled else {
             if presentation.event != nil { presentation.event = nil; render() }

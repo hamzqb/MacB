@@ -426,34 +426,8 @@ struct CoreTestRunner {
                 try expect(placed == layout.enabledWidgets.count, "\(layout.enabledWidgets.count - placed) widgets were dropped")
                 try expect(IslandGeometry.expandedHeight(bodyHeight: IslandGeometry.gridHeight(rows: rows)) > 0, "Grid produced no height")
             }),
-            ("IslandEvent: a level event replaces its own kind instead of queueing", {
-                let first = IslandEvent.volume(0.3, isMuted: false)
-                let second = IslandEvent.volume(0.4, isMuted: false)
-                try expect(second.supersedes(first), "A second volume change queued behind the first")
-                try expect(second.outranks(first), "A newer volume change did not take the panel")
-            }),
-            ("IslandEvent: a quiet event cannot interrupt a louder one", {
-                let volume = IslandEvent.volume(0.5, isMuted: false)
-                let track = IslandEvent.nowPlaying(title: "Kill Bill", artist: "SZA")
-                try expect(!track.outranks(volume), "A track change stole the panel from the volume slider")
-                try expect(volume.outranks(track), "The volume slider lost to a track change")
-                try expect(IslandEvent.batteryLow(8).outranks(volume), "A low battery could not interrupt")
-            }),
-            ("IslandEvent: muting reads as mute rather than zero volume", {
-                let muted = IslandEvent.volume(0.7, isMuted: true)
-                try expect(muted.kind == .mute, "Muting produced a volume event")
-                try expect(muted.progress == 0, "A muted event kept its old level")
-                let silent = IslandEvent.volume(0, isMuted: false)
-                try expect(silent.kind == .mute, "Zero volume did not read as silence")
-            }),
-            ("IslandEvent: levels stay inside zero and one", {
-                for raw in [-3.0, 0.0, 0.42, 1.0, 7.5] {
-                    guard let progress = IslandEvent.volume(raw, isMuted: false).progress else { continue }
-                    try expect(progress >= 0 && progress <= 1, "Volume \(raw) produced \(progress)")
-                }
-            }),
             ("IslandGeometry: an event strip is sized by its own content", {
-                let short = IslandGeometry.eventWidth(title: "Ses", detail: "40%", hasProgress: true)
+                let short = IslandGeometry.eventWidth(title: "Şarj", detail: "%80", hasProgress: true)
                 let long = IslandGeometry.eventWidth(title: "Çok uzun bir şarkı adı burada",
                                                     detail: "Bir sanatçı", hasProgress: false)
                 try expect(short < long, "A long title did not widen the strip")

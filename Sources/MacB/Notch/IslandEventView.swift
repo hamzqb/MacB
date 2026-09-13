@@ -1,7 +1,7 @@
 import MacBCore
 import SwiftUI
 
-/// The island announcing a system change: volume, a new track, the charger.
+/// The island announcing a system change: a new track, the charger, the lid.
 ///
 /// One line, same height as the peek, so the panel slides open and shut without
 /// changing shape. The level bar replaces the macOS square that normally lands
