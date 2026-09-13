@@ -19,6 +19,8 @@ struct IslandWidgetStrip: View {
     @ObservedObject var note: QuickNoteStore
     @ObservedObject var preferences: Preferences
     let width: CGFloat
+    /// True for the moment before the panel starts shrinking.
+    var isLeaving = false
     var select: (NotchContent) -> Void
     var openSettings: () -> Void
     var notify: (String, String) -> Void
@@ -54,7 +56,7 @@ struct IslandWidgetStrip: View {
                     ForEach(Array(row.widgets.enumerated()), id: \.element.id) { columnIndex, widget in
                         widgetCard(widget)
                             .frame(maxHeight: .infinity)
-                            .modifier(EntranceEffect(isVisible: hasAppeared,
+                            .modifier(EntranceEffect(isVisible: hasAppeared && !isLeaving,
                                                      index: rowIndex * max(1, columns) + columnIndex,
                                                      isEnabled: !reduceMotion))
                     }
@@ -1207,6 +1209,15 @@ private struct EntranceEffect: ViewModifier {
     let index: Int
     let isEnabled: Bool
 
+    /// Cards arrive left to right and leave right to left, so the strip folds
+    /// back the way it was dealt out rather than collapsing from the same end
+    /// twice. Leaving is faster than arriving: an exit that takes as long as an
+    /// entrance reads as the app being slow to let go.
+    private var delay: Double {
+        isVisible ? min(0.24, Double(index) * 0.03)
+                  : max(0, 0.10 - Double(index) * 0.018)
+    }
+
     func body(content: Content) -> some View {
         guard isEnabled else { return AnyView(content) }
         return AnyView(
@@ -1214,7 +1225,8 @@ private struct EntranceEffect: ViewModifier {
                 .opacity(isVisible ? 1 : 0)
                 .scaleEffect(isVisible ? 1 : 0.94, anchor: .top)
                 .offset(y: isVisible ? 0 : 8)
-                .motion(MacBDesign.Motion.settle.delay(min(0.24, Double(index) * 0.03)),
+                .motion((isVisible ? MacBDesign.Motion.settle : MacBDesign.Motion.quick)
+                            .delay(delay),
                         value: isVisible)
         )
     }

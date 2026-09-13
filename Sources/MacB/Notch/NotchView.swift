@@ -223,7 +223,8 @@ struct NotchView: View {
                                   aiActivity: aiActivity, systemMonitor: systemMonitor,
                                   processes: processes, recentFiles: recentFiles, tasks: tasks, launcher: launcher,
                                   weather: weather, shelf: shelf, note: note,
-                                  preferences: preferences, width: layout.width, select: select,
+                                  preferences: preferences, width: layout.width,
+                                  isLeaving: presentation.isLeaving, select: select,
                                   openSettings: openSettings, notify: notify)
             case .apps:
                 appsContent

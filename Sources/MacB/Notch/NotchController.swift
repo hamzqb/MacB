@@ -23,6 +23,9 @@ struct IslandToast: Equatable {
     @Published var height: CGFloat = 32
     @Published var radius: CGFloat = 12
     @Published var transition: Double = 1
+    /// Set for a moment before the panel starts shrinking, so the cards have
+    /// somewhere to leave from. Nothing is animated after the panel has gone.
+    @Published var isLeaving = false
     @Published var cameraHeight: CGFloat = 0
     @Published var cameraWidth: CGFloat = 0
     @Published var isDropTarget = false
@@ -658,16 +661,18 @@ struct IslandToast: Equatable {
             render()
         }
     }
-    /// Lights the desktop under the island, in the colour the island is wearing.
+    /// Puts a shadow under the island, and optionally some of its own light.
     ///
-    /// A collapsed island lights nothing: there is no object there to glow, and
-    /// a permanent smudge under the notch would be a defect rather than a
-    /// flourish.
+    /// A collapsed island casts nothing: it is flush against the bezel, there is
+    /// no object standing off the screen to throw a shadow, and a permanent
+    /// smudge under the notch would be a defect rather than a flourish. The
+    /// shadow is not optional where the island is open; the light is.
     private func updateGlow(frame: NSRect, on screen: NSScreen, phase: NotchPhase) {
-        guard preferences.islandGlow, phase != .collapsed else { return glow.hide() }
+        guard phase != .collapsed else { return glow.hide() }
         let tint = (media.isPlaying ? media.tint : nil) ?? MacBDesign.IslandToken.accent
-        glow.update(frame: frame, on: screen, tint: tint,
-                    strength: phase == .expanded ? 1 : 0.55)
+        glow.update(frame: frame, on: screen, radius: presentation.radius, tint: tint,
+                    shadow: 1,
+                    glow: preferences.islandGlow ? (phase == .expanded ? 1 : 0.55) : 0)
     }
 
     private func render(immediate: Bool = false) {
@@ -681,11 +686,27 @@ struct IslandToast: Equatable {
         systemMonitor.setFastSampling(state.isOpen && state.content == .home)
         weather.setPanelVisible(state.isOpen && state.content == .home && widgets.isActive(.weather))
         guard target != presentation.layout || immediate else { return }
+        let reducedMotion = !preferences.animationsEnabled
+            || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        // Let the cards leave before the panel does. Closing used to take the
+        // whole strip away in one frame while opening dealt the cards out one
+        // by one, so the island arrived like an object and left like a bug.
+        // The wait is short enough that closing still feels immediate.
+        if !immediate, !reducedMotion, !presentation.isLeaving,
+           target.phase == .collapsed, presentation.layout.phase == .expanded {
+            presentation.isLeaving = true
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 130_000_000)
+                self?.render()
+            }
+            return
+        }
+        presentation.isLeaving = false
         animationTimer?.invalidate(); animationTimer = nil
         presentation.previousLayout = presentation.layout
         presentation.layout = target
         let startWidth = presentation.width, startHeight = presentation.height, startRadius = presentation.radius
-        let reduced = !preferences.animationsEnabled || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let reduced = reducedMotion
         func apply(_ amount: Double, fade: Double) {
             let t = CGFloat(amount)
             presentation.width = startWidth + (target.width - startWidth) * t
