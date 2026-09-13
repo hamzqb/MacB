@@ -188,7 +188,10 @@ struct NotchView: View {
             VStack(spacing: 0) {
                 Color.clear.frame(height: presentation.cameraHeight)
                 VStack(spacing: IslandGeometry.gap) {
-                    IslandNavigation(selected: layout.content, isEditing: widgets.isEditing,
+                    // The target section, not this copy's. Both copies of the
+                    // panel are on screen during a cross-fade, and a row that
+                    // disagrees with itself shows two pucks at once.
+                    IslandNavigation(selected: presentation.layout.content, isEditing: widgets.isEditing,
                                      select: select,
                                      toggleEditing: { widgets.isEditing.toggle() },
                                      cameraAction: cameraAction, openSettings: openSettings)
@@ -496,7 +499,7 @@ struct NotchView: View {
         }.frame(width: size, height: size).clipShape(RoundedRectangle(cornerRadius: radius)).overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(MacBDesign.IslandToken.Fill.low)).accessibilityHidden(true)
     }
     private func playbackButton(_ icon: String, label: String, size: CGFloat, prominent: Bool = false, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: icon).font(.system(size: prominent ? 14 : 11, weight: .semibold)).foregroundStyle(prominent ? .black : MacBDesign.IslandToken.Ink.primary).frame(width: size, height: size).background(prominent ? .white : MacBDesign.IslandToken.Fill.low, in: Circle()) }
+        Button(action: action) { Image(systemName: icon).font(.system(size: prominent ? MacBDesign.TypeScale.emphasis : MacBDesign.TypeScale.caption, weight: .semibold)).foregroundStyle(prominent ? .black : MacBDesign.IslandToken.Ink.primary).frame(width: size, height: size).background(prominent ? .white : MacBDesign.IslandToken.Fill.low, in: Circle()) }
             .buttonStyle(.plain).accessibilityLabel(label).help(label)
     }
 }

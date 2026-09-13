@@ -46,15 +46,21 @@ struct IslandWidgetStrip: View {
     private var grid: some View {
         VStack(spacing: IslandGeometry.gap) {
             ForEach(Array(store.rows(columns: columns).enumerated()), id: \.offset) { rowIndex, row in
-                HStack(spacing: IslandGeometry.gap) {
+                // Top-aligned, and every card stretched to the tallest in its
+                // row. The default centres them, so a short card floated in the
+                // middle of the row and its first line sat several points below
+                // its neighbour's -- one row of cards read as a scatter of them.
+                HStack(alignment: .top, spacing: IslandGeometry.gap) {
                     ForEach(Array(row.widgets.enumerated()), id: \.element.id) { columnIndex, widget in
                         widgetCard(widget)
+                            .frame(maxHeight: .infinity)
                             .modifier(EntranceEffect(isVisible: hasAppeared,
                                                      index: rowIndex * max(1, columns) + columnIndex,
                                                      isEnabled: !reduceMotion))
                     }
                     Spacer(minLength: 0)
                 }
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         // The panel is already sliding open when this appears, so the cards
@@ -96,7 +102,22 @@ struct IslandWidgetStrip: View {
                     .allowsHitTesting(false)
             }
             .overlay(editingOverlay(widget))
-            .opacity(dragging == widget.id ? 0.4 : 1)
+            // The card being carried leaves a slot rather than a faint copy of
+            // itself. A ghost at forty per cent still reads as a card, so the
+            // grid looked like it had two of them; a marked-out hole reads as
+            // the place the card is going to land.
+            .opacity(dragging == widget.id ? 0 : 1)
+            .overlay {
+                if dragging == widget.id {
+                    MarchingDashes(cornerRadius: MacBDesign.IslandToken.widgetRadius,
+                                   tint: MacBDesign.IslandToken.accent,
+                                   lineWidth: 1.4, isFast: true)
+                        .background(MacBDesign.IslandToken.accent.opacity(0.08),
+                                    in: RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius,
+                                                         style: .continuous))
+                        .allowsHitTesting(false)
+                }
+            }
         if store.isEditing {
             card
                 .onDrag {
@@ -140,7 +161,13 @@ struct IslandWidgetStrip: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
                         .strokeBorder(MacBDesign.IslandToken.accent, lineWidth: 1.5))
-                .overlay(alignment: .topTrailing) { editingControls(widget).padding(MacBDesign.Space.snug) }
+                .overlay(alignment: .topTrailing) {
+                    editingControls(widget)
+                        .padding(.horizontal, MacBDesign.Space.snug)
+                        .padding(.vertical, MacBDesign.Space.tight)
+                        .background(.black.opacity(0.72), in: Capsule())
+                        .padding(MacBDesign.Space.snug)
+                }
         }
     }
 
@@ -148,6 +175,11 @@ struct IslandWidgetStrip: View {
     /// card. A one-unit widget is narrower than four round buttons, so at that
     /// width the three size letters collapse into one menu instead of sliding
     /// on top of each other and of the title underneath.
+    /// The size buttons and the remove button, on their own dark bar.
+    ///
+    /// They used to float straight on the card, which put them across the
+    /// widget's own caption: "Sistem" and "Disk" were half behind a row of
+    /// circles. The bar is what separates a control from the thing it controls.
     private func editingControls(_ widget: IslandWidget) -> some View {
         HStack(spacing: MacBDesign.Space.tight) {
             if widget.size == .small {
@@ -218,13 +250,22 @@ private struct WidgetDropDelegate: DropDelegate {
     func dropEntered(info: DropInfo) {
         guard let dragging, dragging != target.id,
               let index = store.layout.widgets.firstIndex(where: { $0.id == target.id }) else { return }
-        store.move(id: dragging, to: index)
+        // Animated, because the cards were snapping to their new places: the
+        // order changed correctly and nobody could see that it had. A tick as
+        // well, so the change is felt at the moment the order actually moves
+        // rather than guessed at from a card that jumped.
+        withAnimation(MacBDesign.Motion.settle) { store.move(id: dragging, to: index) }
+        Haptics.targetEntered()
     }
 
     func performDrop(info: DropInfo) -> Bool {
+        Haptics.accepted()
         dragging = nil
         return true
     }
+
+    /// A drag that leaves without dropping must not leave a ghost behind.
+    func dropExited(info: DropInfo) {}
 }
 
 // MARK: - Widgets
@@ -789,11 +830,11 @@ struct WeatherWidget: View {
             .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             Spacer(minLength: 0)
             Text("\(snapshot.temperature)°")
-                .font(.system(size: isNarrow ? 24 : (style == .bold ? 40 : 32), weight: .bold))
+                .font(.system(size: isNarrow ? MacBDesign.TypeScale.display : (style == .bold ? MacBDesign.TypeScale.giant : MacBDesign.TypeScale.hero), weight: .bold))
                 .minimumScaleFactor(0.6)
                 .lineLimit(1)
             Text(snapshot.condition)
-                .font(.system(size: isNarrow ? 10 : 12, weight: .medium))
+                .font(.system(size: isNarrow ? MacBDesign.TypeScale.micro : MacBDesign.TypeScale.body, weight: .medium))
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
             Text("Hissedilen \(snapshot.feelsLike)°")
@@ -1201,13 +1242,13 @@ struct WidgetEmptyState: View {
                                          center: .topLeading, startRadius: 1, endRadius: diameter))
                 Circle().strokeBorder(MacBDesign.IslandToken.Fill.base, lineWidth: 0.8)
                 Image(systemName: symbol)
-                    .font(.system(size: span >= 2 ? 14 : 12, weight: .medium))
+                    .font(.system(size: span >= 2 ? MacBDesign.TypeScale.emphasis : MacBDesign.TypeScale.body, weight: .medium))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             }
             .frame(width: diameter, height: diameter)
             VStack(spacing: MacBDesign.Space.hair) {
                 Text(title)
-                    .font(.system(size: span >= 2 ? 11 : 10, weight: .medium))
+                    .font(.system(size: span >= 2 ? MacBDesign.TypeScale.caption : MacBDesign.TypeScale.micro, weight: .medium))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                 if let hint, span >= 2 {
                     Text(hint)

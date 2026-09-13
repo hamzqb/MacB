@@ -116,11 +116,11 @@ struct WindowPreviewPlaceholder: View {
                 }
                 VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                     Text(window.appName)
-                        .font(.system(size: compact ? 11 : 12, weight: .semibold))
+                        .font(.system(size: compact ? MacBDesign.TypeScale.caption : MacBDesign.TypeScale.body, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.78))
                         .lineLimit(1)
                     Text(window.title)
-                        .font(.system(size: compact ? 9 : 10, weight: .medium))
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
                         .foregroundStyle(.white.opacity(0.44))
                         .lineLimit(1)
                 }

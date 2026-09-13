@@ -96,7 +96,7 @@ struct StorageWidget: View {
                 if monitor.snapshot.totalDisk > 0 {
                     HStack(alignment: .firstTextBaseline, spacing: MacBDesign.Space.tight) {
                         Text(Self.short(monitor.snapshot.availableDisk))
-                            .font(.system(size: isNarrow ? 16 : 19, weight: .semibold, design: .rounded))
+                            .font(.system(size: isNarrow ? MacBDesign.TypeScale.title : MacBDesign.TypeScale.heading, weight: .semibold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(MacBDesign.IslandToken.primaryText)
                             .lineLimit(1)
@@ -125,12 +125,20 @@ struct StorageWidget: View {
     }
 
     /// Decimal gigabytes, the way Finder reports them, so the two never disagree.
+    ///
+    /// Whole units, no decimals. The formatter's own two places gave "132,24 GB",
+    /// which did not fit the narrow card and was cut to "132,24…" -- and the
+    /// hundredths changed every few seconds, so the card's width twitched with
+    /// them. Nobody reads free space to ten megabytes.
     static func short(_ bytes: Int64) -> String {
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .decimal
-        formatter.allowedUnits = [.useGB, .useTB]
-        formatter.zeroPadsFractionDigits = false
-        return formatter.string(fromByteCount: max(0, bytes))
+        let value = Double(max(0, bytes))
+        let terabyte = 1_000_000_000_000.0
+        let gigabyte = 1_000_000_000.0
+        if value >= terabyte {
+            // A terabyte figure only has one useful digit after the point.
+            return String(format: "%.1f TB", value / terabyte).replacingOccurrences(of: ".", with: ",")
+        }
+        return "\(Int((value / gigabyte).rounded())) GB"
     }
 }
 
@@ -257,7 +265,7 @@ struct WorldClockWidget: View {
                 VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
                     WidgetCaption(name, trailing: isNarrow ? nil : Self.offsetLabel(zone))
                     Text(Self.time(context.date, in: zone))
-                        .font(.system(size: isNarrow ? 18 : 22, weight: .semibold, design: .rounded))
+                        .font(.system(size: isNarrow ? MacBDesign.TypeScale.title : MacBDesign.TypeScale.heading, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(MacBDesign.IslandToken.primaryText)
                         .lineLimit(1)

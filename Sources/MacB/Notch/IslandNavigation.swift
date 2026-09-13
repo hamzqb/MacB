@@ -32,6 +32,10 @@ struct IslandNavigation: View {
     var cameraAction: () -> Void
     var openSettings: () -> Void
 
+    /// Ties the white puck to whichever button is selected, so it travels
+    /// between them instead of one circle fading out while another fades in.
+    @Namespace private var puck
+
     var body: some View {
         HStack(spacing: MacBDesign.Space.close) {
             ForEach(NotchContent.allCases, id: \.rawValue) { section in
@@ -45,6 +49,7 @@ struct IslandNavigation: View {
             circleButton("gearshape.fill", label: "Ayarlar", isSelected: false, action: openSettings)
         }
         .frame(height: IslandGeometry.navigationHeight)
+        .motion(MacBDesign.Motion.snap, value: selected)
     }
 
     private func circleButton(_ symbol: String, label: String, isSelected: Bool,
@@ -54,8 +59,18 @@ struct IslandNavigation: View {
                 .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
                 .foregroundStyle(isSelected ? Color.black : MacBDesign.IslandToken.primaryText)
                 .frame(width: MacBDesign.IslandToken.navButton, height: MacBDesign.IslandToken.navButton)
-                .background(isSelected ? MacBDesign.IslandToken.navSelectedFill : MacBDesign.IslandToken.navFill,
-                            in: Circle())
+                .background {
+                    // One puck for the whole row. Only the selected button owns
+                    // it, so SwiftUI moves the same circle rather than drawing a
+                    // second one, and the selection reads as a thing that slid
+                    // rather than two things that blinked.
+                    if isSelected {
+                        Circle().fill(MacBDesign.IslandToken.navSelectedFill)
+                            .matchedGeometryEffect(id: "navPuck", in: puck)
+                    } else {
+                        Circle().fill(MacBDesign.IslandToken.navFill)
+                    }
+                }
         }
         .buttonStyle(.plain)
         .islandFocusRing(in: Circle())
