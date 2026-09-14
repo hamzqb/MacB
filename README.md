@@ -2,7 +2,7 @@
 
 Native macOS Dock previews, a keyboard window switcher, and a notch panel with automatic media controls, smart status, and a persistent file shelf. Free, MIT licensed. The interface is Turkish.
 
-[Download the latest release](https://github.com/hamzqb/MacB/releases/latest) · [Privacy](PRIVACY.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
+[Build from source](#build-from-source) · [Privacy](PRIVACY.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
 
 The local build also includes an advanced clipboard, a persistent task list, animated confirmations,
 recent drop targets, window layouts, local productivity tools, an optional system-authentication lock,
@@ -92,4 +92,4 @@ Capture is limited to four visible streams at 8 FPS, stops when panels close, an
 - `MacB`: AppKit controllers, SwiftUI views, Accessibility, ScreenCaptureKit, media automation and local productivity services.
 - `scripts/build.sh`: release compilation, icon generation, app packaging and local signing.
 
-No private window-server APIs, Dock replacement, telemetry or accounts. Hardware fan control is intentionally absent; the system monitor uses public, read-only macOS information. See [PRIVACY.md](PRIVACY.md) for the two narrowly scoped network requests.
+MacB has no Dock replacement, telemetry or accounts. Numbered desktop grouping dynamically reads unsupported, private SkyLight Space information and falls back safely when it is unavailable. Hardware fan control is intentionally absent; the system monitor uses read-only macOS information. See [PRIVACY.md](PRIVACY.md) for the three narrowly scoped network request types.

@@ -197,8 +197,9 @@ private struct DesktopWindowSection: Identifiable {
     private func present() {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
-        let width = min(780, screen.visibleFrame.width - 40)
-        let size = NSSize(width: width, height: min(300, screen.visibleFrame.height - 40))
+        // Four cards across, plus the gaps and the panel's own padding.
+        let width = min(760, screen.visibleFrame.width - 40)
+        let size = NSSize(width: width, height: min(420, screen.visibleFrame.height - 40))
         let panel = SwitcherPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -297,6 +298,15 @@ private struct DesktopWindowSection: Identifiable {
     }
 }
 
+/// Every window as an equal card, grouped by desktop.
+///
+/// The old layout gave two thirds of the panel to one window and squeezed the
+/// rest into a narrow list, and it said the same things repeatedly: the title
+/// appeared in a header, again under the big preview and again in the list row,
+/// and each desktop was named once as a tab and again as a section heading
+/// directly beneath it. Nothing here is written twice. The thumbnails tell the
+/// windows apart, the card labels name the applications, and the full title of
+/// whichever window is selected is spelled out once, at the bottom.
 private struct SwitcherView: View {
     @ObservedObject var model: SwitcherModel
     @ObservedObject var previews: PreviewService
@@ -305,8 +315,19 @@ private struct SwitcherView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
+    /// Four across. Wide enough that a window is recognisable from its
+    /// thumbnail, narrow enough that a dozen windows still fit without
+    /// scrolling.
+    private static let cardWidth: CGFloat = 168
+    private static let cardHeight: CGFloat = 106
+
+    private var columns: [GridItem] {
+        Array(repeating: GridItem(.fixed(Self.cardWidth), spacing: MacBDesign.Space.comfortable,
+                                  alignment: .top), count: 4)
+    }
+
     var body: some View {
-        VStack(spacing: MacBDesign.Space.regular) {
+        VStack(spacing: MacBDesign.Space.comfortable) {
             if model.isLoading {
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let message = model.message {
@@ -314,16 +335,9 @@ private struct SwitcherView: View {
                     .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let selected = model.selectedWindow {
-                selectionHeader(selected)
-                HStack(spacing: MacBDesign.Space.comfortable) {
-                    SwitcherSelectedPreview(window: selected, previews: previews) {
-                        onChoose(selected)
-                    }
-                    desktopRail
-                        .frame(width: 246)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                grid
+                if let selected = model.selectedWindow { caption(selected) }
             }
         }
         .padding(14)
@@ -339,194 +353,155 @@ private struct SwitcherView: View {
         .animation(animationsEnabled && !reduceMotion ? MacBDesign.Motion.instant : nil, value: model.selectedID)
     }
 
-    private var desktopRail: some View {
+    private var grid: some View {
         ScrollViewReader { proxy in
-            VStack(spacing: MacBDesign.Space.close) {
-                if model.desktopSections.count > 1 {
-                    HStack(spacing: MacBDesign.Space.snug) {
-                        ForEach(model.desktopSections) { section in
-                            Button {
-                                if animationsEnabled && !reduceMotion {
-                                    withAnimation(MacBDesign.Motion.quick) { proxy.scrollTo(section.id, anchor: .top) }
-                                } else {
-                                    proxy.scrollTo(section.id, anchor: .top)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: MacBDesign.Space.loose) {
+                    ForEach(model.desktopSections) { section in
+                        VStack(alignment: .leading, spacing: MacBDesign.Space.close) {
+                            // Only when there is more than one desktop. With a
+                            // single desktop the heading names something nobody
+                            // has to choose between.
+                            if model.desktopSections.count > 1 { sectionHeading(section) }
+                            LazyVGrid(columns: columns, alignment: .leading,
+                                      spacing: MacBDesign.Space.comfortable) {
+                                ForEach(section.windows) { window in
+                                    SwitcherWindowCard(
+                                        window: window,
+                                        selected: window.id == model.selectedID,
+                                        position: (model.windows.firstIndex { $0.id == window.id } ?? 0) + 1,
+                                        total: model.windows.count,
+                                        width: Self.cardWidth, height: Self.cardHeight,
+                                        previews: previews) { onChoose(window) }
+                                        .id(window.id)
                                 }
-                            } label: {
-                                HStack(spacing: MacBDesign.Space.tight) {
-                                    Image(systemName: section.isCurrent ? "rectangle.fill" : "rectangle")
-                                    Text(section.title)
-                                    Text("\(section.windows.count)").monospacedDigit().foregroundStyle(.secondary)
-                                }
-                                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
-                                .padding(.horizontal, MacBDesign.Space.close).padding(.vertical, MacBDesign.Space.snug)
-                                .background(section.isCurrent ? MacBDesign.selectedBackground.opacity(0.42) : Color.primary.opacity(0.055),
-                                            in: Capsule())
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: MacBDesign.Space.regular) {
-                        ForEach(Array(model.desktopSections.enumerated()), id: \.element.id) { index, section in
-                            if index > 0 { Divider().opacity(0.55) }
-                            windowSection(title: section.title,
-                                          systemImage: section.isCurrent ? "rectangle" : "square.stack.3d.up",
-                                          windows: section.windows)
-                                .id(section.id)
-                        }
-                    }
-                }
-                .onChange(of: model.selectedID) { _, selectedID in
-                    guard let selectedID else { return }
-                    if animationsEnabled && !reduceMotion {
-                        withAnimation(MacBDesign.Motion.instant) { proxy.scrollTo(selectedID, anchor: .center) }
-                    } else {
-                        proxy.scrollTo(selectedID, anchor: .center)
-                    }
+                .padding(.horizontal, MacBDesign.Space.hair)
+                .padding(.vertical, MacBDesign.Space.tight)
+            }
+            .onChange(of: model.selectedID) { _, selectedID in
+                guard let selectedID else { return }
+                if animationsEnabled && !reduceMotion {
+                    withAnimation(MacBDesign.Motion.instant) { proxy.scrollTo(selectedID, anchor: .center) }
+                } else {
+                    proxy.scrollTo(selectedID, anchor: .center)
                 }
             }
         }
     }
 
-    @ViewBuilder private func windowSection(title: String, systemImage: String, windows: [WindowRecord]) -> some View {
-        if !windows.isEmpty {
-            VStack(spacing: MacBDesign.Space.snug) {
-                HStack(spacing: MacBDesign.Space.snug) {
-                    Image(systemName: systemImage).font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
-                    Text(title).font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
-                    Spacer(minLength: 4)
-                    Text("\(windows.count)")
-                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold, design: .rounded)).monospacedDigit()
-                        .padding(.horizontal, MacBDesign.Space.snug).padding(.vertical, MacBDesign.Space.hair)
-                        .background(Color.primary.opacity(0.07), in: Capsule())
-                }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, MacBDesign.Space.tight)
-                ForEach(windows) { window in
-                    SwitcherWindowCard(window: window, selected: window.id == model.selectedID,
-                        position: (model.windows.firstIndex { $0.id == window.id } ?? 0) + 1,
-                        total: model.windows.count, previews: previews) {
-                        onChoose(window)
-                    }
-                    .id(window.id)
-                }
-            }
+    private func sectionHeading(_ section: DesktopWindowSection) -> some View {
+        HStack(spacing: MacBDesign.Space.snug) {
+            Image(systemName: section.isCurrent ? "rectangle.fill" : "square.stack.3d.up")
+            Text(section.title)
+            Text("\(section.windows.count)")
+                .monospacedDigit()
+                .padding(.horizontal, MacBDesign.Space.snug)
+                .padding(.vertical, MacBDesign.Space.hair)
+                .background(Color.primary.opacity(0.07), in: Capsule())
         }
+        .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+        .foregroundStyle(.secondary)
     }
 
-    private func selectionHeader(_ window: WindowRecord) -> some View {
+    /// The one place the selected window's full title is written out.
+    private func caption(_ window: WindowRecord) -> some View {
         HStack(spacing: MacBDesign.Space.close) {
             if let icon = window.appIcon {
-                Image(nsImage: icon).resizable().frame(width: 20, height: 20).accessibilityHidden(true)
+                Image(nsImage: icon).resizable().frame(width: 18, height: 18).accessibilityHidden(true)
             }
-            Text(window.appName).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold)).foregroundStyle(.primary)
-            if !switcherTitlesMatch(window.appName, window.title) {
-                Text(window.title).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(.secondary).lineLimit(1)
-            }
-            Spacer(minLength: 8)
+            Text(window.title)
+                .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+                .lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: MacBDesign.Space.close)
             Text("\(model.selectedIndex + 1) / \(model.windows.count)")
-                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold, design: .rounded)).monospacedDigit()
+                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold, design: .rounded))
+                .monospacedDigit()
                 .foregroundStyle(.tertiary)
         }
-        .frame(height: 24)
-        .padding(.horizontal, MacBDesign.Space.hair)
-    }
-
-}
-
-private struct SwitcherSelectedPreview: View {
-    let window: WindowRecord
-    @ObservedObject var previews: PreviewService
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack(alignment: .bottomLeading) {
-                Color.black.opacity(0.58)
-                if let image = previews.images[window.id] {
-                    Image(nsImage: image).resizable().scaledToFit().frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    WindowPreviewPlaceholder(window: window, compact: false)
-                }
-                LinearGradient(colors: [.clear, .black.opacity(0.62)], startPoint: .center, endPoint: .bottom)
-                    .allowsHitTesting(false)
-                HStack(spacing: MacBDesign.Space.close) {
-                    if let icon = window.appIcon {
-                        Image(nsImage: icon).resizable().frame(width: 22, height: 22)
-                    }
-                    Text(window.title).font(.system(size: MacBDesign.TypeScale.body, weight: .semibold)).lineLimit(1)
-                    Spacer(minLength: 0)
-                    if window.isMinimized {
-                        Label("Küçültülmüş", systemImage: "minus.circle.fill")
-                            .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium)).foregroundStyle(.secondary)
-                    }
-                    if window.desktopLocation == .other {
-                        Label(window.desktopName ?? "Diğer masaüstü", systemImage: "square.stack.3d.up.fill")
-                            .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.82))
-                    }
-                }
-                .padding(MacBDesign.Space.regular)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
-                .strokeBorder(MacBDesign.separator, lineWidth: 0.5))
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(window.appName), \(window.title), seçili pencereye geç")
+        .frame(height: 22)
     }
 }
 
+/// One window in the grid.
 private struct SwitcherWindowCard: View {
     let window: WindowRecord
     let selected: Bool
     let position: Int
     let total: Int
+    let width: CGFloat
+    let height: CGFloat
     @ObservedObject var previews: PreviewService
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: MacBDesign.Space.regular) {
-                ZStack {
-                    if let image = previews.images[window.id] {
-                        Image(nsImage: image).resizable().scaledToFill()
-                    } else if let icon = window.appIcon {
-                        Image(nsImage: icon).resizable().scaledToFit().padding(MacBDesign.Space.regular)
-                    } else {
-                        Image(systemName: "macwindow").foregroundStyle(.secondary)
-                    }
-                }
-                .frame(width: 56, height: 40)
-                .background(Color.black.opacity(0.35))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
-                    Text(window.title)
-                        .font(.system(size: MacBDesign.TypeScale.caption, weight: selected ? .semibold : .medium))
-                        .foregroundStyle(.primary).lineLimit(1)
-                    if !switcherTitlesMatch(window.appName, window.title) {
-                        Text(window.appName)
-                            .font(.system(size: MacBDesign.TypeScale.micro)).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 0)
-                if selected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.accent)
-                }
+            VStack(spacing: MacBDesign.Space.snug) {
+                thumbnail
+                Text(window.appName)
+                    .font(.system(size: MacBDesign.TypeScale.caption,
+                                  weight: selected ? .semibold : .medium))
+                    .foregroundStyle(selected ? .primary : .secondary)
+                    .lineLimit(1)
+                    .frame(width: width)
             }
-            .padding(MacBDesign.Space.close)
-            .frame(height: 54)
-            .background(selected ? MacBDesign.selectedBackground.opacity(0.48) : Color.primary.opacity(0.035),
-                        in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card)
-                .strokeBorder(selected ? MacBDesign.focusRing : .clear, lineWidth: selected ? 1.5 : 0))
-            .contentShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.card))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .scaleEffect(selected ? 1.03 : 1)
         .accessibilityLabel("\(window.appName), \(window.title), \(position) / \(total)")
         .accessibilityHint(selected ? "Seçili pencere" : "Bu pencereye geç")
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private var thumbnail: some View {
+        ZStack(alignment: .bottomLeading) {
+            Color.black.opacity(0.35)
+            // Filled rather than fitted. Fitting a wide window into this box
+            // left black bars down both sides and shrank the only part of the
+            // card that tells one window from another.
+            if let image = previews.images[window.id] {
+                Image(nsImage: image).resizable().scaledToFill()
+            } else {
+                WindowPreviewPlaceholder(window: window, compact: true)
+            }
+        }
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
+        .overlay(alignment: .bottomLeading) {
+            if let icon = window.appIcon {
+                Image(nsImage: icon).resizable().frame(width: 22, height: 22)
+                    .padding(MacBDesign.Space.snug)
+                    .accessibilityHidden(true)
+            }
+        }
+        .overlay(alignment: .topTrailing) { badge }
+        .overlay(
+            RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
+                .strokeBorder(selected ? MacBDesign.accent : MacBDesign.separator,
+                              lineWidth: selected ? 2 : 0.5))
+    }
+
+    /// Says only what the thumbnail cannot: that the window is put away, or
+    /// that reaching it means changing desktop.
+    @ViewBuilder private var badge: some View {
+        if window.isMinimized {
+            marker("minus.circle.fill", "Küçültülmüş")
+        } else if window.desktopLocation == .other {
+            marker("square.stack.3d.up.fill", window.desktopName ?? "Diğer masaüstü")
+        }
+    }
+
+    private func marker(_ symbol: String, _ label: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(MacBDesign.Space.tight)
+            .background(.black.opacity(0.55), in: Circle())
+            .padding(MacBDesign.Space.snug)
+            .accessibilityLabel(label)
     }
 }

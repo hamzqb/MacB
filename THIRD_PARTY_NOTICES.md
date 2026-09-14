@@ -58,7 +58,10 @@ MacB's Dock previews and notch interactions were evaluated against
 GPL-3.0. MacB does not copy, compile, link, or redistribute their source code.
 The multi-display behavior, one-panel preview lifecycle, compact system status,
 media surface, file shelf, camera mirror, and gesture ideas were implemented
-independently with Apple's public frameworks so MacB can remain MIT licensed.
+independently for MacB, primarily with Apple's documented frameworks, so MacB
+can remain MIT licensed. Numbered Mission Control desktop grouping separately
+uses dynamically loaded, read-only SkyLight symbols and has a public fallback;
+no DockDoor or boring.notch source is copied or linked.
 
 ## Weather data
 
