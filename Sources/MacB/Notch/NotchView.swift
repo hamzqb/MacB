@@ -146,13 +146,14 @@ struct NotchView: View {
 
     /// How much black sits between the desktop and the widgets.
     ///
-    /// Never zero. At full translucency the panel is still a panel, and a
-    /// widget grid floating on bare wallpaper with no ground under it is not a
-    /// design, it is a bug that happens to look deliberate.
+    /// At the top of the slider there is none at all: the material behind the
+    /// panel already carries enough of its own weight to keep white text on it,
+    /// and anything added on top of that was the reason the "glass" still read
+    /// as a black bar over a dark desktop.
     private func veilOpacity(tinted: Bool) -> Double {
         let translucency = min(1, max(0, preferences.islandTranslucency))
-        let heaviest: Double = tinted ? 0.78 : 0.62
-        let lightest: Double = tinted ? 0.22 : 0.10
+        let heaviest: Double = tinted ? 0.72 : 0.58
+        let lightest: Double = tinted ? 0.10 : 0
         return heaviest - (heaviest - lightest) * translucency
     }
 

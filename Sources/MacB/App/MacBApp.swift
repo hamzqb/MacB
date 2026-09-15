@@ -85,7 +85,8 @@ import MacBCore
         if CommandLine.arguments.contains("--blur-probe") {
             let application = NSApplication.shared
             application.setActivationPolicy(.accessory)
-            let overlay = LidBlurOverlay()
+            let overlay = LidBlurOverlay.shared
+            overlay.prepare()
             let target = CommandLine.arguments.firstIndex(of: "--blur-probe")
                 .flatMap { CommandLine.arguments.indices.contains($0 + 1) ? Double(CommandLine.arguments[$0 + 1]) : nil } ?? 1
             print("Blur \(target) seviyesine çıkacak, 4 saniye duracak. " +
@@ -168,6 +169,10 @@ import MacBCore
             return
         }
         let app = NSApplication.shared
+        // Before the run loop, and it has to be: the window server will not
+        // blur behind a window that was created after it started. See
+        // `LidBlurOverlay.prepare()`.
+        LidBlurOverlay.shared.prepare()
         let delegate = AppDelegate()
         app.delegate = delegate
         withExtendedLifetime(delegate) { app.run() }

@@ -81,7 +81,7 @@ struct IslandToast: Equatable {
     private var display: NSScreen?
     private var toastTask: Task<Void, Never>?
     private var cameraWindow: NSWindow?
-    private let lidBlur = LidBlurOverlay()
+    private let lidBlur = LidBlurOverlay.shared
     private let glow = IslandGlowOverlay()
     var enabled = true {
         didSet { if enabled { start() } else { stop() } }
@@ -487,6 +487,12 @@ struct IslandToast: Equatable {
         backdrop.material = preferences.islandAppearance == .blackGlass ? .fullScreenUI : .hudWindow
         backdrop.topRadius = presentation.cameraHeight > 0 ? 0 : presentation.radius
         backdrop.bottomRadius = presentation.radius
+        // The material has one fixed density, so the only way to go further is
+        // to thin the frost itself and let some of the screen past unblurred.
+        // Floored well short of nothing: a panel you can read a sentence through
+        // is a hole in the screen, not a surface.
+        let translucency = min(1, max(0, preferences.islandTranslucency))
+        backdrop.alphaValue = 1 - 0.3 * translucency
     }
 
     private func updateDisplay() {

@@ -1,5 +1,4 @@
 import AppKit
-import QuartzCore
 import MacBCore
 
 /// Blurs the whole built-in screen while the lid is closing.
@@ -23,6 +22,10 @@ import MacBCore
 /// everything down if the hinge stops reporting, so a stalled sensor can never
 /// leave somebody with a screen they cannot see through.
 @MainActor final class LidBlurOverlay {
+    /// The one overlay, because its windows have to exist before the run loop
+    /// starts and there is only one moment in the program's life like that.
+    static let shared = LidBlurOverlay()
+
     private var panes: [NSWindow] = []
     private var dim: NSWindow?
     /// The display the overlay is built on, by its identifier rather than by the
@@ -37,30 +40,16 @@ import MacBCore
     private var watchdog: Timer?
     private var lastProgress: Double = 0
     private var lastRadius: Double = -1
+    private var isShowing = false
 
     /// How long the blur may sit at one value before it is assumed to be stuck.
     /// Long enough for a slow, deliberate close; short enough to be a blink.
     private static let stallTimeout: TimeInterval = 8
 
-    var isVisible: Bool { !panes.isEmpty || dim != nil }
+    var isVisible: Bool { isShowing }
 
     /// Whether the compositor is doing the blurring, rather than stacked materials.
-    ///
-    /// Off by default, and deliberately. The window server accepts the radius —
-    /// the call returns success — but on this macOS it only actually blurs for a
-    /// window that was put up in an earlier run loop pass than the one that asks
-    /// for the blur, and the overlay builds and asks in the same pass because
-    /// the hinge gives it no warning. Ordering the window front, flushing the
-    /// transaction and re-sending the radius all fail to change that; the same
-    /// sequence in a standalone window blurs perfectly.
-    ///
-    /// Until that is understood rather than guessed at, the lid keeps the
-    /// stacked materials it has always had, and the real path is here behind a
-    /// switch so it can be finished without a rebuild for every attempt.
-    static var usesRealBlur: Bool {
-        WindowBlur.isAvailable && !reduceTransparency
-            && ProcessInfo.processInfo.environment["MACB_REAL_BLUR"] == "1"
-    }
+    static var usesRealBlur: Bool { WindowBlur.isAvailable && !reduceTransparency }
 
     /// Somebody who has asked the system for less transparency has asked not to
     /// be shown a blurred version of what is behind something. They still get
@@ -70,11 +59,37 @@ import MacBCore
         NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
     }
 
+    /// Builds the windows, while the window server will still give them a blur.
+    ///
+    /// This has to happen before `NSApplication.run()`, and there is no way
+    /// around it. A window created after the run loop starts — in a launch
+    /// delegate, in a timer, anywhere — is accepted by the compositor and then
+    /// never blurred: `CGSSetWindowBackgroundBlurRadius` returns success and the
+    /// screen stays perfectly sharp for the rest of that window's life. Measured
+    /// both ways against a striped test pattern; the difference is absolute, not
+    /// a matter of degree.
+    ///
+    /// So the panes are made once, at the very start, kept out of sight, and
+    /// brought forward when the hinge moves. The cost is two borderless windows
+    /// with no content view sitting ordered-out for the session, which is
+    /// nothing; the alternative is a lid that never blurs anything.
+    func prepare() {
+        guard panes.isEmpty, Self.usesRealBlur else { return }
+        guard let screen = Self.builtInScreen(), let id = Self.displayID(of: screen) else { return }
+        build(on: screen, id: id)
+        for pane in panes { pane.orderOut(nil) }
+        dim?.orderOut(nil)
+    }
+
     /// Follows the hinge. Zero takes everything down.
     func apply(progress: Double) {
         guard progress > 0.001 else { return hide() }
         guard let screen = Self.builtInScreen(), let id = Self.displayID(of: screen) else { return hide() }
-        if screenID != id { build(on: screen, id: id) }
+        if screenID != id {
+            build(on: screen, id: id)
+        } else if !isShowing {
+            show(on: screen)
+        }
 
         if Self.usesRealBlur {
             let radius = LidScreenBlur.blurRadius(progress: progress)
@@ -82,8 +97,8 @@ import MacBCore
             // it would receive has actually changed, so a hinge reporting the
             // same angle sixty times a second does not become sixty round trips.
             if let pane = panes.first, abs(radius - lastRadius) >= 1 {
-                WindowBlur.apply(radius: radius, to: pane)
                 lastRadius = radius
+                WindowBlur.apply(radius: radius, to: pane)
             }
         } else {
             for (index, pane) in panes.enumerated() {
@@ -96,6 +111,8 @@ import MacBCore
         lastProgress = progress
     }
 
+    /// Takes the blur off the screen without throwing the windows away: they can
+    /// never be replaced, so they are only ever ordered out. See `prepare()`.
     func hide() {
         watchdog?.invalidate(); watchdog = nil
         for pane in panes {
@@ -103,13 +120,27 @@ import MacBCore
             pane.orderOut(nil)
         }
         dim?.orderOut(nil)
-        panes = []; dim = nil; screenID = nil; lastProgress = 0; lastRadius = -1
+        isShowing = false; lastProgress = 0; lastRadius = -1
+    }
+
+    private func show(on screen: NSScreen) {
+        for pane in panes {
+            pane.setFrame(screen.frame, display: false)
+            pane.orderFront(nil)
+        }
+        if let dim, let top = panes.last {
+            dim.setFrame(screen.frame, display: false)
+            dim.order(.above, relativeTo: top.windowNumber)
+        }
+        isShowing = true
     }
 
     // MARK: - Panes
 
     private func build(on screen: NSScreen, id: CGDirectDisplayID) {
-        hide()
+        for pane in panes { WindowBlur.remove(from: pane); pane.orderOut(nil) }
+        dim?.orderOut(nil)
+        panes = []; dim = nil; lastRadius = -1
         screenID = id
 
         if Self.usesRealBlur {
@@ -118,12 +149,6 @@ import MacBCore
             // window with a fully clear background has no surface to blur onto.
             window.backgroundColor = NSColor(white: 0, alpha: 0.001)
             window.orderFront(nil)
-            // The window server will not attach a blur to a window it has not
-            // finished putting up, and it says nothing when it declines: the
-            // call reports success and the screen stays perfectly sharp. The
-            // flush is what makes the window real before a radius is asked for.
-            window.displayIfNeeded()
-            CATransaction.flush()
             panes = [window]
         } else {
             var previous: NSWindow?
@@ -152,7 +177,7 @@ import MacBCore
         // The dim rides above the blur so it darkens the blurred picture rather
         // than being blurred itself, which would do nothing at all. The stacked
         // materials darken plenty on their own, so it is only for the real path.
-        guard Self.usesRealBlur else { return }
+        guard Self.usesRealBlur else { isShowing = true; return }
         let shade = Self.makeWindow(on: screen)
         shade.backgroundColor = .black
         shade.alphaValue = 0
@@ -162,6 +187,7 @@ import MacBCore
             shade.orderFront(nil)
         }
         dim = shade
+        isShowing = true
     }
 
     private static func makeWindow(on screen: NSScreen) -> NSWindow {

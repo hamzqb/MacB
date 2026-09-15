@@ -170,12 +170,12 @@ public enum LidScreenBlur {
     /// the first few points destroy small text and the last twenty change
     /// almost nothing anyone can name — so the radius runs ahead of the hinge
     /// early, which is the only part of the fold long enough to watch.
-    public static let maximumRadius: Double = 72
+    public static let maximumRadius: Double = 80
 
     public static func blurRadius(progress: Double) -> Double {
         guard progress > 0 else { return 0 }
         let clamped = min(1, progress)
-        return maximumRadius * pow(clamped, 0.55)
+        return maximumRadius * pow(clamped, 0.75)
     }
 
     /// A little black under the blur, because a blurred bright desktop is still
