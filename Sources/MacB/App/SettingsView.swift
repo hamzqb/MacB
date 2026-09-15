@@ -32,6 +32,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
 }
 
 struct SettingsView: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @ObservedObject var preferences: Preferences
     @ObservedObject var permissions: PermissionStore
     @ObservedObject var spotify: SpotifyService
@@ -307,8 +308,39 @@ struct SettingsView: View {
             }
             if utilities.isWorking { ProgressView().controlSize(.small) }
             if let status = utilities.statusMessage { message(status, warning: false) }
+            undoRow
         }
         .onAppear { systemMonitor.refresh() }
+    }
+
+    /// The offer to put the last batch back.
+    ///
+    /// macOS tells us where each item landed in the Trash, so "geri almak için
+    /// Çöp Sepeti'nden çıkar" was MacB handing the user a job it could do
+    /// itself. The offer stands until the next sweep, and it refuses any item
+    /// whose old path has been taken back in the meantime rather than
+    /// overwriting it.
+    @ViewBuilder private var undoRow: some View {
+        if utilities.canUndoTrashMove, let title = utilities.undoableTitle {
+            HStack(spacing: MacBDesign.Space.regular) {
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
+                    .foregroundStyle(MacBDesign.accent)
+                Text("\(title) Çöp Sepeti'nde. Eski yerine geri konabilir.")
+                    .font(.system(size: MacBDesign.TypeScale.body))
+                    .foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: MacBDesign.Space.close)
+                Button("Geri al", action: utilities.undoLastTrashMove)
+                Button("Kapat", action: utilities.forgetTrashMove)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(MacBDesign.muted)
+            }
+            .padding(MacBDesign.Space.comfortable)
+            .background(MacBDesign.cardFill, in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
+                .strokeBorder(MacBDesign.cardStroke, lineWidth: 0.5))
+        }
     }
 
     private var sidebar: some View {
@@ -806,6 +838,32 @@ struct SettingsView: View {
                 Picker("Island yüzeyi", selection: $preferences.islandAppearance) {
                     ForEach(IslandAppearance.allCases) { Text($0.title).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden().accessibilityLabel("Island yüzeyi")
+                if preferences.islandAppearance.usesMaterial {
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+                        HStack {
+                            Text("Saydamlık")
+                                .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                            Spacer()
+                            Text("%\(Int((preferences.islandTranslucency * 100).rounded()))")
+                                .font(.system(size: MacBDesign.TypeScale.caption).monospacedDigit())
+                                .foregroundStyle(MacBDesign.muted)
+                        }
+                        Slider(value: $preferences.islandTranslucency, in: 0...1)
+                            .accessibilityLabel("Island saydamlığı")
+                        Text("Masaüstünün ne kadarının panelden geçeceği. Doğru değer duvar kağıdına bağlı: koyu bir arka plan yüksek saydamlığı kaldırır, açık bir arka planda yazılar çabuk okunmaz olur.")
+                            .font(.system(size: MacBDesign.TypeScale.caption))
+                            .foregroundStyle(MacBDesign.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if reduceTransparency {
+                            Label("Sistemde “Saydamlığı Azalt” açık. Island düz siyah çiziliyor, bu ayarın şu an bir etkisi yok.",
+                                  systemImage: "info.circle")
+                                .font(.system(size: MacBDesign.TypeScale.caption))
+                                .foregroundStyle(.orange)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.top, MacBDesign.Space.close)
+                }
                 if preferences.islandAppearance == .customImage {
                     HStack(spacing: MacBDesign.Space.regular) {
                         Text(background.name ?? "Henüz bir görsel seçilmedi.")

@@ -94,12 +94,16 @@ final class AppUninstallService {
     /// The recheck is not paranoia about the user: the review sheet can sit open
     /// for minutes, and a path that was a folder when it was listed must not be
     /// a symlink into someone else's data by the time it is recycled.
-    func moveToTrash(_ candidates: [AppRemovalCandidate]) async throws {
+    /// Returns where each item ended up, so the removal can be taken back.
+    @discardableResult
+    func moveToTrash(_ candidates: [AppRemovalCandidate]) async throws -> [TrashMove] {
+        var moves: [TrashMove] = []
         for candidate in candidates {
             guard !candidate.requiresAdministrator else { throw AppUninstallError.requiresAdministrator }
             guard isSafeCandidate(candidate) else { throw AppUninstallError.unsafeCandidate }
-            _ = try await NSWorkspace.shared.recycle([candidate.url])
+            moves += try await NSWorkspace.shared.recycleRecording([candidate.url])
         }
+        return moves
     }
 
     /// Asks the application to quit, the way the Dock does, and waits briefly.

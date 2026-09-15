@@ -32,7 +32,13 @@ struct IslandWidgetStrip: View {
     private var columns: Int { IslandGeometry.columns(forWidth: width) }
     private var columnWidth: CGFloat { IslandGeometry.columnWidth(forWidth: width, columns: columns) }
 
-    private var usesGlass: Bool { preferences.islandAppearance != .pureBlack }
+    /// Glass cards are only glass when there is glass under them. With Reduce
+    /// Transparency on the panel is solid black, and a refracting card over a
+    /// solid panel refracts nothing while still costing the contrast.
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    private var usesGlass: Bool {
+        !reduceTransparency && preferences.islandAppearance != .pureBlack
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: IslandGeometry.gap) {
@@ -155,33 +161,50 @@ struct IslandWidgetStrip: View {
 
     @ViewBuilder private func editingOverlay(_ widget: IslandWidget) -> some View {
         if store.isEditing {
-            // The card is dimmed while it is being arranged. On a one-unit
-            // widget the controls sit directly over the caption, and a scrim is
-            // what keeps that readable as a control bar rather than a collision.
+            // While a card is being arranged it stops being a widget and
+            // becomes a tile with a name on it. The scrim is heavy enough to
+            // put the live content out of the way, because the live content is
+            // not what anybody is reading here.
+            //
+            // The name goes at the top and the controls at the bottom, at
+            // opposite ends of the card. They used to share the top edge, and
+            // on a one-unit widget a capsule of four circles is wider than the
+            // space left beside a word: "Sistem" and "Disk" were half behind
+            // it. Separating them by the height of the card is the only
+            // arrangement that cannot collide at any width.
             RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
-                .fill(Color.black.opacity(0.42))
+                .fill(Color.black.opacity(0.62))
                 .overlay(
                     RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
                         .strokeBorder(MacBDesign.IslandToken.accent, lineWidth: 1.5))
-                .overlay(alignment: .topTrailing) {
+                .overlay(alignment: .top) {
+                    VStack(spacing: MacBDesign.Space.tight) {
+                        Image(systemName: widget.kind.symbol)
+                            .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
+                            .foregroundStyle(MacBDesign.IslandToken.accent)
+                        Text(widget.kind.title)
+                            .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                            .foregroundStyle(MacBDesign.IslandToken.primaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    .padding(.horizontal, MacBDesign.Space.snug)
+                    .padding(.top, MacBDesign.Space.close)
+                }
+                .overlay(alignment: .bottom) {
                     editingControls(widget)
-                        .padding(.horizontal, MacBDesign.Space.snug)
-                        .padding(.vertical, MacBDesign.Space.tight)
-                        .background(.black.opacity(0.72), in: Capsule())
-                        .padding(MacBDesign.Space.snug)
+                        .padding(.horizontal, MacBDesign.Space.tight)
+                        .padding(.bottom, MacBDesign.Space.snug)
                 }
         }
     }
 
-    /// The edit controls sit on their own dark bar rather than floating over the
-    /// card. A one-unit widget is narrower than four round buttons, so at that
-    /// width the three size letters collapse into one menu instead of sliding
-    /// on top of each other and of the title underneath.
-    /// The size buttons and the remove button, on their own dark bar.
+    /// The size buttons and the remove button, on their own dark bar at the foot
+    /// of the card.
     ///
-    /// They used to float straight on the card, which put them across the
-    /// widget's own caption: "Sistem" and "Disk" were half behind a row of
-    /// circles. The bar is what separates a control from the thing it controls.
+    /// A one-unit widget is narrower than four round buttons, so at that width
+    /// the three size letters collapse into one menu rather than sliding on top
+    /// of each other.
     private func editingControls(_ widget: IslandWidget) -> some View {
         HStack(spacing: MacBDesign.Space.tight) {
             if widget.size == .small {

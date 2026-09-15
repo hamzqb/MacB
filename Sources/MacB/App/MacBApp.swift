@@ -83,21 +83,33 @@ import MacBCore
         // Drives the screen blur by hand so it can be photographed without a
         // real lid: it runs the whole ramp once, then puts itself away.
         if CommandLine.arguments.contains("--blur-probe") {
-            NSApplication.shared.setActivationPolicy(.accessory)
-            NSApplication.shared.finishLaunching()
+            let application = NSApplication.shared
+            application.setActivationPolicy(.accessory)
             let overlay = LidBlurOverlay()
             let target = CommandLine.arguments.firstIndex(of: "--blur-probe")
                 .flatMap { CommandLine.arguments.indices.contains($0 + 1) ? Double(CommandLine.arguments[$0 + 1]) : nil } ?? 1
-            for step in 0...40 {
-                overlay.apply(progress: target * Double(step) / 40)
-                _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+            print("Blur \(target) seviyesine çıkacak, 4 saniye duracak. " +
+                  "Pencere sunucusu: \(LidBlurOverlay.usesRealBlur ? "gerçek bulanıklık" : "malzeme katmanları")")
+            // Driven by a timer under the real run loop rather than by hand.
+            // A hand-turned `RunLoop.run(mode:before:)` never flushes the window
+            // server transaction the blur radius rides on, so the probe used to
+            // report success and photograph a perfectly sharp screen.
+            var step = 0
+            let steps = 40
+            Timer.scheduledTimer(withTimeInterval: 0.03, repeats: true) { timer in
+                if step <= steps {
+                    overlay.apply(progress: target * Double(step) / Double(steps))
+                    step += 1
+                    return
+                }
+                timer.invalidate()
+                Timer.scheduledTimer(withTimeInterval: 4, repeats: false) { _ in
+                    overlay.hide()
+                    print("Kapatıldı.")
+                    application.terminate(nil)
+                }
             }
-            print("Blur \(target) seviyesinde, 4 saniye açık kalacak.")
-            let hold = Date().addingTimeInterval(4)
-            while Date() < hold, RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.2)) {}
-            overlay.hide()
-            _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.3))
-            print("Kapatıldı.")
+            application.run()
             return
         }
         // Reports, and optionally sets, the macOS login item. Useful because

@@ -16,6 +16,12 @@ import UniformTypeIdentifiers
     @Published private(set) var selectedCacheIDs: Set<String> = []
     @Published private(set) var hasScannedCaches = false
 
+    /// The last batch MacB put in the Trash, for as long as it can be taken
+    /// back. One batch, not a stack: a session-long history of the user's disk
+    /// is not something MacB has any business keeping.
+    @Published private(set) var undoableMoves: [TrashMove] = []
+    @Published private(set) var undoableTitle: String?
+
     private let archiveService = ArchiveService()
     private let uninstallService = AppUninstallService()
     private let cacheSweepService = CacheSweepService()
@@ -70,8 +76,9 @@ import UniformTypeIdentifiers
         let freed = ByteCountFormatter.string(fromByteCount: cacheSize, countStyle: .file)
         cacheItems = []; selectedCacheIDs = []; hasScannedCaches = false
         run { [cacheSweepService] in
-            try await cacheSweepService.moveToTrash(items)
-            return "\(count) klasör Çöp Sepeti'ne taşındı, \(freed) yer açıldı."
+            let moves = try await cacheSweepService.moveToTrash(items)
+            return (moves, "\(count) klasör",
+                    "\(count) klasör Çöp Sepeti'ne taşındı, \(freed) yer açıldı.")
         }
     }
 
@@ -182,8 +189,8 @@ import UniformTypeIdentifiers
                     throw AppUninstallError.stillRunning
                 }
             }
-            try await uninstallService.moveToTrash(candidates)
-            return "\(count) öğe Çöp Sepeti’ne taşındı. Geri almak için Çöp Sepeti'nden çıkar."
+            let moves = try await uninstallService.moveToTrash(candidates)
+            return (moves, "\(count) öğe", "\(count) öğe Çöp Sepeti’ne taşındı.")
         }
     }
 
@@ -211,12 +218,44 @@ import UniformTypeIdentifiers
                 .map(URL.init(fileURLWithPath:)).first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
+    var canUndoTrashMove: Bool { !undoableMoves.isEmpty }
+
+    /// Puts the last batch back where it came from.
+    func undoLastTrashMove() {
+        guard canUndoTrashMove else { return }
+        let moves = undoableMoves
+        forgetTrashMove()
+        statusMessage = TrashUndo.restore(moves)
+    }
+
+    func forgetTrashMove() {
+        undoableMoves = []
+        undoableTitle = nil
+    }
+
     private func run(_ operation: @escaping () async throws -> String) {
         guard !isWorking else { return }
         isWorking = true; statusMessage = nil
         Task {
             do { statusMessage = try await operation() }
             catch { statusMessage = error.localizedDescription }
+            isWorking = false
+        }
+    }
+
+    /// The same as `run`, for the two operations that also leave something in
+    /// the Trash worth offering back.
+    private func run(_ operation: @escaping () async throws -> ([TrashMove], String, String)) {
+        guard !isWorking else { return }
+        isWorking = true; statusMessage = nil; forgetTrashMove()
+        Task {
+            do {
+                let (moves, title, message) = try await operation()
+                if !moves.isEmpty { undoableMoves = moves; undoableTitle = title }
+                statusMessage = message
+            } catch {
+                statusMessage = error.localizedDescription
+            }
             isWorking = false
         }
     }

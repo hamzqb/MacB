@@ -118,6 +118,15 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var protectPrivateTools: Bool { didSet { defaults.set(protectPrivateTools, forKey: "protectPrivateTools") } }
     @Published var interfaceDensity: InterfaceDensity { didSet { defaults.set(interfaceDensity.rawValue, forKey: "interfaceDensity") } }
     @Published var islandAppearance: IslandAppearance { didSet { defaults.set(islandAppearance.rawValue, forKey: "islandAppearance") } }
+    /// How much of the desktop shows through the glass island, 0 to 1.
+    ///
+    /// A single number rather than three named presets, because the right
+    /// amount depends entirely on the wallpaper underneath: a dark photograph
+    /// takes far more transparency than a white one before the widgets stop
+    /// being readable, and only the person looking at it knows which they have.
+    @Published var islandTranslucency: Double {
+        didSet { defaults.set(min(1, max(0, islandTranslucency)), forKey: "islandTranslucency") }
+    }
     @Published var islandEventsEnabled: Bool { didSet { defaults.set(islandEventsEnabled, forKey: "islandEventsEnabled") } }
     @Published var lidHingeEnabled: Bool { didSet { defaults.set(lidHingeEnabled, forKey: "lidHingeEnabled") } }
     /// The hinge angle at which the fold starts, in degrees.
@@ -160,6 +169,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "protectPrivateTools": false,
                                     "interfaceDensity": InterfaceDensity.balanced.rawValue,
                                     "islandAppearance": IslandAppearance.pureBlack.rawValue,
+                                    "islandTranslucency": 0.55,
                                     "islandEventsEnabled": true,
                                     "lidHingeEnabled": true,
                                     "lidHingeAngle": LidFold.defaultOpenAngle,
@@ -184,6 +194,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         protectPrivateTools = defaults.bool(forKey: "protectPrivateTools")
         interfaceDensity = InterfaceDensity(rawValue: defaults.string(forKey: "interfaceDensity") ?? "") ?? .balanced
         islandAppearance = IslandAppearance(rawValue: defaults.string(forKey: "islandAppearance") ?? "") ?? .pureBlack
+        islandTranslucency = min(1, max(0, defaults.double(forKey: "islandTranslucency")))
         islandEventsEnabled = defaults.bool(forKey: "islandEventsEnabled")
         lidHingeEnabled = defaults.bool(forKey: "lidHingeEnabled")
         lidHingeAngle = LidFold.clampOpenAngle(defaults.double(forKey: "lidHingeAngle"))

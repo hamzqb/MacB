@@ -35,6 +35,9 @@ struct NotchView: View {
     @State private var clipboardFilter: ClipboardFilter = .recent
     /// Where the pointer is inside the panel, for the specular highlight.
     @State private var pointer: CGPoint?
+    /// The island is glass from edge to edge, so this setting is not a detail
+    /// here: with it on, every translucent surface in the panel goes solid.
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -96,20 +99,25 @@ struct NotchView: View {
     }
 
     private var carriesGlass: Bool {
-        preferences.islandAppearance == .liquidGlass || preferences.islandAppearance == .blackGlass
+        guard !reduceTransparency else { return false }
+        return preferences.islandAppearance == .liquidGlass || preferences.islandAppearance == .blackGlass
     }
 
     @ViewBuilder private var islandSurface: some View {
         if presentation.layout.phase == .collapsed {
             Color.clear
+        } else if reduceTransparency {
+            // Asked for less transparency, given none: a flat surface the
+            // widgets are guaranteed to read against, whatever the wallpaper.
+            Color.black
         } else {
             switch preferences.islandAppearance {
             case .pureBlack:
                 Color.black
             case .liquidGlass:
-                liquidGlass(tint: nil)
+                translucentSurface(tinted: false)
             case .blackGlass:
-                liquidGlass(tint: .black.opacity(0.55))
+                translucentSurface(tinted: true)
             case .customImage:
                 if let image = background.image {
                     Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
@@ -123,26 +131,35 @@ struct NotchView: View {
         }
     }
 
-    /// The real thing where macOS has it, and an honest imitation where it does not.
+    /// Glass that is actually see-through.
     ///
-    /// macOS 26 renders glass itself: it bends what is behind the panel at the
-    /// edges and lights the rim from wherever the desktop is bright. Nothing
-    /// hand-drawn gets close, so on older systems this stays a blurred material
-    /// with a lit edge rather than pretending to refract.
-    @ViewBuilder private func liquidGlass(tint: Color?) -> some View {
-        if #available(macOS 26.0, *) {
-            // Not .interactive(). That variant is built for a control: it swings
-            // the whole sheet's opacity on press, which on a button is the point
-            // and on a panel this size reads as the surface glitching. The
-            // pointer response lives in specularHighlight instead, where it is
-            // a light moving over a sheet that does not itself change.
-            Color.clear.glassEffect(tint.map { Glass.regular.tint($0) } ?? .regular,
-                                    in: islandShape)
-        } else {
-            Rectangle().fill(.ultraThinMaterial)
-            if let tint { tint }
-            glassSheen
-        }
+    /// The old surface was `glassEffect`, which blurs what is inside the window
+    /// it is drawn in. Behind this panel the window is empty, so it blurred
+    /// black and produced a very good picture of frosted glass with nothing
+    /// behind it. `IslandBackdrop` samples the screen instead, so the wallpaper
+    /// and whatever window is under the notch genuinely come through.
+    ///
+    /// The veil over it is what keeps white text legible on a white desktop,
+    /// and how much of it there is, is the user's call — see
+    /// `Preferences.islandTranslucency`.
+    @ViewBuilder private func translucentSurface(tinted: Bool) -> some View {
+        IslandBackdrop(material: tinted ? .hudWindow : .fullScreenUI,
+                       topRadius: presentation.cameraHeight > 0 ? 0 : presentation.radius,
+                       bottomRadius: presentation.radius)
+        Color.black.opacity(veilOpacity(tinted: tinted))
+        glassSheen
+    }
+
+    /// How much black sits between the desktop and the widgets.
+    ///
+    /// Never zero. At full translucency the panel is still a panel, and a
+    /// widget grid floating on bare wallpaper with no ground under it is not a
+    /// design, it is a bug that happens to look deliberate.
+    private func veilOpacity(tinted: Bool) -> Double {
+        let translucency = min(1, max(0, preferences.islandTranslucency))
+        let heaviest: Double = tinted ? 0.78 : 0.62
+        let lightest: Double = tinted ? 0.22 : 0.10
+        return heaviest - (heaviest - lightest) * translucency
     }
 
     private var glassSheen: some View {
@@ -155,7 +172,7 @@ struct NotchView: View {
         // While music is playing the rim borrows the cover's colour, which is
         // the quietest way for the whole panel to know what is on.
         if media.isPlaying, let tint = media.tint { return tint.opacity(0.38) }
-        return preferences.islandAppearance == .pureBlack
+        return preferences.islandAppearance == .pureBlack || reduceTransparency
             ? MacBDesign.IslandToken.Fill.hairline
             : MacBDesign.Island.glassStroke
     }

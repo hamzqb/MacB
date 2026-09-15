@@ -158,4 +158,32 @@ public enum LidScreenBlur {
     public static func strength(progress: Double) -> Double {
         ramps.indices.reduce(0.0) { $0 + layerAlpha($1, progress: progress) } / Double(ramps.count)
     }
+
+    /// The radius, in points, when the window server will take one from us.
+    ///
+    /// Stacked panes were a way of faking a dial. Where a real one exists the
+    /// picture is blurred once, at a radius that climbs the whole way down, and
+    /// nothing is layered over anything: no darkening that was never asked for,
+    /// no step where three panes suddenly agree.
+    ///
+    /// The curve is front-loaded on purpose. Blur is not perceived linearly —
+    /// the first few points destroy small text and the last twenty change
+    /// almost nothing anyone can name — so the radius runs ahead of the hinge
+    /// early, which is the only part of the fold long enough to watch.
+    public static let maximumRadius: Double = 72
+
+    public static func blurRadius(progress: Double) -> Double {
+        guard progress > 0 else { return 0 }
+        let clamped = min(1, progress)
+        return maximumRadius * pow(clamped, 0.55)
+    }
+
+    /// A little black under the blur, because a blurred bright desktop is still
+    /// a bright desktop and the lid is on its way to none at all.
+    public static let maximumDim: Double = 0.34
+
+    public static func dimAlpha(progress: Double) -> Double {
+        guard progress > 0 else { return 0 }
+        return maximumDim * pow(min(1, progress), 1.6)
+    }
 }

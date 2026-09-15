@@ -80,12 +80,16 @@ final class CacheSweepService {
     ///
     /// The review list can sit open while the disk changes underneath it, so the
     /// safety rule is applied again here rather than trusted from the scan.
-    func moveToTrash(_ items: [CacheSweepItem]) async throws {
+    /// Returns where each folder ended up, so the sweep can be taken back.
+    @discardableResult
+    func moveToTrash(_ items: [CacheSweepItem]) async throws -> [TrashMove] {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
+        var moves: [TrashMove] = []
         for item in items {
             guard isSafe(item.url, home: home) else { throw CacheSweepError.unsafeItem }
-            _ = try await NSWorkspace.shared.recycle([item.url])
+            moves += try await NSWorkspace.shared.recycleRecording([item.url])
         }
+        return moves
     }
 
     // MARK: - Building

@@ -360,6 +360,7 @@ private struct CardFramesKey: PreferenceKey {
 }
 
 private struct DockPreviewView: View {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     let pid: pid_t
     let horizontal: Bool
     @ObservedObject var windowService: WindowService
@@ -394,7 +395,8 @@ private struct DockPreviewView: View {
             if let error = previewService.errorMessage { Text(error).font(.caption2).foregroundStyle(.secondary).padding([.horizontal, .bottom], 10) }
             else { footer.padding(.horizontal, 14).padding(.bottom, MacBDesign.Space.comfortable) }
         }.coordinateSpace(name: "panel").onPreferenceChange(CardFramesKey.self, perform: onFrames)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: MacBDesign.corner))
+            .background(reduceTransparency ? AnyShapeStyle(MacBDesign.surface) : AnyShapeStyle(.regularMaterial),
+                        in: RoundedRectangle(cornerRadius: MacBDesign.corner))
             .overlay(RoundedRectangle(cornerRadius: MacBDesign.corner).strokeBorder(MacBDesign.separator, lineWidth: 0.5))
             .task(id: visibleWindows.map(\.id).joined(separator: "|")) {
                 await previewService.show(visibleWindows)

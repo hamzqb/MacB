@@ -1057,6 +1057,50 @@ struct CoreTestRunner {
                 let data = try JSONEncoder().encode(settings)
                 let restored = try JSONDecoder().decode(FaceUnlockSettings.self, from: data)
                 try expect(restored == settings, "Settings changed across a restart")
+            }),
+            ("TrashRestorePlan: an item is only put back into a place that is still free", {
+                try expect(TrashRestorePlan.outcome(trashedExists: true, originalExists: false) == .restore,
+                           "An item still in the Trash was not offered back")
+                try expect(TrashRestorePlan.outcome(trashedExists: false, originalExists: false) == .missingFromTrash,
+                           "An emptied Trash was treated as restorable")
+                try expect(TrashRestorePlan.outcome(trashedExists: true, originalExists: true) == .occupied,
+                           "A restore would have overwritten whatever took the old path")
+                try expect(TrashRestorePlan.outcome(trashedExists: false, originalExists: true) == .missingFromTrash,
+                           "A missing item was not reported as missing")
+            }),
+            ("TrashRestorePlan: the report names every outcome, not only the good one", {
+                try expect(TrashRestorePlan.summary(restored: 0, missing: 0, occupied: 0) == "Geri alınacak bir şey yok.",
+                           "An empty undo claimed to have done something")
+                let partial = TrashRestorePlan.summary(restored: 2, missing: 1, occupied: 3)
+                try expect(partial.contains("2 öğe"), "The restored count went unreported")
+                try expect(partial.contains("1 öğe"), "The missing count went unreported")
+                try expect(partial.contains("3 öğe"), "The blocked count went unreported")
+                let clean = TrashRestorePlan.summary(restored: 4, missing: 0, occupied: 0)
+                try expect(!clean.contains("bulunamadı") && !clean.contains("dolu"),
+                           "A clean undo reported failures it did not have")
+            }),
+            ("LidScreenBlur: the radius climbs the whole way down and is front-loaded", {
+                try expect(LidScreenBlur.blurRadius(progress: 0) == 0, "The blur started before the lid moved")
+                var previous = -1.0
+                for step in 0...20 {
+                    let radius = LidScreenBlur.blurRadius(progress: Double(step) / 20)
+                    try expect(radius > previous, "The radius stalled at \(Double(step) / 20)")
+                    previous = radius
+                }
+                try expect(abs(LidScreenBlur.blurRadius(progress: 1) - LidScreenBlur.maximumRadius) < 0.001,
+                           "The blur did not reach its maximum by the end of the fold")
+                // Half way down the lid, more than half the blur: the early part
+                // of the fold is the part anyone has time to look at.
+                try expect(LidScreenBlur.blurRadius(progress: 0.5) > LidScreenBlur.maximumRadius * 0.5,
+                           "The blur was not front-loaded")
+            }),
+            ("LidScreenBlur: the dim follows the blur without ever hiding the screen on its own", {
+                try expect(LidScreenBlur.dimAlpha(progress: 0) == 0, "The screen dimmed before the lid moved")
+                try expect(LidScreenBlur.dimAlpha(progress: 1) == LidScreenBlur.maximumDim,
+                           "The dim did not reach its maximum")
+                try expect(LidScreenBlur.maximumDim < 0.5, "The dim was heavy enough to be the whole effect")
+                try expect(LidScreenBlur.dimAlpha(progress: 0.5) < LidScreenBlur.maximumDim * 0.5,
+                           "The dim ran ahead of the blur instead of trailing it")
             })
         ]
         var failures = 0
