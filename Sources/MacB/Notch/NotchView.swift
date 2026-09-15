@@ -131,21 +131,15 @@ struct NotchView: View {
         }
     }
 
-    /// Glass that is actually see-through.
+    /// What the island draws over its own glass.
     ///
-    /// The old surface was `glassEffect`, which blurs what is inside the window
-    /// it is drawn in. Behind this panel the window is empty, so it blurred
-    /// black and produced a very good picture of frosted glass with nothing
-    /// behind it. `IslandBackdrop` samples the screen instead, so the wallpaper
-    /// and whatever window is under the notch genuinely come through.
-    ///
-    /// The veil over it is what keeps white text legible on a white desktop,
-    /// and how much of it there is, is the user's call — see
-    /// `Preferences.islandTranslucency`.
+    /// The glass itself is not here. A `.behindWindow` material cannot sample
+    /// the screen from inside a SwiftUI hierarchy that clips and folds itself,
+    /// so it lives in the panel's window under this view — see
+    /// `NotchController.updateBackdrop(phase:)`. What is left here is the veil
+    /// that keeps white text legible over a white desktop, and how much of it
+    /// there is, is the user's call.
     @ViewBuilder private func translucentSurface(tinted: Bool) -> some View {
-        IslandBackdrop(material: tinted ? .hudWindow : .fullScreenUI,
-                       topRadius: presentation.cameraHeight > 0 ? 0 : presentation.radius,
-                       bottomRadius: presentation.radius)
         Color.black.opacity(veilOpacity(tinted: tinted))
         glassSheen
     }

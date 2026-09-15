@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 /// The island's actual translucency: the desktop behind the panel, blurred by
 /// the window server, showing through the panel's own shape.
@@ -11,44 +10,19 @@ import SwiftUI
 /// fact, paint.
 ///
 /// `NSVisualEffectView` in `.behindWindow` mode is the one thing that samples
-/// the screen itself, so that is what the island is made of now. It is given the
-/// panel's own outline as a mask rather than relying on the SwiftUI clip, which
-/// does not reliably reach an AppKit view hosted inside it — without the mask
-/// the blur is a square and the rounded corners are the only part that is not.
+/// the screen itself, so that is what the island is made of now. It does not
+/// live in the SwiftUI view: hosted inside a hierarchy that clips itself to the
+/// island's outline and folds with the lid, it has nothing behind it to sample
+/// and draws a flat dark sheet. `NotchController` puts it in the panel's window
+/// underneath the hosting view instead, and gives it the panel's own outline as
+/// a mask — without the mask the glass is a square and only the corners of the
+/// content are round.
 ///
 /// Nothing is captured: this is the same compositor effect a sidebar uses, and
 /// no pixel behind the panel is ever readable by MacB.
-struct IslandBackdrop: NSViewRepresentable {
-    /// How heavy the frost is. The island sits over a desktop it does not
-    /// control, so it needs a material that darkens rather than one that takes
-    /// the window's own colour.
-    var material: NSVisualEffectView.Material = .hudWindow
-    var topRadius: CGFloat
-    var bottomRadius: CGFloat
-
-    func makeNSView(context: Context) -> ShapedVisualEffectView {
-        let view = ShapedVisualEffectView()
-        view.material = material
-        view.blendingMode = .behindWindow
-        view.state = .active
-        view.appearance = NSAppearance(named: .darkAqua)
-        view.topRadius = topRadius
-        view.bottomRadius = bottomRadius
-        return view
-    }
-
-    func updateNSView(_ view: ShapedVisualEffectView, context: Context) {
-        if view.material != material { view.material = material }
-        view.topRadius = topRadius
-        view.bottomRadius = bottomRadius
-    }
-}
-
-/// An effect view that keeps its mask in step with its own bounds.
 ///
-/// The island changes width and height constantly — it grows for a panel, it
-/// shrinks back to a bar — so the mask cannot be made once. It is rebuilt
-/// whenever the size or either radius changes, and never otherwise: drawing an
+/// The mask is rebuilt whenever the size or either radius changes, and never
+/// otherwise: the island changes width and height constantly, and drawing an
 /// image on every layout pass of a view this size is not free.
 final class ShapedVisualEffectView: NSVisualEffectView {
     var topRadius: CGFloat = 0 { didSet { if topRadius != oldValue { refreshMask() } } }

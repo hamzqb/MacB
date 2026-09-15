@@ -65,6 +65,8 @@ struct IslandToast: Equatable {
     private let presentation = NotchPresentation()
     private var state = PanelState()
     private var panel: NotchPanel?
+    /// The sheet of real glass under the panel. See `updateBackdrop(phase:)`.
+    private var islandBackdrop: ShapedVisualEffectView?
     private var animationTimer: Timer?
     private var deadlineTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
@@ -140,7 +142,32 @@ struct IslandToast: Equatable {
             self?.shelf.add(urls: urls)
             self?.showToast(symbol: "checkmark", message: "\(urls.count) öğe eklendi")
         }
-        window.contentView = host; panel = window
+        // The glass lives in the window, under the SwiftUI view, rather than
+        // inside it.
+        //
+        // A `.behindWindow` material is the only thing on macOS that samples the
+        // screen behind a window, and it cannot do that from inside a SwiftUI
+        // hierarchy: the island clips itself to its own outline and folds with
+        // the lid, and a subtree SwiftUI has to rasterise has nothing behind it
+        // to sample. Hosted there it drew a flat dark sheet and the "glass" was
+        // paint. Here it is a sibling of the hosting view, composited by AppKit,
+        // and the desktop genuinely comes through.
+        let container = NSView(frame: .zero)
+        container.autoresizingMask = [.width, .height]
+        let backdrop = ShapedVisualEffectView()
+        backdrop.blendingMode = .behindWindow
+        backdrop.state = .active
+        backdrop.appearance = NSAppearance(named: .darkAqua)
+        backdrop.autoresizingMask = [.width, .height]
+        backdrop.isHidden = true
+        host.autoresizingMask = [.width, .height]
+        container.addSubview(backdrop)
+        container.addSubview(host, positioned: .above, relativeTo: backdrop)
+        window.contentView = container
+        backdrop.frame = container.bounds
+        host.frame = container.bounds
+        islandBackdrop = backdrop
+        panel = window
         updateDisplay(); window.orderFrontRegardless()
         let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .leftMouseDown, .leftMouseUp]
         if let monitor = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
@@ -156,7 +183,21 @@ struct IslandToast: Equatable {
             self?.dragHandedOff = true; self?.closePanel(immediate: true)
         }
         preferences.objectWillChange.sink { [weak self] _ in
-            DispatchQueue.main.async { self?.render() }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                // Switching the surface changes nothing about the panel's size,
+                // so it would never reach the glass through a re-render alone.
+                self.updateBackdrop(phase: self.presentation.layout.phase)
+                self.render()
+            }
+        }.store(in: &subscriptions)
+        // The glass cannot fold, so it steps aside for the hinge and comes back
+        // when the lid is open again.
+        lid.$foldProgress.map { $0 > 0.001 }.removeDuplicates().sink { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.updateBackdrop(phase: self.presentation.layout.phase)
+            }
         }.store(in: &subscriptions)
         // Opening the library and adding a widget both change how much room home
         // needs, and the panel resizes from here rather than from the view.
@@ -424,6 +465,30 @@ struct IslandToast: Equatable {
             Task { @MainActor in action() }
         })
     }
+    /// Keeps the window's glass in step with the panel it sits under.
+    ///
+    /// Hidden rather than faded when it is not wanted: an appearance with no
+    /// material, Reduce Transparency, a collapsed island with nothing to be
+    /// glass, and the fold, where the panel is a rotated picture and a flat
+    /// sheet of glass behind it would not rotate with it.
+    private func updateBackdrop(phase: NotchPhase) {
+        guard let backdrop = islandBackdrop else { return }
+        let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        let wanted = preferences.islandAppearance.usesMaterial
+            && !reduceTransparency
+            && phase != .collapsed
+            && lid.foldProgress <= 0.001
+        backdrop.isHidden = !wanted
+        guard wanted else { return }
+        // `.hudWindow` is the one that carries the most of what is behind it —
+        // it is what Spotlight is made of. `.fullScreenUI` was tried first and
+        // is nearly opaque: it looked exactly like the flat black panel it was
+        // meant to replace, which cost an evening to notice.
+        backdrop.material = preferences.islandAppearance == .blackGlass ? .fullScreenUI : .hudWindow
+        backdrop.topRadius = presentation.cameraHeight > 0 ? 0 : presentation.radius
+        backdrop.bottomRadius = presentation.radius
+    }
+
     private func updateDisplay() {
         let mouseScreen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
         let notchedScreen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 }
@@ -717,6 +782,7 @@ struct IslandToast: Equatable {
                              y: screen.frame.maxY - presentation.height,
                              width: presentation.width, height: presentation.height)
             panel.setFrame(box, display: true)
+            updateBackdrop(phase: target.phase)
             updateGlow(frame: box, on: screen, phase: target.phase)
         }
         if immediate { apply(1, fade: 1); return }
