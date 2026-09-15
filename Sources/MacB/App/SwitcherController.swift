@@ -238,6 +238,7 @@ private struct DesktopWindowSection: Identifiable {
         // Through the filter, so a refresh while somebody is typing does not
         // quietly put the windows they just excluded back in the Tab order.
         selection.replace(with: traversalOrder(model.matchingWindows))
+        resizePanel()
         model.selectedID = selection.selectedID
         model.message = ordered.isEmpty ? (windowService.errorMessage ?? "Gösterilecek pencere bulunamadı.") : nil
         model.needsAccessibility = ordered.isEmpty && !AXIsProcessTrusted()
@@ -291,6 +292,7 @@ private struct DesktopWindowSection: Identifiable {
             selection.select(ordered.first ?? "")
         }
         model.selectedID = selection.selectedID
+        resizePanel()
         updatePreviews()
     }
 
@@ -329,12 +331,51 @@ private struct DesktopWindowSection: Identifiable {
         }
     }
 
+    /// The panel is only as big as what is in it.
+    ///
+    /// It used to be a fixed seven hundred and sixty by four hundred and
+    /// twenty whatever it held, so five windows left the bottom half of it
+    /// empty and the whole thing read as a page that had failed to load.
+    private static func panelSize(for model: SwitcherModel, on screen: NSScreen) -> NSSize {
+        let cards = max(model.windows.count, 1)
+        let columns = min(SwitcherModel.gridColumns, cards)
+        let contentWidth = CGFloat(columns) * 168 + CGFloat(columns - 1) * 12
+        // Wide enough for the caption line under a long window title even when
+        // only one card sits above it.
+        let width = min(max(contentWidth + 28, 360), screen.visibleFrame.width - 40)
+
+        let sections = model.desktopSections
+        let showsHeadings = sections.count > 1
+        var content: CGFloat = 0
+        for (index, section) in sections.enumerated() {
+            if index > 0 { content += 16 }
+            if showsHeadings { content += 16 + 8 }
+            let rows = max(1, Int(ceil(Double(section.windows.count) / Double(SwitcherModel.gridColumns))))
+            content += CGFloat(rows) * 126 + CGFloat(rows - 1) * 12
+        }
+        if sections.isEmpty { content = 120 }
+        // Outer padding, the scroll view's own inset, and the caption line.
+        let height = min(content + 28 + 8 + 34, screen.visibleFrame.height - 40)
+        return NSSize(width: width, height: max(height, 160))
+    }
+
+    /// Fits the panel to the windows once they have actually arrived.
+    private func resizePanel() {
+        guard let panel, let screen = panel.screen ?? NSScreen.main else { return }
+        let size = Self.panelSize(for: model, on: screen)
+        guard abs(panel.frame.width - size.width) > 0.5
+                || abs(panel.frame.height - size.height) > 0.5 else { return }
+        let origin = NSPoint(x: screen.visibleFrame.midX - size.width / 2,
+                             y: screen.visibleFrame.midY - size.height / 2)
+        panel.setFrame(NSRect(origin: origin, size: size), display: true,
+                       animate: false)
+    }
+
     private func present() {
         let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
-        // Four cards across, plus the gaps and the panel's own padding.
-        let width = min(760, screen.visibleFrame.width - 40)
-        let size = NSSize(width: width, height: min(420, screen.visibleFrame.height - 40))
+        let size = Self.panelSize(for: model, on: screen)
+        let width = size.width
         let panel = SwitcherPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -676,8 +717,20 @@ private struct SwitcherWindowCard: View {
             // card that tells one window from another.
             if let image = previews.images[window.id] {
                 Image(nsImage: image).resizable().scaledToFill()
+            } else if let icon = window.appIcon {
+                // Just the icon, faint and large. The shared placeholder draws
+                // a little mock window with traffic lights and grey bars, which
+                // at this size reads as a real window that failed to render
+                // rather than as a picture that has not arrived yet.
+                Image(nsImage: icon).resizable().scaledToFit()
+                    .frame(width: 44, height: 44)
+                    .opacity(0.5)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                WindowPreviewPlaceholder(window: window, compact: true)
+                Image(systemName: "macwindow")
+                    .font(.system(size: MacBDesign.TypeScale.display, weight: .light))
+                    .foregroundStyle(.white.opacity(0.35))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .frame(width: width, height: height)
