@@ -12,6 +12,14 @@ private final class SwitcherPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+/// Where a card sits in the grid, so the arrow keys can move by what is drawn
+/// rather than by a position in a flat list.
+struct GridPosition: Equatable {
+    let section: Int
+    let row: Int
+    let column: Int
+}
+
 private struct DesktopWindowSection: Identifiable {
     let id: String
     let title: String
@@ -24,10 +32,28 @@ private struct DesktopWindowSection: Identifiable {
     @Published var selectedID: String?
     @Published var isLoading = false
     @Published var message: String?
+    /// True when the message is the one the user can actually do something
+    /// about, so the view can offer the button rather than only the sentence.
+    @Published var needsAccessibility = false
+    /// What has been typed while the switcher is up. Empty means everything.
+    @Published var filter = ""
     var selectedWindow: WindowRecord? { windows.first { $0.id == selectedID } }
     var selectedIndex: Int { windows.firstIndex { $0.id == selectedID } ?? 0 }
+    /// The windows the filter leaves, in display order.
+    ///
+    /// Matched loosely on purpose: somebody typing "chr" wants Chrome, and
+    /// somebody typing part of a page title wants that tab's window.
+    var matchingWindows: [WindowRecord] {
+        let needle = filter.trimmingCharacters(in: .whitespaces)
+        guard !needle.isEmpty else { return windows }
+        return windows.filter { window in
+            window.appName.localizedStandardContains(needle)
+                || window.title.localizedStandardContains(needle)
+        }
+    }
+
     fileprivate var desktopSections: [DesktopWindowSection] {
-        let indexed = Dictionary(grouping: windows.compactMap { window -> (Int, WindowRecord)? in
+        let indexed = Dictionary(grouping: matchingWindows.compactMap { window -> (Int, WindowRecord)? in
             window.desktopIndex.map { ($0, window) }
         }, by: { $0.0 })
         var result = indexed.keys.sorted().map { index in
@@ -35,7 +61,7 @@ private struct DesktopWindowSection: Identifiable {
             return DesktopWindowSection(id: "desktop-\(index)", title: "Masaüstü \(index)",
                 isCurrent: records.contains { $0.desktopLocation == .current }, windows: records)
         }
-        let unassigned = windows.filter { $0.desktopIndex == nil }
+        let unassigned = matchingWindows.filter { $0.desktopIndex == nil }
         if !unassigned.isEmpty {
             result.append(DesktopWindowSection(id: "desktop-current-fallback", title: "Bu Masaüstü",
                 isCurrent: true, windows: unassigned))
@@ -45,6 +71,38 @@ private struct DesktopWindowSection: Identifiable {
             return $0.id.localizedStandardCompare($1.id) == .orderedAscending
         }
     }
+    /// How many cards the grid puts on a row. The view lays out the same number.
+    static let gridColumns = 4
+
+    /// Every window's place in the grid, built from the same sections the view
+    /// draws so the two cannot drift apart.
+    var gridPositions: [String: GridPosition] {
+        var result: [String: GridPosition] = [:]
+        for (sectionIndex, section) in desktopSections.enumerated() {
+            for (offset, window) in section.windows.enumerated() {
+                result[window.id] = GridPosition(section: sectionIndex,
+                                                 row: offset / Self.gridColumns,
+                                                 column: offset % Self.gridColumns)
+            }
+        }
+        return result
+    }
+
+    /// The window at a place in the grid, or the nearest one on that row.
+    ///
+    /// Moving off the end of a row lands on the last card of it rather than
+    /// nowhere, because a key press that does nothing reads as a dead key.
+    func window(at position: GridPosition) -> String? {
+        let sections = desktopSections
+        guard position.row >= 0, position.column >= 0,
+              sections.indices.contains(position.section) else { return nil }
+        let windows = sections[position.section].windows
+        let start = position.row * Self.gridColumns
+        guard start < windows.count else { return nil }
+        let index = min(start + position.column, windows.count - 1)
+        return windows[index].id
+    }
+
     var previewWindows: [WindowRecord] {
         guard let selectedWindow else { return [] }
         let sameDesktop = windows.filter { candidate in
@@ -65,6 +123,7 @@ private struct DesktopWindowSection: Identifiable {
     private let previews: PreviewService
     private let preferences: Preferences
     private let favorites: FavoriteWindowStore
+    private let permissions: PermissionStore
     private let model = SwitcherModel()
     private var selection = WindowSelection()
     private var panel: SwitcherPanel?
@@ -83,11 +142,13 @@ private struct DesktopWindowSection: Identifiable {
     private(set) var isVisible = false
     var onWillOpen: (() -> Void)?
 
-    init(windowService: WindowService, previewService: PreviewService, preferences: Preferences, favorites: FavoriteWindowStore) {
+    init(windowService: WindowService, previewService: PreviewService, preferences: Preferences,
+         favorites: FavoriteWindowStore, permissions: PermissionStore) {
         self.windowService = windowService
         self.previews = previewService
         self.preferences = preferences
         self.favorites = favorites
+        self.permissions = permissions
         subscription = windowService.$windows.dropFirst().sink { [weak self] records in
             guard let self, self.isVisible, !self.model.isLoading else { return }
             self.update(records)
@@ -107,6 +168,8 @@ private struct DesktopWindowSection: Identifiable {
         model.isLoading = true
         model.windows = []
         model.message = nil
+        model.needsAccessibility = false
+        model.filter = ""
         selection = WindowSelection()
         present()
         installMonitors()
@@ -168,10 +231,82 @@ private struct DesktopWindowSection: Identifiable {
             let right = ranks[$1.element.id] ?? (1000 + $1.offset)
             return left < right
         }.map(\.element)
-        selection.replace(with: ordered.map(\.id))
+        // Two different orders, on purpose. The grid is grouped by desktop
+        // because that is how somebody reads it; Tab walks most-recently-used
+        // because that is how somebody uses it.
         model.windows = ordered
+        // Through the filter, so a refresh while somebody is typing does not
+        // quietly put the windows they just excluded back in the Tab order.
+        selection.replace(with: traversalOrder(model.matchingWindows))
         model.selectedID = selection.selectedID
         model.message = ordered.isEmpty ? (windowService.errorMessage ?? "Gösterilecek pencere bulunamadı.") : nil
+        model.needsAccessibility = ordered.isEmpty && !AXIsProcessTrusted()
+        updatePreviews()
+    }
+
+    /// The order Tab walks: what you used last, first.
+    ///
+    /// This used to be the same list the grid draws, which is grouped by
+    /// desktop and then pulls every window of the frontmost application to the
+    /// front. That made the commonest switch of all impossible: tapping the
+    /// shortcut while sitting in one of five Chrome windows moved to another
+    /// Chrome window rather than back to the thing you had just come from, so
+    /// bouncing between two windows could not be done at all.
+    ///
+    /// Position zero is whatever is in front right now, so a single tap always
+    /// lands on the window before it.
+    private func traversalOrder(_ records: [WindowRecord]) -> [String] {
+        let ranks = Dictionary(uniqueKeysWithValues: recentIDs.enumerated().map { ($1, $0) })
+        let ordered = records.enumerated().sorted {
+            // Anything MacB has not seen switched to keeps the window service's
+            // own front-to-back order, which is the best guess available.
+            let left = ranks[$0.element.id] ?? (1000 + $0.offset)
+            let right = ranks[$1.element.id] ?? (1000 + $1.offset)
+            return left < right
+        }.map(\.element)
+        var ids = ordered.map(\.id)
+        // Switching with the mouse never reaches recentIDs, so the front window
+        // is taken from the system rather than from MacB's own memory.
+        if let pid = initialApplication?.processIdentifier,
+           let current = ordered.first(where: { $0.pid == pid }),
+           let index = ids.firstIndex(of: current.id), index != 0 {
+            ids.remove(at: index)
+            ids.insert(current.id, at: 0)
+        }
+        return ids
+    }
+
+    /// Narrows the list to what has been typed.
+    ///
+    /// The selection is kept when the window it points at survives the filter,
+    /// so typing more letters does not keep throwing somebody back to the top.
+    private func setFilter(_ text: String) {
+        model.filter = text
+        let visible = model.matchingWindows.map(\.id)
+        let ordered = traversalOrder(model.matchingWindows)
+        selection.replace(with: ordered)
+        if let selected = model.selectedID, visible.contains(selected) {
+            selection.select(selected)
+        } else {
+            selection.select(ordered.first ?? "")
+        }
+        model.selectedID = selection.selectedID
+        updatePreviews()
+    }
+
+    /// Moves by a row or a column of the grid, rather than by one place in the
+    /// Tab order. Up and down used to do exactly what left and right did, which
+    /// in a one-column list was honest and in a grid is not.
+    private func move(rows: Int, columns: Int) {
+        guard !model.isLoading, !model.windows.isEmpty else { return }
+        guard let current = model.selectedID,
+              let position = model.gridPositions[current] else { return }
+        let target = GridPosition(section: position.section,
+                                  row: position.row + rows,
+                                  column: position.column + columns)
+        guard let id = model.window(at: target) else { return }
+        selection.select(id)
+        model.selectedID = id
         updatePreviews()
     }
 
@@ -210,6 +345,9 @@ private struct DesktopWindowSection: Identifiable {
         panel.contentView = NSHostingView(rootView: SwitcherView(model: model, previews: previews, onChoose: { [weak self] window in
             self?.selection.select(window.id)
             self?.commit()
+        }, onOpenAccessibility: { [weak self] in
+            self?.permissions.openPrivacy("Privacy_Accessibility")
+            self?.dismiss(restoreFocus: false)
         }))
         panel.setFrameOrigin(NSPoint(x: screen.visibleFrame.midX - width / 2, y: screen.visibleFrame.midY - size.height / 2))
         self.panel = panel
@@ -232,11 +370,29 @@ private struct DesktopWindowSection: Identifiable {
                 return event
             }
             switch event.keyCode {
-            case 53: self.dismiss(restoreFocus: true); return nil
+            case 53:
+                // Escape clears the search before it closes the switcher, so a
+                // mistyped letter does not cost the whole switch.
+                if !self.model.filter.isEmpty { self.setFilter("") } else { self.dismiss(restoreFocus: true) }
+                return nil
             case 36, 76: self.commit(); return nil
-            case 48, 124, 125: self.advance(backwards: event.modifierFlags.contains(.shift)); return nil
-            case 123, 126: self.advance(backwards: true); return nil
-            default: return event
+            case 48: self.advance(backwards: event.modifierFlags.contains(.shift)); return nil
+            case 124: self.move(rows: 0, columns: 1); return nil
+            case 123: self.move(rows: 0, columns: -1); return nil
+            case 125: self.move(rows: 1, columns: 0); return nil
+            case 126: self.move(rows: -1, columns: 0); return nil
+            case 51:
+                guard !self.model.filter.isEmpty else { return nil }
+                self.setFilter(String(self.model.filter.dropLast()))
+                return nil
+            default:
+                guard let typed = event.charactersIgnoringModifiers,
+                      typed.count == 1,
+                      let scalar = typed.unicodeScalars.first,
+                      !CharacterSet.controlCharacters.contains(scalar),
+                      !CharacterSet.illegalCharacters.contains(scalar) else { return event }
+                self.setFilter(self.model.filter + typed)
+                return nil
             }
         }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
@@ -311,6 +467,7 @@ private struct SwitcherView: View {
     @ObservedObject var model: SwitcherModel
     @ObservedObject var previews: PreviewService
     var onChoose: (WindowRecord) -> Void
+    var onOpenAccessibility: () -> Void
     @AppStorage("animationsEnabled") private var animationsEnabled = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -323,7 +480,7 @@ private struct SwitcherView: View {
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.fixed(Self.cardWidth), spacing: MacBDesign.Space.comfortable,
-                                  alignment: .top), count: 4)
+                                  alignment: .top), count: SwitcherModel.gridColumns)
     }
 
     var body: some View {
@@ -331,12 +488,17 @@ private struct SwitcherView: View {
             if model.isLoading {
                 ProgressView().controlSize(.small).frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let message = model.message {
-                Label(message, systemImage: "macwindow")
-                    .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                empty(message)
             } else {
-                grid
+                if !model.filter.isEmpty { searchLine }
+                if model.desktopSections.isEmpty {
+                    Text("“\(model.filter)” ile eşleşen pencere yok.")
+                        .font(.system(size: MacBDesign.TypeScale.body))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    grid
+                }
                 if let selected = model.selectedWindow { caption(selected) }
             }
         }
@@ -351,6 +513,55 @@ private struct SwitcherView: View {
         }
         .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.panel).strokeBorder(MacBDesign.separator, lineWidth: 0.5))
         .animation(animationsEnabled && !reduceMotion ? MacBDesign.Motion.instant : nil, value: model.selectedID)
+    }
+
+    /// What is shown when there is nothing to show.
+    ///
+    /// A missing permission used to be a sentence and nothing else: no button,
+    /// no explanation of why it had stopped working. MacB loses this grant every
+    /// time it is updated, because the grant is tied to the exact copy of the
+    /// application macOS saw last, so this is the state somebody meets after
+    /// every update -- and the sentence sent them off to find the setting
+    /// themselves. The code to open that very pane was already here.
+    private func empty(_ message: String) -> some View {
+        VStack(spacing: MacBDesign.Space.comfortable) {
+            Image(systemName: model.needsAccessibility ? "hand.raised" : "macwindow")
+                .font(.system(size: MacBDesign.TypeScale.hero, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text(message)
+                .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+            if model.needsAccessibility {
+                Text("MacB her güncellendiğinde macOS bu izni sıfırlar. Açtığında pencere seçici hemen çalışır.")
+                    .font(.system(size: MacBDesign.TypeScale.caption))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 380)
+                Button("Erişilebilirlik ayarlarını aç") { onOpenAccessibility() }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Shown only once something has been typed. An empty search field sitting
+    /// there permanently would be one more thing to read every time the
+    /// switcher opens, for a feature most switches never need.
+    private var searchLine: some View {
+        HStack(spacing: MacBDesign.Space.snug) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(model.filter)
+                .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+            Spacer(minLength: MacBDesign.Space.close)
+            Text("esc ile temizle")
+                .font(.system(size: MacBDesign.TypeScale.micro))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, MacBDesign.Space.regular)
+        .padding(.vertical, MacBDesign.Space.snug)
+        .background(Color.primary.opacity(0.06), in: Capsule())
     }
 
     private var grid: some View {

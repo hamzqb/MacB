@@ -226,7 +226,8 @@ private final class Flag: @unchecked Sendable {
                                             systemEvents: systemEvents,
                                             openSettings: { [weak self] in self?.showSettings() })
     private lazy var switcher = SwitcherController(windowService: windows, previewService: previews,
-                                                   preferences: preferences, favorites: favorites)
+                                                   preferences: preferences, favorites: favorites,
+                                                   permissions: permissions)
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
