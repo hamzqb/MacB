@@ -154,6 +154,17 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     /// rather than an offset, so the widget follows daylight saving on its own.
     @Published var secondaryTimeZone: String { didSet { defaults.set(secondaryTimeZone, forKey: "secondaryTimeZone") } }
     @Published var shortcut: SwitcherShortcut { didSet { defaults.set(shortcut.rawValue, forKey: "shortcut") } }
+    /// Whether Fn + a two-finger click opens the ring of shortcuts.
+    @Published var radialMenuEnabled: Bool {
+        didSet { defaults.set(radialMenuEnabled, forKey: "radialMenuEnabled") }
+    }
+    /// What sits on the ring, clockwise from the top.
+    @Published var radialMenuLayout: RadialMenuLayout {
+        didSet {
+            guard let data = try? JSONEncoder().encode(radialMenuLayout) else { return }
+            defaults.set(data, forKey: "radialMenuLayout")
+        }
+    }
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
@@ -176,6 +187,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "islandGlow": true,
                                     "lidScreenBlur": true,
                                     "automationEnabled": false,
+                                    "radialMenuEnabled": true,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
         notchEnabled = defaults.bool(forKey: "notchEnabled")
@@ -201,6 +213,12 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         islandGlow = defaults.bool(forKey: "islandGlow")
         lidScreenBlur = defaults.bool(forKey: "lidScreenBlur")
         automationEnabled = defaults.bool(forKey: "automationEnabled")
+        radialMenuEnabled = defaults.bool(forKey: "radialMenuEnabled")
+        // A ring that cannot be decoded is a ring with the default slices, not
+        // an app that refuses to start.
+        radialMenuLayout = defaults.data(forKey: "radialMenuLayout")
+            .flatMap { try? JSONDecoder().decode(RadialMenuLayout.self, from: $0) }
+            ?? .default
         lidWelcomeText = defaults.string(forKey: "lidWelcomeText") ?? ""
         lidFarewellText = defaults.string(forKey: "lidFarewellText") ?? ""
         let storedZone = defaults.string(forKey: "secondaryTimeZone") ?? "America/New_York"

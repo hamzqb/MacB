@@ -206,6 +206,7 @@ private final class Flag: @unchecked Sendable {
     private let biometricAuth = BiometricAuthService()
     private let recentTargets = RecentTargetStore()
     private let hotKey = HotKeyController()
+    private let radialMenu = RadialMenuController()
     private lazy var windowLayout = WindowLayoutService(preferences: preferences)
     private let aiActivity = AIActivityService()
     private let systemMonitor = SystemMonitorService()
@@ -273,6 +274,8 @@ private final class Flag: @unchecked Sendable {
             guard self.permissions.accessibility else { self.showSettings(); return }
             self.switcher.begin(backwards: backwards, shortcut: self.hotKey.activeShortcut ?? self.preferences.shortcut)
         }
+        radialMenu.perform = { [weak self] action in self?.performRadialAction(action) }
+        radialMenu.hasAccessibility = { [weak self] in self?.permissions.accessibility ?? false }
         switcher.onWillOpen = { [weak self] in
             self?.dock.dismiss()
             self?.dock.enabled = false
@@ -419,6 +422,8 @@ private final class Flag: @unchecked Sendable {
         if preferences.switcherEnabled { hotKey.register(preferences.shortcut) }
         else { hotKey.unregister(); switcher.dismiss() }
         windowLayout.setEnabled(preferences.windowManagementEnabled)
+        radialMenu.setLayout(preferences.radialMenuLayout)
+        radialMenu.setEnabled(preferences.radialMenuEnabled && permissions.accessibility)
         lid.setOpenAngle(preferences.lidHingeAngle)
         lid.setEnabled(preferences.lidHingeEnabled && preferences.notchEnabled)
         automation.notice = { [weak self] text in self?.notch.showRuleNotice(text) }
@@ -428,6 +433,37 @@ private final class Flag: @unchecked Sendable {
         fileActivity.enabled = preferences.fileActivityEnabled
         layoutMenuItem?.isEnabled = preferences.windowManagementEnabled && permissions.accessibility
         // Existing hosting view observes preferences; preserve its sidebar selection.
+    }
+
+    /// Runs one slice of the ring.
+    ///
+    /// Everything here is something the menu bar already offers, on purpose: the
+    /// ring is a faster way to reach what MacB does, not a second set of
+    /// behaviours that only exists on a gesture.
+    private func performRadialAction(_ action: RadialAction) {
+        switch action {
+        case .island: openNotch()
+        case .shelf: openIsland(showing: .files)
+        case .clipboard: openIsland(showing: .clipboard)
+        case .timer: openIsland(showing: .timer)
+        case .switcher:
+            permissions.refresh()
+            guard permissions.accessibility else { return showSettings() }
+            switcher.begin(backwards: false, shortcut: hotKey.activeShortcut ?? preferences.shortcut)
+        case .keyboardLock: startKeyboardCleaning()
+        case .windowLeft: windowLayout.perform(.leftHalf)
+        case .windowRight: windowLayout.perform(.rightHalf)
+        case .windowMaximize: windowLayout.perform(.maximize)
+        case .windowCenter: windowLayout.perform(.center)
+        case .windowNextDisplay: windowLayout.perform(.nextDisplay)
+        case .settings: showSettings()
+        }
+    }
+
+    private func openIsland(showing content: NotchContent) {
+        if !preferences.notchEnabled { preferences.notchEnabled = true }
+        notch.start()
+        notch.openPanel(showing: content)
     }
 
     @objc private func switcherClosed() { dock.enabled = preferences.dockEnabled && !isSleeping && !isSessionInactive }

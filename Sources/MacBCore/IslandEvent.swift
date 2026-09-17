@@ -95,15 +95,22 @@ public extension IslandEvent {
                     symbol: "battery.25")
     }
 
-    /// The moment the lid comes back up.
+    /// The moment the lid comes back up, or nothing at all.
     ///
     /// Shown with the same machinery as a charger notice, because that is exactly
     /// what it is: a line that appears, is read, and leaves on its own.
+    ///
+    /// Nil when the user has not written a line. Opening the lid is the one
+    /// moment the machine is guaranteed to have the person's attention, and
+    /// spending it on a greeting they did not ask for is the app talking for
+    /// the sake of talking. An empty field is not "pick something for me", it
+    /// is "say nothing" — the clock-driven greeting is still there for whoever
+    /// wants it, they just have to type it.
     static func welcome(hour: Int, time: String, batteryPercent: Int?,
-                        custom: String? = nil) -> IslandEvent {
+                        custom: String? = nil) -> IslandEvent? {
+        guard let title = customTitle(custom) else { return nil }
         let detail = [time, batteryPercent.map { "%\($0)" }].compactMap { $0 }.joined(separator: " · ")
-        return IslandEvent(kind: .welcome, title: customTitle(custom) ?? greeting(forHour: hour),
-                           detail: detail,
+        return IslandEvent(kind: .welcome, title: title, detail: detail,
                            progress: nil, symbol: symbolForGreeting(hour))
     }
 

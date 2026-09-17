@@ -317,10 +317,12 @@ struct IslandToast: Equatable {
         formatter.locale = Locale(identifier: "tr_TR")
         formatter.dateFormat = "HH:mm"
         let battery = systemMonitor.snapshot.batteryPercent.map { Int($0.rounded()) }
-        systemEvents.present(.welcome(hour: Calendar.current.component(.hour, from: now),
-                                      time: formatter.string(from: now),
-                                      batteryPercent: battery,
-                                      custom: preferences.lidWelcomeText))
+        // No line written, no line shown. See `IslandEvent.welcome`.
+        guard let event = IslandEvent.welcome(hour: Calendar.current.component(.hour, from: now),
+                                              time: formatter.string(from: now),
+                                              batteryPercent: battery,
+                                              custom: preferences.lidWelcomeText) else { return }
+        systemEvents.present(event)
     }
 
     /// The lid is going down. Put something on screen for the hinge to fold.
@@ -394,6 +396,16 @@ struct IslandToast: Equatable {
             state.open()
         }
         shelf.refreshAvailability(); render(); panel?.makeKey()
+    }
+
+    /// Opens the island straight onto one section.
+    ///
+    /// `openPanel()` decides for itself what is most worth showing, which is
+    /// right when the island is opened by hovering the notch and wrong when
+    /// somebody has just aimed at "Pano" on the ring and meant it.
+    func openPanel(showing content: NotchContent) {
+        openPanel()
+        select(content)
     }
 
     /// Uses the real view and services so design states can be checked without moving the pointer.

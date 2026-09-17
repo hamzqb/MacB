@@ -11,6 +11,12 @@ private func expect(_ condition: @autoclosure () throws -> Bool, _ message: Stri
     if try !condition() { throw TestFailure(description: message) }
 }
 
+/// Unwraps, or fails the scenario with a sentence rather than a crash.
+private func require<T>(_ value: T?, _ message: String) throws -> T {
+    guard let value else { throw TestFailure(description: message) }
+    return value
+}
+
 private func withShelfFixture(_ body: (URL, URL) throws -> Void) throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MacBTests-" + UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -871,7 +877,9 @@ struct CoreTestRunner {
                            "A pane past the end arrived")
             }),
             ("IslandEvent: a hand-written line replaces the greeting, detail intact", {
-                let event = IslandEvent.welcome(hour: 2, time: "09:14", batteryPercent: 78, custom: "Hoş geldin")
+                let event = try require(IslandEvent.welcome(hour: 2, time: "09:14", batteryPercent: 78,
+                                                            custom: "Hoş geldin"),
+                                        "A written line produced no greeting at all")
                 try expect(event.title == "Hoş geldin", "The written line was ignored")
                 try expect(event.detail == "09:14 · %78", "The detail was lost")
                 let bye = IslandEvent.farewell(hour: 2, batteryPercent: 72, custom: "  Kendine iyi bak  ")
@@ -884,6 +892,14 @@ struct CoreTestRunner {
                 try expect(IslandEvent.customTitle("   \n ") == nil, "Spaces blanked the island")
                 try expect(IslandEvent.farewell(hour: 2, batteryPercent: nil, custom: " ").title == "İyi geceler",
                            "A blank field replaced the farewell")
+                // The lid opening is the one moment the machine has somebody's
+                // attention for certain, and an empty field means they do not
+                // want it spent on a greeting.
+                for blank in [nil, "", "   \n "] as [String?] {
+                    try expect(IslandEvent.welcome(hour: 2, time: "09:14", batteryPercent: 78,
+                                                   custom: blank) == nil,
+                               "An empty welcome line still put something on screen")
+                }
                 let long = String(repeating: "a", count: IslandEvent.customTitleLimit + 20)
                 try expect(IslandEvent.customTitle(long)?.count == IslandEvent.customTitleLimit,
                            "A line too long for the island was not cut")
@@ -916,10 +932,14 @@ struct CoreTestRunner {
                 try expect(IslandEvent.greeting(forHour: 13) == "İyi günler", "Midday was wrong")
                 try expect(IslandEvent.greeting(forHour: 20) == "İyi akşamlar", "Evening was wrong")
                 try expect(IslandEvent.greeting(forHour: 2) == "İyi geceler", "Night was wrong")
-                let event = IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: 78)
+                let event = try require(IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: 78,
+                                                            custom: "Günaydın"),
+                                        "A written greeting produced nothing")
                 try expect(event.kind == .welcome && event.detail == "09:14 · %78", "The greeting read wrong")
-                try expect(IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: nil).detail == "09:14",
-                           "A machine with no battery printed one")
+                let noBattery = try require(IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: nil,
+                                                                custom: "Günaydın"),
+                                            "A written greeting produced nothing")
+                try expect(noBattery.detail == "09:14", "A machine with no battery printed one")
             }),
             ("ProcessRanking: a helper is credited to the application it belongs to", {
                 let helper = "/Applications/Google Chrome.app/Contents/Frameworks/Chrome Framework.framework/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)"
@@ -1114,6 +1134,79 @@ struct CoreTestRunner {
                     try expect(!liveness.isStalled(at: now),
                                "The blur gave up on a hinge that was still answering, at \(now)s")
                 }
+            }),
+            ("RadialMenu: slice zero is straight up and the rest run clockwise", {
+                let up = RadialMenuGeometry.slice(dx: 0, dy: 80, count: 4)
+                let right = RadialMenuGeometry.slice(dx: 80, dy: 0, count: 4)
+                let down = RadialMenuGeometry.slice(dx: 0, dy: -80, count: 4)
+                let left = RadialMenuGeometry.slice(dx: -80, dy: 0, count: 4)
+                try expect(up == 0, "Up was not the first slice, it was \(String(describing: up))")
+                try expect(right == 1, "The ring did not run clockwise")
+                try expect(down == 2, "Down landed on \(String(describing: down))")
+                try expect(left == 3, "Left landed on \(String(describing: left))")
+                // A slice is centred on its direction, so either side of straight
+                // up is still the first slice.
+                try expect(RadialMenuGeometry.slice(dx: 20, dy: 80, count: 6) == 0, "Up drifted off slice zero")
+                try expect(RadialMenuGeometry.slice(dx: -20, dy: 80, count: 6) == 0, "Up drifted off slice zero")
+                for count in 3...RadialMenuGeometry.maximumSlices {
+                    for step in 0..<count {
+                        let angle = RadialMenuGeometry.midAngle(step, count: count)
+                        let picked = RadialMenuGeometry.slice(dx: sin(angle) * 90, dy: cos(angle) * 90,
+                                                              count: count)
+                        try expect(picked == step,
+                                   "Aiming at the middle of slice \(step) of \(count) picked \(String(describing: picked))")
+                    }
+                }
+            }),
+            ("RadialMenu: the middle chooses nothing, which is how somebody backs out", {
+                try expect(RadialMenuGeometry.slice(dx: 0, dy: 0, count: 6) == nil,
+                           "The ring fired at the point the click landed")
+                let justInside = RadialMenuGeometry.deadZone - 0.5
+                try expect(RadialMenuGeometry.slice(dx: justInside, dy: 0, count: 6) == nil,
+                           "The dead zone was smaller than it claims")
+                let justOutside = RadialMenuGeometry.deadZone + 0.5
+                try expect(RadialMenuGeometry.slice(dx: justOutside, dy: 0, count: 6) != nil,
+                           "Nothing outside the dead zone could be picked")
+            }),
+            ("RadialMenu: the ring stays on screen even in a corner", {
+                let screen = (x: 0.0, y: 0.0, width: 1440.0, height: 900.0)
+                let size = RadialMenuGeometry.outerRadius * 2
+                for cursor in [(x: 0.0, y: 0.0), (x: 1440.0, y: 900.0), (x: 2.0, y: 898.0)] {
+                    let origin = RadialMenuGeometry.origin(forCursor: cursor, size: size, screen: screen)
+                    try expect(origin.x >= screen.x && origin.x + size <= screen.x + screen.width,
+                               "The ring hung off the side at \(cursor)")
+                    try expect(origin.y >= screen.y && origin.y + size <= screen.y + screen.height,
+                               "The ring hung off the top or bottom at \(cursor)")
+                }
+                let middle = RadialMenuGeometry.origin(forCursor: (x: 720, y: 450), size: size, screen: screen)
+                try expect(middle.x == 720 - size / 2 && middle.y == 450 - size / 2,
+                           "The ring was nudged even though it fitted")
+            }),
+            ("RadialMenu: a slice that cannot work is dropped, not left dead on the ring", {
+                let layout = RadialMenuLayout(actions: [.island, .switcher, .windowLeft, .clipboard, .shelf])
+                let granted = layout.usableActions(hasAccessibility: true)
+                try expect(granted.count == 5, "A granted ring lost slices")
+                let denied = layout.usableActions(hasAccessibility: false)
+                try expect(!denied.contains(.switcher) && !denied.contains(.windowLeft),
+                           "A slice that needs Accessibility survived without it")
+                try expect(denied.count >= RadialMenuGeometry.minimumSlices,
+                           "The ring shrank below the point where it is still a ring")
+                // Nothing but window work and the switcher should need the permission.
+                try expect(!RadialAction.island.requiresAccessibility && !RadialAction.settings.requiresAccessibility,
+                           "MacB's own panels claimed to need Accessibility")
+            }),
+            ("RadialMenu: a stored ring is clamped on the way back in", {
+                let tooMany = RadialMenuLayout(actions: Array(repeating: .island, count: 30))
+                try expect(tooMany.actions.count == RadialMenuGeometry.maximumSlices,
+                           "A ring with thirty slices was allowed")
+                let tooFew = RadialMenuLayout(actions: [.settings])
+                try expect(tooFew.actions.count >= RadialMenuGeometry.minimumSlices,
+                           "A ring with one slice was allowed")
+                try expect(tooFew.actions.first == .settings, "Topping the ring up lost what was chosen")
+                let encoded = try JSONEncoder().encode(RadialMenuLayout(actions: Array(repeating: .shelf, count: 30)))
+                let decoded = try JSONDecoder().decode(RadialMenuLayout.self, from: encoded)
+                try expect(decoded.actions.count == RadialMenuGeometry.maximumSlices,
+                           "Decoding skipped the clamp that encoding respected")
             }),
             ("LidBlurLiveness: a hinge that goes quiet takes the blur down with it", {
                 var liveness = LidBlurLiveness()

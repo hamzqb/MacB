@@ -18,6 +18,15 @@ enum Haptics {
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
 
+    /// The pointer crossed onto another slice of the radial menu.
+    ///
+    /// The same tap as arriving over a drop target, and for the same reason: a
+    /// ring is aimed at by angle, and a tap per slice is what lets somebody
+    /// pick the one they want without stopping to read it.
+    static func tick() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+    }
+
     /// Something has actually been taken: a file dropped, a shelf item accepted.
     static func accepted() {
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .drawCompleted)

@@ -910,12 +910,15 @@ struct SettingsView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     lidLine("Açılış yazısı", text: $preferences.lidWelcomeText,
-                            placeholder: IslandEvent.greeting(forHour: currentHour),
+                            placeholder: "Boş — hiçbir şey çıkmaz",
                             label: "Kapak açılınca görünen yazı")
+                    Text("Boş bırakırsan kapağı açtığında ekranda hiçbir şey çıkmaz.")
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                     lidLine("Kapanış yazısı", text: $preferences.lidFarewellText,
                             placeholder: IslandEvent.farewellTitle(forHour: currentHour),
                             label: "Kapak kapanırken görünen yazı")
-                    Text("Boş bırakırsan saate göre değişir. En fazla \(IslandEvent.customTitleLimit) karakter.")
+                    Text("Kapanış yazısını boş bırakırsan saate göre değişir; katlanacak bir şey olması gerekiyor. En fazla \(IslandEvent.customTitleLimit) karakter.")
                         .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -933,6 +936,51 @@ struct SettingsView: View {
                 settingToggle("Yumuşak geçişler", detail: "Paneller açılırken ve kapanırken kısa animasyonlar kullan.", isOn: $preferences.animationsEnabled)
                 rowDivider
                 settingToggle("Pencere peek modu", detail: "Kartta bekleyince pencerenin ekrandaki yerini hafifçe vurgula.", isOn: $preferences.peekEnabled)
+            }
+            section("Kısayol halkası", "circle.circle") {
+                settingToggle("Fn + iki parmak tıklaması",
+                              detail: "İmlecin etrafında bir halka açılır. Tutup istediğin dilime doğru kaydır ve bırak; ya da tıklayıp bırak, halka açık kalsın, sonra dilime tıkla. Escape kapatır.",
+                              isOn: $preferences.radialMenuEnabled)
+                if preferences.radialMenuEnabled {
+                    if !permissions.accessibility {
+                        message("Halka, tıklamayı yakalamak için Erişilebilirlik izni istiyor. İzin verilene kadar açılmaz.", warning: true)
+                    }
+                    rowDivider
+                    Text("Dilimler saat yönünde, yukarıdan başlayarak.")
+                        .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
+                    ForEach(Array(preferences.radialMenuLayout.actions.enumerated()), id: \.offset) { index, action in
+                        HStack(spacing: MacBDesign.Space.regular) {
+                            Image(systemName: action.symbol)
+                                .font(.system(size: MacBDesign.TypeScale.body))
+                                .foregroundStyle(MacBDesign.accent)
+                                .frame(width: 20)
+                            Picker("", selection: radialSlice(at: index)) {
+                                ForEach(RadialAction.allCases, id: \.self) { candidate in
+                                    Text(candidate.title).tag(candidate)
+                                }
+                            }
+                            .labelsHidden()
+                            .accessibilityLabel("\(index + 1). dilim")
+                            Button {
+                                removeRadialSlice(at: index)
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(preferences.radialMenuLayout.actions.count <= RadialMenuGeometry.minimumSlices)
+                            .help("Bu dilimi çıkar")
+                        }
+                    }
+                    HStack(spacing: MacBDesign.Space.regular) {
+                        Button("Dilim ekle", action: addRadialSlice)
+                            .disabled(preferences.radialMenuLayout.actions.count >= RadialMenuGeometry.maximumSlices)
+                        Button("Varsayılana dön") { preferences.radialMenuLayout = .default }
+                        Spacer()
+                        Text("\(preferences.radialMenuLayout.actions.count) dilim")
+                            .font(.system(size: MacBDesign.TypeScale.caption))
+                            .foregroundStyle(MacBDesign.muted)
+                    }
+                }
             }
             section("Hızlı erişim", "square.grid.2x2") {
                 Text("Island'daki Uygulamalar bölümünde yalnızca buraya eklediklerin görünür. MacB kurulu uygulamaları taramaz.")
@@ -1007,6 +1055,41 @@ struct SettingsView: View {
     }
 
     private var rowDivider: some View { Divider().opacity(0.45) }
+
+    /// One slice of the ring, as something a Picker can drive.
+    ///
+    /// The layout validates itself on the way in, so the binding hands it a
+    /// whole new list rather than reaching into the one it has.
+    private func radialSlice(at index: Int) -> Binding<RadialAction> {
+        Binding(
+            get: {
+                let actions = preferences.radialMenuLayout.actions
+                return actions.indices.contains(index) ? actions[index] : .island
+            },
+            set: { value in
+                var actions = preferences.radialMenuLayout.actions
+                guard actions.indices.contains(index) else { return }
+                actions[index] = value
+                preferences.radialMenuLayout = RadialMenuLayout(actions: actions)
+            })
+    }
+
+    private func addRadialSlice() {
+        var actions = preferences.radialMenuLayout.actions
+        // The first thing not already on the ring, so adding a slice twice does
+        // not produce two of the same.
+        let next = RadialAction.allCases.first { !actions.contains($0) } ?? .island
+        actions.append(next)
+        preferences.radialMenuLayout = RadialMenuLayout(actions: actions)
+    }
+
+    private func removeRadialSlice(at index: Int) {
+        var actions = preferences.radialMenuLayout.actions
+        guard actions.indices.contains(index),
+              actions.count > RadialMenuGeometry.minimumSlices else { return }
+        actions.remove(at: index)
+        preferences.radialMenuLayout = RadialMenuLayout(actions: actions)
+    }
 
     private var runningBadge: some View {
         Text("çalışıyor")
