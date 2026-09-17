@@ -33,6 +33,8 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    /// What is being typed into the key field. Cleared as soon as it is stored.
+    @State private var aiKeyDraft = ""
     @ObservedObject var preferences: Preferences
     @ObservedObject var permissions: PermissionStore
     @ObservedObject var spotify: SpotifyService
@@ -55,6 +57,7 @@ struct SettingsView: View {
     @ObservedObject var launcher: AppLauncherStore
     @ObservedObject var automation: AutomationService
     @ObservedObject var loginItem: LoginItemService
+    @ObservedObject var aiKey: AIKeyStore
     var openPanel: () -> Void
     @AppStorage("settingsPage") private var selectedPage: SettingsPage = .general
     @State private var showRemovalConfirmation = false
@@ -194,6 +197,44 @@ struct SettingsView: View {
                         }
                     }
                 }
+            }
+            section("Yapay zekâ anahtarı", "key.horizontal") {
+                Text("Halkadaki yapay zekâ dilimi ve island'daki soru kutusu bu anahtarla çalışır. Anahtar Keychain'e yazılır — plist'e, dosyaya ya da koda değil — ve bir daha ekranda gösterilmez. Sadece OpenAI'ye gider.")
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if aiKey.hasKey {
+                    HStack(spacing: MacBDesign.Space.regular) {
+                        Image(systemName: "checkmark.seal.fill").foregroundStyle(MacBDesign.accent)
+                        Text("Anahtar kayıtlı.")
+                            .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                        Spacer(minLength: 8)
+                        Button("Doğrula") { Task { await aiKey.verify() } }
+                            .disabled(aiKey.status == .checking)
+                        Button("Sil", role: .destructive) { aiKey.remove() }
+                    }
+                }
+                HStack(spacing: MacBDesign.Space.regular) {
+                    SecureField(aiKey.hasKey ? "Yeni anahtarla değiştir" : "sk-…", text: $aiKeyDraft)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("OpenAI anahtarı")
+                    Button("Kaydet") {
+                        if aiKey.save(aiKeyDraft) {
+                            // Cleared the moment it is stored, so the typed key
+                            // does not sit in a view's state for the session.
+                            aiKeyDraft = ""
+                            Task { await aiKey.verify() }
+                        }
+                    }
+                    .disabled(!AIKeyFormat.looksLikeKey(aiKeyDraft))
+                }
+                switch aiKey.status {
+                case .idle: EmptyView()
+                case .checking: message("OpenAI'ye soruluyor…")
+                case .valid(let text): message(text)
+                case .invalid(let text): message(text, warning: true)
+                }
+                if let error = aiKey.errorMessage { message(error, warning: true) }
+                message("Anahtarını bir yere yapıştırdıysan (sohbet, not, ekran görüntüsü) onu iptal et ve yenisini üret. Sızmış bir anahtar senin faturana çalışır.", warning: true)
             }
             section("Sistem", "gauge.with.dots.needle.67percent") {
                 HStack(spacing: MacBDesign.Space.regular) {
@@ -916,9 +957,9 @@ struct SettingsView: View {
                         .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     lidLine("Kapanış yazısı", text: $preferences.lidFarewellText,
-                            placeholder: IslandEvent.farewellTitle(forHour: currentHour),
+                            placeholder: "Boş — hiçbir şey çıkmaz",
                             label: "Kapak kapanırken görünen yazı")
-                    Text("Kapanış yazısını boş bırakırsan saate göre değişir; katlanacak bir şey olması gerekiyor. En fazla \(IslandEvent.customTitleLimit) karakter.")
+                    Text("İkisi de boşken island hiç görünmez, katlanma animasyonu da olmaz. Ekranın bulanıklaşması devam eder. En fazla \(IslandEvent.customTitleLimit) karakter.")
                         .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -980,6 +1021,25 @@ struct SettingsView: View {
                             .font(.system(size: MacBDesign.TypeScale.caption))
                             .foregroundStyle(MacBDesign.muted)
                     }
+                    Text("Tek dilim de olur: o zaman hangi yöne kaydırırsan kaydır aynı şey çalışır.")
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    rowDivider
+                    HStack {
+                        Text("Saydamlık")
+                            .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                        Spacer(minLength: 8)
+                        Text("%\(Int((preferences.radialMenuTranslucency * 100).rounded()))")
+                            .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold)).monospacedDigit()
+                            .foregroundStyle(MacBDesign.accent)
+                    }
+                    Slider(value: $preferences.radialMenuTranslucency, in: 0...1)
+                        .disabled(reduceTransparency)
+                    Text(reduceTransparency
+                         ? "Sistemde \u{201C}Saydamlığı azalt\u{201D} açık, halka düz çiziliyor."
+                         : "Island'daki gibi: sağa gittikçe buz incelir, arkadaki ekran daha çok görünür.")
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             section("Hızlı erişim", "square.grid.2x2") {

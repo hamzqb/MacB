@@ -69,6 +69,19 @@ import MacBCore
         apply(updated)
     }
 
+    /// Switches a widget kind on if it is off, and says whether it had to.
+    ///
+    /// For the shortcut ring: somebody who aims at "Hızlı not" has asked for the
+    /// note, and finding nothing there because the card happens to be off the
+    /// strip is a worse answer than turning it on and saying so.
+    @discardableResult
+    func enable(kind: IslandWidgetKind) -> Bool {
+        guard !layout.activeKinds.contains(kind) else { return false }
+        guard let widget = layout.widgets.first(where: { $0.kind == kind }) else { return false }
+        setEnabled(id: widget.id, true)
+        return true
+    }
+
     func reset() { apply(.standard) }
 
     private func apply(_ updated: IslandWidgetLayout) {

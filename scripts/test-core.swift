@@ -882,7 +882,9 @@ struct CoreTestRunner {
                                         "A written line produced no greeting at all")
                 try expect(event.title == "Hoş geldin", "The written line was ignored")
                 try expect(event.detail == "09:14 · %78", "The detail was lost")
-                let bye = IslandEvent.farewell(hour: 2, batteryPercent: 72, custom: "  Kendine iyi bak  ")
+                let bye = try require(IslandEvent.farewell(hour: 2, batteryPercent: 72,
+                                                           custom: "  Kendine iyi bak  "),
+                                      "A written farewell produced nothing")
                 try expect(bye.title == "Kendine iyi bak", "The farewell was not trimmed")
                 try expect(bye.detail == "%72", "The battery was lost")
             }),
@@ -890,15 +892,15 @@ struct CoreTestRunner {
                 try expect(IslandEvent.customTitle(nil) == nil, "Nothing became something")
                 try expect(IslandEvent.customTitle("") == nil, "An empty field counted")
                 try expect(IslandEvent.customTitle("   \n ") == nil, "Spaces blanked the island")
-                try expect(IslandEvent.farewell(hour: 2, batteryPercent: nil, custom: " ").title == "İyi geceler",
-                           "A blank field replaced the farewell")
-                // The lid opening is the one moment the machine has somebody's
-                // attention for certain, and an empty field means they do not
-                // want it spent on a greeting.
+                // Both ends of the lid are the same rule: an empty field is an
+                // instruction to say nothing, not a request to have something
+                // picked by the clock.
                 for blank in [nil, "", "   \n "] as [String?] {
                     try expect(IslandEvent.welcome(hour: 2, time: "09:14", batteryPercent: 78,
                                                    custom: blank) == nil,
                                "An empty welcome line still put something on screen")
+                    try expect(IslandEvent.farewell(hour: 2, batteryPercent: 78, custom: blank) == nil,
+                               "An empty farewell line still put something on screen")
                 }
                 let long = String(repeating: "a", count: IslandEvent.customTitleLimit + 20)
                 try expect(IslandEvent.customTitle(long)?.count == IslandEvent.customTitleLimit,
@@ -927,11 +929,7 @@ struct CoreTestRunner {
                 try expect(quiet.progress == 0, "A silent sensor still folded the island")
                 try expect(quiet.update(angle: 100) == .opened, "The opening was lost with the reading")
             }),
-            ("LidFold: the greeting fits the time of day", {
-                try expect(IslandEvent.greeting(forHour: 7) == "Günaydın", "Morning was wrong")
-                try expect(IslandEvent.greeting(forHour: 13) == "İyi günler", "Midday was wrong")
-                try expect(IslandEvent.greeting(forHour: 20) == "İyi akşamlar", "Evening was wrong")
-                try expect(IslandEvent.greeting(forHour: 2) == "İyi geceler", "Night was wrong")
+            ("IslandEvent: the lid line carries the time and the battery with it", {
                 let event = try require(IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: 78,
                                                             custom: "Günaydın"),
                                         "A written greeting produced nothing")
@@ -1148,7 +1146,7 @@ struct CoreTestRunner {
                 // up is still the first slice.
                 try expect(RadialMenuGeometry.slice(dx: 20, dy: 80, count: 6) == 0, "Up drifted off slice zero")
                 try expect(RadialMenuGeometry.slice(dx: -20, dy: 80, count: 6) == 0, "Up drifted off slice zero")
-                for count in 3...RadialMenuGeometry.maximumSlices {
+                for count in RadialMenuGeometry.minimumSlices...RadialMenuGeometry.maximumSlices {
                     for step in 0..<count {
                         let angle = RadialMenuGeometry.midAngle(step, count: count)
                         let picked = RadialMenuGeometry.slice(dx: sin(angle) * 90, dy: cos(angle) * 90,
@@ -1157,6 +1155,45 @@ struct CoreTestRunner {
                                    "Aiming at the middle of slice \(step) of \(count) picked \(String(describing: picked))")
                     }
                 }
+            }),
+            ("ClipboardSearch: typing part of an entry finds it, however it was written", {
+                let entry = ["İstanbul Havalimanı", nil, "https://ornek.com/güzergâh"]
+                for query in ["istanbul", "İSTANBUL", "Havalimani", "havalimanı", "  istanbul  "] {
+                    try expect(ClipboardSearch.matches(haystack: entry, query: query),
+                               "Searching for \(query) missed the entry")
+                }
+                try expect(ClipboardSearch.matches(haystack: entry, query: "guzergah"),
+                           "Searching without the accents missed the entry")
+                try expect(!ClipboardSearch.matches(haystack: entry, query: "ankara"),
+                           "An entry matched something that is not in it")
+                try expect(ClipboardSearch.matches(haystack: entry, query: ""),
+                           "An empty search hid everything")
+                try expect(ClipboardSearch.matches(haystack: entry, query: "   "),
+                           "A search of spaces hid everything")
+                try expect(!ClipboardSearch.matches(haystack: [nil, nil], query: "x"),
+                           "An entry with nothing in it matched")
+            }),
+            ("RadialMenu: one slice is a real ring, aimed in any direction", {
+                for degrees in stride(from: 0.0, to: 360.0, by: 15) {
+                    let radians = degrees * .pi / 180
+                    let picked = RadialMenuGeometry.slice(dx: sin(radians) * 70, dy: cos(radians) * 70, count: 1)
+                    try expect(picked == 0, "A one-slice ring missed at \(degrees)°")
+                }
+                try expect(RadialMenuGeometry.slice(dx: 0, dy: 0, count: 1) == nil,
+                           "A one-slice ring fired from the middle")
+            }),
+            ("AIKeyFormat: an obviously broken key is caught before it is stored", {
+                try expect(AIKeyFormat.looksLikeKey("sk-" + String(repeating: "a", count: 40)),
+                           "A real-shaped key was rejected")
+                try expect(AIKeyFormat.looksLikeKey("  sk-" + String(repeating: "a", count: 40) + "\n"),
+                           "A key with the usual paste whitespace around it was rejected")
+                try expect(!AIKeyFormat.looksLikeKey("sk-short"), "A truncated paste was accepted")
+                try expect(!AIKeyFormat.looksLikeKey(String(repeating: "a", count: 40)),
+                           "Something with no prefix at all was accepted")
+                try expect(!AIKeyFormat.looksLikeKey("sk-" + String(repeating: "a", count: 20) + " " +
+                                                     String(repeating: "b", count: 20)),
+                           "A key with a space in the middle of it was accepted")
+                try expect(!AIKeyFormat.looksLikeKey(""), "An empty field was accepted")
             }),
             ("RadialMenu: the middle chooses nothing, which is how somebody backs out", {
                 try expect(RadialMenuGeometry.slice(dx: 0, dy: 0, count: 6) == nil,

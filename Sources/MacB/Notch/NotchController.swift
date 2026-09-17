@@ -334,9 +334,12 @@ struct IslandToast: Equatable {
         guard preferences.lidHingeEnabled, preferences.islandEventsEnabled else { return }
         guard state.phase != .expanded, !incomingDragActive, !developmentPreviewLocked else { return }
         let battery = systemMonitor.snapshot.batteryPercent.map { Int($0.rounded()) }
-        systemEvents.present(.farewell(hour: Calendar.current.component(.hour, from: Date()),
-                                       batteryPercent: battery,
-                                       custom: preferences.lidFarewellText))
+        // No line written, no line shown. The blur still runs; there is simply
+        // nothing on screen for the hinge to fold.
+        guard let event = IslandEvent.farewell(hour: Calendar.current.component(.hour, from: Date()),
+                                               batteryPercent: battery,
+                                               custom: preferences.lidFarewellText) else { return }
+        systemEvents.present(event)
     }
 
     /// Shows an event, or takes the island back down once it has passed.
@@ -717,6 +720,10 @@ struct IslandToast: Equatable {
         guard left > 0, right > 0 else { return nil }
         return max(120, display.frame.width - left - right)
     }
+
+    /// A short line inside the open panel, for something that has just happened
+    /// to the panel itself.
+    func notify(symbol: String, message: String) { showToast(symbol: symbol, message: message) }
 
     private func showToast(symbol: String, message: String) {
         toastTask?.cancel()

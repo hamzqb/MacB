@@ -228,6 +228,7 @@ private final class Flag: @unchecked Sendable {
     private let quickNote = QuickNoteStore()
     private let updates = UpdateService()
     private let loginItem = LoginItemService()
+    private let aiKey = AIKeyStore()
     private lazy var dock = DockController(windowService: windows, previewService: previews, preferences: preferences,
                                            favorites: favorites, recentTargets: recentTargets)
     private lazy var notch = NotchController(media: media, shelf: shelf, preferences: preferences,
@@ -423,6 +424,7 @@ private final class Flag: @unchecked Sendable {
         else { hotKey.unregister(); switcher.dismiss() }
         windowLayout.setEnabled(preferences.windowManagementEnabled)
         radialMenu.setLayout(preferences.radialMenuLayout)
+        radialMenu.setTranslucency(preferences.radialMenuTranslucency)
         radialMenu.setEnabled(preferences.radialMenuEnabled && permissions.accessibility)
         lid.setOpenAngle(preferences.lidHingeAngle)
         lid.setEnabled(preferences.lidHingeEnabled && preferences.notchEnabled)
@@ -446,6 +448,7 @@ private final class Flag: @unchecked Sendable {
         case .shelf: openIsland(showing: .files)
         case .clipboard: openIsland(showing: .clipboard)
         case .timer: openIsland(showing: .timer)
+        case .quickNote: openQuickNote()
         case .switcher:
             permissions.refresh()
             guard permissions.accessibility else { return showSettings() }
@@ -457,6 +460,21 @@ private final class Flag: @unchecked Sendable {
         case .windowCenter: windowLayout.perform(.center)
         case .windowNextDisplay: windowLayout.perform(.nextDisplay)
         case .settings: showSettings()
+        }
+    }
+
+    /// Opens the island with the cursor already in the note card.
+    ///
+    /// The card lives on the widget strip, which somebody may have switched off.
+    /// Aiming at "Hızlı not" is a clear enough request to turn it back on, and
+    /// the island says so rather than doing it quietly.
+    private func openQuickNote() {
+        openIsland(showing: .home)
+        let turnedOn = widgetLayout.enable(kind: .notes)
+        if turnedOn { notch.notify(symbol: "square.and.pencil", message: "Not kartı açıldı") }
+        // One turn of the run loop, so the card exists to take the cursor.
+        DispatchQueue.main.asyncAfter(deadline: .now() + (turnedOn ? 0.35 : 0.12)) {
+            NotificationCenter.default.post(name: .macBFocusQuickNote, object: nil)
         }
     }
 
@@ -531,7 +549,7 @@ private final class Flag: @unchecked Sendable {
             processes: processes, lid: lid, keyboardCleaning: keyboardCleaning,
             updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher, automation: automation,
-            loginItem: loginItem,
+            loginItem: loginItem, aiKey: aiKey,
             openPanel: { [weak self] in self?.openNotch() }))
     }
 

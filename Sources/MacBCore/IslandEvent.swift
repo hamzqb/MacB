@@ -114,14 +114,19 @@ public extension IslandEvent {
                            progress: nil, symbol: symbolForGreeting(hour))
     }
 
-    /// The moment the lid starts going down.
+    /// The moment the lid starts going down, or nothing at all.
     ///
-    /// The island is normally invisible when closed, so there would be nothing
-    /// to fold. This is what gets put on screen to fold away.
-    static func farewell(hour: Int, batteryPercent: Int?, custom: String? = nil) -> IslandEvent {
-        IslandEvent(kind: .lidClosing, title: customTitle(custom) ?? farewellTitle(forHour: hour),
-                    detail: batteryPercent.map { "%\($0)" },
-                    progress: nil, symbol: "laptopcomputer.and.arrow.down")
+    /// The island is invisible when closed, so this is what gets put on screen
+    /// for the hinge to fold away. Leaving the field empty means there is
+    /// nothing to fold and the island simply stays gone — the screen still
+    /// blurs as the lid comes down, which is the part that carries the meaning.
+    /// Same rule as `welcome`: an empty field is an instruction to say nothing,
+    /// not a request to have something chosen.
+    static func farewell(hour: Int, batteryPercent: Int?, custom: String? = nil) -> IslandEvent? {
+        guard let title = customTitle(custom) else { return nil }
+        return IslandEvent(kind: .lidClosing, title: title,
+                           detail: batteryPercent.map { "%\($0)" },
+                           progress: nil, symbol: "laptopcomputer.and.arrow.down")
     }
 
     /// A line one of the user's own rules asked for.
@@ -147,27 +152,6 @@ public extension IslandEvent {
         guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty else { return nil }
         return String(trimmed.prefix(customTitleLimit))
-    }
-
-    /// Sending somebody off is not the same words as greeting them, and at three
-    /// in the afternoon "iyi geceler" would be wrong.
-    static func farewellTitle(forHour hour: Int) -> String {
-        switch hour {
-        case 5..<18: return "Görüşürüz"
-        case 18..<23: return "İyi akşamlar"
-        default: return "İyi geceler"
-        }
-    }
-
-    /// What to call the time of day. Turkish splits the evening and the night
-    /// where a clock does not, so the boundaries are named rather than computed.
-    static func greeting(forHour hour: Int) -> String {
-        switch hour {
-        case 5..<11: return "Günaydın"
-        case 11..<18: return "İyi günler"
-        case 18..<23: return "İyi akşamlar"
-        default: return "İyi geceler"
-        }
     }
 
     private static func symbolForGreeting(_ hour: Int) -> String {

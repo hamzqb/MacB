@@ -76,7 +76,28 @@ struct IslandClipboardView: View {
     @Binding var filter: ClipboardFilter
     var notify: (String, String) -> Void
 
-    private var visible: [ClipboardShelfItem] { clipboard.items.filter { filter.matches($0) } }
+    /// What is being searched for. Not persisted: a search is about the next
+    /// ten seconds, and a filter still applied tomorrow is a list with things
+    /// missing from it for no visible reason.
+    @State private var query = ""
+    @FocusState private var searchFocused: Bool
+
+    private var visible: [ClipboardShelfItem] {
+        clipboard.items.filter { item in
+            filter.matches(item) && ClipboardSearch.matches(haystack: searchable(item), query: query)
+        }
+    }
+
+    /// Everything about an entry worth typing at.
+    ///
+    /// The visible text, the link and the file names — an image has none of
+    /// these and is found by its filter rather than by search, which is correct:
+    /// nobody remembers the words inside a screenshot.
+    private func searchable(_ item: ClipboardShelfItem) -> [String?] {
+        var fields: [String?] = [item.text, item.urlString, item.colorHex]
+        fields.append(contentsOf: (item.filePaths ?? []).map { ($0 as NSString).lastPathComponent })
+        return fields
+    }
 
     private func count(_ value: ClipboardFilter) -> Int {
         clipboard.items.filter(value.matches).count
@@ -84,12 +105,17 @@ struct IslandClipboardView: View {
 
     private var removableCount: Int { clipboard.items.filter { !$0.isFavorite }.count }
 
+    private var isSearching: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
             HStack(spacing: MacBDesign.Space.regular) {
                 filterRow
                 trashButton
             }
+            searchField
             if visible.isEmpty {
                 emptyState
             } else {
@@ -104,6 +130,39 @@ struct IslandClipboardView: View {
                 .scrollClipDisabled()
             }
         }
+    }
+
+    /// Type part of what you copied.
+    ///
+    /// A clipboard history is the one list where scrolling is the wrong tool:
+    /// somebody knows exactly what they copied and only needs to say which one.
+    /// The filters above answer "what kind of thing"; this answers "the one
+    /// with this in it".
+    private var searchField: some View {
+        HStack(spacing: MacBDesign.Space.snug) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+                .foregroundStyle(MacBDesign.IslandToken.Ink.faint)
+            TextField("Ara", text: $query)
+                .textFieldStyle(.plain)
+                .font(.system(size: MacBDesign.TypeScale.caption))
+                .foregroundStyle(MacBDesign.IslandToken.primaryText)
+                .focused($searchFocused)
+                .accessibilityLabel("Panoda ara")
+            if !query.isEmpty {
+                Button { query = ""; searchFocused = true } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: MacBDesign.TypeScale.caption))
+                        .foregroundStyle(MacBDesign.IslandToken.Ink.faint)
+                }
+                .buttonStyle(.plain)
+                .help("Aramayı temizle")
+                .accessibilityLabel("Aramayı temizle")
+            }
+        }
+        .padding(.horizontal, MacBDesign.Space.close)
+        .frame(height: 26)
+        .background(MacBDesign.IslandToken.Fill.hairline, in: Capsule())
     }
 
     /// The filters scroll rather than shrink. A truncated one-word label reads as
@@ -181,12 +240,15 @@ struct IslandClipboardView: View {
                     .fill(RadialGradient(colors: [MacBDesign.IslandToken.Fill.raised, MacBDesign.IslandToken.Fill.hairline],
                                          center: .topLeading, startRadius: 1, endRadius: 40))
                 Circle().strokeBorder(MacBDesign.IslandToken.Fill.base, lineWidth: 0.8)
-                Image(systemName: filter.symbol)
+                Image(systemName: isSearching ? "magnifyingglass" : filter.symbol)
                     .font(.system(size: MacBDesign.TypeScale.title, weight: .medium))
                     .foregroundStyle(MacBDesign.IslandToken.secondaryText)
             }
             .frame(width: 40, height: 40)
-            Text(filter.emptyMessage)
+            // An empty list during a search is not an empty clipboard, and
+            // saying "kopyaladıkların burada birikir" to somebody who has just
+            // typed four letters is answering a question they did not ask.
+            Text(isSearching ? "Aramana uyan bir şey yok." : filter.emptyMessage)
                 .font(.system(size: MacBDesign.TypeScale.caption))
                 .foregroundStyle(MacBDesign.IslandToken.secondaryText)
                 .multilineTextAlignment(.center)

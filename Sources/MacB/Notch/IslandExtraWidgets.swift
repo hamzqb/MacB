@@ -188,6 +188,11 @@ struct ShelfWidget: View {
     }
 }
 
+extension Notification.Name {
+    /// Sent when something outside the island wants the note card's cursor.
+    static let macBFocusQuickNote = Notification.Name("MacBFocusQuickNote")
+}
+
 // MARK: - Note
 
 struct NotesWidget: View {
@@ -208,6 +213,12 @@ struct NotesWidget: View {
                     .foregroundStyle(MacBDesign.IslandToken.primaryText)
                     .focused($isFocused)
                     .accessibilityLabel("Hızlı not")
+                    // Opened from the shortcut ring, the note is the thing that
+                    // was asked for, so the cursor starts in it rather than
+                    // making somebody click a card they just aimed at.
+                    .onReceive(NotificationCenter.default.publisher(for: .macBFocusQuickNote)) { _ in
+                        isFocused = true
+                    }
             }
         }
         .overlay(alignment: .bottomTrailing) {

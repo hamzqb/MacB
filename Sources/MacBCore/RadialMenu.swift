@@ -13,6 +13,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
     case clipboard
     case switcher
     case timer
+    case quickNote
     case keyboardLock
     case windowLeft
     case windowRight
@@ -28,6 +29,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         case .clipboard: return "Pano"
         case .switcher: return "Pencereler"
         case .timer: return "Zamanlayıcı"
+        case .quickNote: return "Hızlı not"
         case .keyboardLock: return "Klavye kilidi"
         case .windowLeft: return "Sol yarı"
         case .windowRight: return "Sağ yarı"
@@ -45,6 +47,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         case .clipboard: return "doc.on.clipboard"
         case .switcher: return "square.on.square"
         case .timer: return "timer"
+        case .quickNote: return "square.and.pencil"
         case .keyboardLock: return "keyboard"
         case .windowLeft: return "rectangle.lefthalf.filled"
         case .windowRight: return "rectangle.righthalf.filled"
@@ -63,7 +66,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         switch self {
         case .switcher, .windowLeft, .windowRight, .windowMaximize, .windowCenter, .windowNextDisplay:
             return true
-        case .island, .shelf, .clipboard, .timer, .keyboardLock, .settings:
+        case .island, .shelf, .clipboard, .timer, .quickNote, .keyboardLock, .settings:
             return false
         }
     }
@@ -78,9 +81,12 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
 public enum RadialMenuGeometry {
     /// How many slices the ring may carry.
     ///
-    /// Below three there is no ring worth drawing, and past eight the slices are
-    /// narrower than the wobble in a hand coming off a trackpad click.
-    public static let minimumSlices = 3
+    /// One is allowed, and it is a real answer rather than a degenerate case:
+    /// a ring with a single slice is a gesture that does one thing, aimed in any
+    /// direction, which is the fastest shortcut in the app. Past eight the
+    /// slices are narrower than the wobble in a hand coming off a trackpad
+    /// click, and nobody can hit them without looking.
+    public static let minimumSlices = 1
     public static let maximumSlices = 8
 
     /// The hole in the middle, in points.
@@ -90,11 +96,16 @@ public enum RadialMenuGeometry {
     /// the click would fire on every single use. Inside this radius the ring is
     /// showing but has chosen nothing, which is also how somebody backs out —
     /// come back to the middle and let go.
-    public static let deadZone: Double = 34
+    public static let deadZone: Double = 30
 
     /// Where the drawn ring starts and ends, measured from the cursor.
-    public static let innerRadius: Double = 52
-    public static let outerRadius: Double = 116
+    ///
+    /// Small on purpose. This appears under the hand, mid-gesture, over
+    /// whatever somebody was looking at, and every point of radius is more of
+    /// their work covered up. A band thin enough to read as a control rather
+    /// than a window is the whole point of the shape.
+    public static let innerRadius: Double = 42
+    public static let outerRadius: Double = 88
 
     public static func clampSliceCount(_ count: Int) -> Int {
         min(maximumSlices, max(minimumSlices, count))
@@ -149,7 +160,7 @@ public struct RadialMenuLayout: Equatable, Codable, Sendable {
     public private(set) var actions: [RadialAction]
 
     public static let `default` = RadialMenuLayout(actions: [
-        .island, .clipboard, .shelf, .switcher, .windowMaximize, .settings
+        .island, .clipboard, .shelf, .switcher
     ])
 
     /// Decoding goes through the same validation as everything else, so a file
@@ -180,13 +191,11 @@ public struct RadialMenuLayout: Equatable, Codable, Sendable {
             : RadialMenuLayout.fallback(filling: usable)
     }
 
-    /// Tops a short list up from the default one, without repeating anything.
+    /// Tops an empty list up, so the ring always has something on it.
+    ///
+    /// Only ever reached by a layout with nothing in it at all, since one slice
+    /// is a legitimate ring.
     private static func fallback(filling actions: [RadialAction]) -> [RadialAction] {
-        var filled = actions
-        for candidate in [RadialAction.island, .clipboard, .shelf, .switcher] where
-            filled.count < RadialMenuGeometry.minimumSlices && !filled.contains(candidate) {
-            filled.append(candidate)
-        }
-        return filled
+        actions.isEmpty ? [.island] : actions
     }
 }

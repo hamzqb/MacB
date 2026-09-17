@@ -158,6 +158,14 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var radialMenuEnabled: Bool {
         didSet { defaults.set(radialMenuEnabled, forKey: "radialMenuEnabled") }
     }
+    /// How much of the screen the ring lets through, 0 to 1.
+    @Published var radialMenuTranslucency: Double {
+        didSet {
+            let clamped = min(1, max(0, radialMenuTranslucency))
+            if clamped != radialMenuTranslucency { radialMenuTranslucency = clamped; return }
+            defaults.set(clamped, forKey: "radialMenuTranslucency")
+        }
+    }
     /// What sits on the ring, clockwise from the top.
     @Published var radialMenuLayout: RadialMenuLayout {
         didSet {
@@ -188,6 +196,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "lidScreenBlur": true,
                                     "automationEnabled": false,
                                     "radialMenuEnabled": true,
+                                    "radialMenuTranslucency": 0.55,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
         notchEnabled = defaults.bool(forKey: "notchEnabled")
@@ -214,6 +223,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         lidScreenBlur = defaults.bool(forKey: "lidScreenBlur")
         automationEnabled = defaults.bool(forKey: "automationEnabled")
         radialMenuEnabled = defaults.bool(forKey: "radialMenuEnabled")
+        radialMenuTranslucency = min(1, max(0, defaults.double(forKey: "radialMenuTranslucency")))
         // A ring that cannot be decoded is a ring with the default slices, not
         // an app that refuses to start.
         radialMenuLayout = defaults.data(forKey: "radialMenuLayout")

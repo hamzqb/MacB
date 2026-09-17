@@ -19,9 +19,19 @@ struct RadialMenuView: View {
     let selection: Int?
     /// 0 while the ring is arriving, 1 once it is there.
     let presence: Double
+    /// How much of the screen behind the ring comes through, 0 to 1.
+    let translucency: Double
+    /// Set when the system has been asked for less transparency, in which case
+    /// the ring is drawn solid and the slider is ignored.
+    let isSolid: Bool
 
     private var sliceCount: Int { max(1, actions.count) }
     private var step: Double { 360 / Double(sliceCount) }
+    /// How heavily the ring paints over what is behind it.
+    ///
+    /// Same dial as the island's, and the same reasoning: the material has one
+    /// fixed density, so the only way further is to stop adding to it.
+    private var weight: Double { isSolid ? 1 : 1 - min(1, max(0, translucency)) }
 
     var body: some View {
         ZStack {
@@ -43,12 +53,16 @@ struct RadialMenuView: View {
     @ViewBuilder private func slice(index: Int, action: RadialAction) -> some View {
         let isOn = selection == index
         ZStack {
+            if isSolid {
+                sliceShape(index: index).fill(Color.black)
+            }
             sliceShape(index: index)
-                .fill(isOn ? Color.white.opacity(0.20) : Color.white.opacity(0.05))
+                .fill(isOn ? Color.white.opacity(0.10 + 0.14 * weight)
+                           : Color.white.opacity(0.02 + 0.07 * weight))
             sliceShape(index: index)
-                .stroke(isOn ? MacBDesign.IslandToken.accent.opacity(0.85)
-                             : Color.white.opacity(0.10),
-                        lineWidth: isOn ? 1.5 : 0.5)
+                .stroke(isOn ? MacBDesign.IslandToken.accent.opacity(0.9)
+                             : Color.white.opacity(0.08 + 0.06 * weight),
+                        lineWidth: isOn ? 1.2 : 0.5)
             label(index: index, action: action, isOn: isOn)
         }
         .motion(MacBDesign.Motion.instant, value: selection)
@@ -69,7 +83,7 @@ struct RadialMenuView: View {
         let centre = (-90 + Double(index) * step) * .pi / 180
         let radius = (RadialMenuGeometry.innerRadius + RadialMenuGeometry.outerRadius) / 2
         return Image(systemName: action.symbol)
-            .font(.system(size: 17, weight: isOn ? .semibold : .medium))
+            .font(.system(size: 15, weight: isOn ? .semibold : .medium))
             .foregroundStyle(isOn ? Color.white : MacBDesign.IslandToken.Ink.primary)
             .offset(x: cos(centre) * radius, y: sin(centre) * radius)
             .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
@@ -79,30 +93,30 @@ struct RadialMenuView: View {
     /// than merely empty.
     private var divider: some View {
         Circle()
-            .stroke(Color.white.opacity(0.14), lineWidth: 0.5)
+            .stroke(Color.white.opacity(0.08 + 0.08 * weight), lineWidth: 0.5)
             .frame(width: RadialMenuGeometry.innerRadius * 2,
                    height: RadialMenuGeometry.innerRadius * 2)
     }
 
-    /// The middle, which is both the label and the way out.
+    /// The middle: the name of the thing about to happen, and nothing else.
     ///
-    /// It names what is about to happen rather than making the user read it off
-    /// a slice they are pointing away from, and when nothing is chosen it says
-    /// so, because letting go in the middle is how the ring is dismissed.
+    /// It used to carry an instruction as well, which is the kind of text that
+    /// is read once and then covers up somebody's work forever after. The hole
+    /// is empty until a slice is chosen, which is also how the ring says that
+    /// letting go now does nothing.
     private var hub: some View {
-        VStack(spacing: 2) {
+        Group {
             if let selection, actions.indices.contains(selection) {
                 Text(actions[selection].title)
-                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                     .foregroundStyle(.white)
-            } else {
-                Text("Bırak, kapansın")
-                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
-                    .foregroundStyle(MacBDesign.IslandToken.Ink.faint)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .shadow(color: .black.opacity(0.5), radius: 3)
             }
         }
-        .multilineTextAlignment(.center)
-        .frame(width: RadialMenuGeometry.innerRadius * 1.7)
+        .frame(width: RadialMenuGeometry.innerRadius * 1.6)
         .motion(MacBDesign.Motion.instant, value: selection)
     }
 }

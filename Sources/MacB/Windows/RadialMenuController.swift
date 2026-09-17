@@ -30,11 +30,13 @@ import SwiftUI
 
     private var enabled = false
     private var layout = RadialMenuLayout.default
+    private var translucency: Double = 0.55
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
 
     private var panel: NSPanel?
     private var host: NSHostingView<RadialMenuView>?
+    private var glass: RadialGlassView?
     private var centre: CGPoint = .zero
     private var actions: [RadialAction] = []
     private var selection: Int?
@@ -61,6 +63,19 @@ import SwiftUI
     func setLayout(_ layout: RadialMenuLayout) {
         self.layout = layout
         if isVisible { dismiss() }
+    }
+
+    /// How much of the screen behind the ring comes through, 0 to 1.
+    func setTranslucency(_ value: Double) {
+        translucency = min(1, max(0, value))
+        if isVisible { render() }
+    }
+
+    /// Somebody who asked the system for less transparency gets a solid ring:
+    /// the slider and the material both step aside, and what is left is a
+    /// control they can read against any wallpaper.
+    private var isSolid: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
     }
 
     private func install() {
@@ -214,20 +229,27 @@ import SwiftUI
         glass.state = .active
         glass.appearance = NSAppearance(named: .darkAqua)
         glass.autoresizingMask = [.width, .height]
-        let host = NSHostingView(rootView: RadialMenuView(actions: [], selection: nil, presence: 0))
+        let host = NSHostingView(rootView: RadialMenuView(actions: [], selection: nil, presence: 0,
+                                                          translucency: translucency, isSolid: isSolid))
         host.autoresizingMask = [.width, .height]
         container.addSubview(glass)
         container.addSubview(host, positioned: .above, relativeTo: glass)
         window.contentView = container
         glass.frame = container.bounds
         host.frame = container.bounds
+        self.glass = glass
         self.host = host
         panel = window
         return window
     }
 
     private func render() {
-        host?.rootView = RadialMenuView(actions: actions, selection: selection, presence: presence)
+        host?.rootView = RadialMenuView(actions: actions, selection: selection, presence: presence,
+                                        translucency: translucency, isSolid: isSolid)
+        // The frost thins with the slider, exactly as the island's does, and
+        // steps out of the way entirely for Reduce Transparency.
+        glass?.isHidden = isSolid
+        glass?.alphaValue = 1 - 0.42 * translucency
     }
 
     func dismiss() {
