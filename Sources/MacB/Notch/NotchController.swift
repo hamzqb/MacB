@@ -67,6 +67,10 @@ struct IslandToast: Equatable {
     private var panel: NotchPanel?
     /// The sheet of real glass under the panel. See `updateBackdrop(phase:)`.
     private var islandBackdrop: ShapedVisualEffectView?
+    private var islandSaturation: IslandSaturationView?
+    /// The fold the island was last drawn at, so repeated identical readings
+    /// feed the blur's watchdog without redrawing the panel for nothing.
+    private var lastRenderedFold: Double = 0
     private var animationTimer: Timer?
     private var deadlineTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
@@ -161,12 +165,21 @@ struct IslandToast: Equatable {
         backdrop.autoresizingMask = [.width, .height]
         backdrop.isHidden = true
         host.autoresizingMask = [.width, .height]
+        // Above the material, below the content: the material's own blur has
+        // already been composited by the time this layer's filter runs, so the
+        // saturation lands on the blurred desktop and not on the widgets.
+        let saturation = IslandSaturationView(frame: .zero)
+        saturation.autoresizingMask = [.width, .height]
+        saturation.isHidden = true
         container.addSubview(backdrop)
-        container.addSubview(host, positioned: .above, relativeTo: backdrop)
+        container.addSubview(saturation, positioned: .above, relativeTo: backdrop)
+        container.addSubview(host, positioned: .above, relativeTo: saturation)
         window.contentView = container
         backdrop.frame = container.bounds
+        saturation.frame = container.bounds
         host.frame = container.bounds
         islandBackdrop = backdrop
+        islandSaturation = saturation
         panel = window
         updateDisplay(); window.orderFrontRegardless()
         let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .leftMouseDown, .leftMouseUp]
@@ -247,7 +260,14 @@ struct IslandToast: Equatable {
         }.store(in: &subscriptions)
         // The fold is a continuous transform on the island, so the view has to
         // be redrawn as the hinge turns rather than only when a phase changes.
-        lid.$foldProgress.removeDuplicates().sink { [weak self] progress in
+        //
+        // Deliberately not deduplicated. The screen blur treats every reading as
+        // a sign of life from the hinge, and a lid being held still reports the
+        // same angle over and over: with the duplicates dropped here, holding
+        // the lid halfway looked exactly like a sensor that had died, and the
+        // blur took itself off the screen mid-close. The redraw is still
+        // deduplicated, one level down.
+        lid.$foldProgress.sink { [weak self] progress in
             self?.foldProgressChanged(progress)
         }.store(in: &subscriptions)
         // Switching either setting off has to clear the screen at once. Waiting
@@ -267,7 +287,10 @@ struct IslandToast: Equatable {
     /// The blur is switched off rather than merely faded when the fold is at
     /// zero, so a lid that is simply open never leaves windows lying about.
     private func foldProgressChanged(_ progress: Double) {
-        render()
+        if progress != lastRenderedFold {
+            lastRenderedFold = progress
+            render()
+        }
         guard preferences.lidHingeEnabled, preferences.lidScreenBlur else {
             if lidBlur.isVisible { lidBlur.hide() }
             return
@@ -479,6 +502,7 @@ struct IslandToast: Equatable {
             && phase != .collapsed
             && lid.foldProgress <= 0.001
         backdrop.isHidden = !wanted
+        islandSaturation?.isHidden = !wanted
         guard wanted else { return }
         // `.hudWindow` is the one that carries the most of what is behind it —
         // it is what Spotlight is made of. `.fullScreenUI` was tried first and
@@ -492,7 +516,16 @@ struct IslandToast: Equatable {
         // Floored well short of nothing: a panel you can read a sentence through
         // is a hole in the screen, not a surface.
         let translucency = min(1, max(0, preferences.islandTranslucency))
-        backdrop.alphaValue = 1 - 0.3 * translucency
+        backdrop.alphaValue = 1 - 0.42 * translucency
+        // Colour comes back as the frost thins, which is the whole trick: what
+        // is behind the sheet has to look more alive through it than beside it,
+        // or the panel reads as a grey slab no matter how much of the desktop
+        // is technically getting through.
+        if let saturation = islandSaturation {
+            saturation.topRadius = backdrop.topRadius
+            saturation.bottomRadius = backdrop.bottomRadius
+            saturation.saturation = 1 + 0.7 * translucency
+        }
     }
 
     private func updateDisplay() {

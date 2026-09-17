@@ -187,3 +187,41 @@ public enum LidScreenBlur {
         return maximumDim * pow(min(1, progress), 1.6)
     }
 }
+
+/// Decides when a lid blur has outlived the hinge that asked for it.
+///
+/// The blur covers the whole screen, so something has to take it off if the
+/// readings stop arriving — an overlay left up by a dead sensor is a screen
+/// nobody can use. The rule that does that is the entire safety argument for
+/// the feature, and it was wrong: it watched the *angle* rather than the
+/// readings, so a lid held still at any angle looked identical to a lid whose
+/// sensor had died, and a slow, deliberate close had the blur pulled off it
+/// part way down.
+///
+/// A lid that is not moving is not a broken lid. What matters is whether the
+/// hinge is still answering, which is why this counts readings and never looks
+/// at what they say.
+public struct LidBlurLiveness: Equatable, Sendable {
+    /// How long the hinge may go quiet before the blur comes off.
+    ///
+    /// Readings arrive every 33ms while the hinge turns and every 500ms while
+    /// it rests, so this is several missed readings in a row rather than one
+    /// late one, and still short enough that nobody is left staring at a screen
+    /// they cannot read.
+    public static let stallTimeout: Double = 4
+
+    private var lastReading: Double?
+
+    public init() {}
+
+    /// The hinge said something. What it said does not matter.
+    public mutating func sawReading(at time: Double) { lastReading = time }
+
+    /// Forgets the hinge, for when the blur comes down on purpose.
+    public mutating func reset() { lastReading = nil }
+
+    public func isStalled(at time: Double, timeout: Double = stallTimeout) -> Bool {
+        guard let lastReading else { return false }
+        return time - lastReading > timeout
+    }
+}

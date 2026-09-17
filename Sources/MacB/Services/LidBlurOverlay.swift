@@ -38,13 +38,10 @@ import MacBCore
     /// putting up, and the blur silently did nothing at all.
     private var screenID: CGDirectDisplayID?
     private var watchdog: Timer?
-    private var lastProgress: Double = 0
+    /// Whether the hinge is still answering. See `LidBlurLiveness`.
+    private var liveness = LidBlurLiveness()
     private var lastRadius: Double = -1
     private var isShowing = false
-
-    /// How long the blur may sit at one value before it is assumed to be stuck.
-    /// Long enough for a slow, deliberate close; short enough to be a blink.
-    private static let stallTimeout: TimeInterval = 8
 
     var isVisible: Bool { isShowing }
 
@@ -106,9 +103,8 @@ import MacBCore
             }
         }
         dim?.alphaValue = LidScreenBlur.dimAlpha(progress: progress)
-
-        if abs(progress - lastProgress) > 0.001 { armWatchdog() }
-        lastProgress = progress
+        liveness.sawReading(at: ProcessInfo.processInfo.systemUptime)
+        armWatchdog()
     }
 
     /// Takes the blur off the screen without throwing the windows away: they can
@@ -120,7 +116,8 @@ import MacBCore
             pane.orderOut(nil)
         }
         dim?.orderOut(nil)
-        isShowing = false; lastProgress = 0; lastRadius = -1
+        isShowing = false; lastRadius = -1
+        liveness.reset()
     }
 
     private func show(on screen: NSScreen) {
@@ -223,11 +220,19 @@ import MacBCore
     // MARK: - Watchdog
 
     /// A blur nobody asked to keep is worse than no blur at all, so the overlay
-    /// removes itself if the hinge stops moving without ever reaching the end.
+    /// removes itself if the hinge stops reporting altogether.
+    ///
+    /// One repeating timer that reads a timestamp, rather than a fresh one-shot
+    /// per reading: the hinge reports thirty times a second while it moves, and
+    /// that was thirty timers created and thrown away every second.
     private func armWatchdog() {
-        watchdog?.invalidate()
-        watchdog = Timer.scheduledTimer(withTimeInterval: Self.stallTimeout, repeats: false) { [weak self] _ in
-            Task { @MainActor in self?.hide() }
+        guard watchdog == nil else { return }
+        watchdog = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                guard self.liveness.isStalled(at: ProcessInfo.processInfo.systemUptime) else { return }
+                self.hide()
+            }
         }
     }
 }

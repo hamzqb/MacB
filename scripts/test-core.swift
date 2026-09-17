@@ -1101,6 +1101,32 @@ struct CoreTestRunner {
                 try expect(LidScreenBlur.maximumDim < 0.5, "The dim was heavy enough to be the whole effect")
                 try expect(LidScreenBlur.dimAlpha(progress: 0.5) < LidScreenBlur.maximumDim * 0.5,
                            "The dim ran ahead of the blur instead of trailing it")
+            }),
+            ("LidBlurLiveness: a lid held perfectly still is not a lid that stopped reporting", {
+                // The bug this exists to stop: the hinge reports the same angle
+                // over and over while somebody closes the lid slowly, and the
+                // blur used to read that as a dead sensor and take itself off.
+                var liveness = LidBlurLiveness()
+                var now = 0.0
+                for _ in 0..<120 {
+                    liveness.sawReading(at: now)
+                    now += 0.5
+                    try expect(!liveness.isStalled(at: now),
+                               "The blur gave up on a hinge that was still answering, at \(now)s")
+                }
+            }),
+            ("LidBlurLiveness: a hinge that goes quiet takes the blur down with it", {
+                var liveness = LidBlurLiveness()
+                liveness.sawReading(at: 10)
+                try expect(!liveness.isStalled(at: 10 + LidBlurLiveness.stallTimeout),
+                           "The blur came off exactly on the timeout rather than past it")
+                try expect(liveness.isStalled(at: 10 + LidBlurLiveness.stallTimeout + 0.1),
+                           "A silent hinge left the whole screen blurred")
+                try expect(LidBlurLiveness.stallTimeout > 1,
+                           "The timeout was tight enough for one late reading to clear the screen")
+                liveness.reset()
+                try expect(!liveness.isStalled(at: 1_000),
+                           "A blur that was never asked for reported itself as stalled")
             })
         ]
         var failures = 0

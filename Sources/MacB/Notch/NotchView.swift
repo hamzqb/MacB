@@ -65,8 +65,8 @@ struct NotchView: View {
             case .ended: pointer = nil
             }
         }
-        .overlay(islandShape.strokeBorder(surfaceStroke,
-            lineWidth: presentation.layout.phase == .collapsed ? 0 : 0.5)
+        .overlay(islandShape.strokeBorder(surfaceStrokeStyle,
+            lineWidth: presentation.layout.phase == .collapsed ? 0 : 1)
             .motion(MacBDesign.Motion.gentle, value: media.tint))
         .modifier(HingeFold(progress: lid.foldProgress))
         .foregroundStyle(.white)
@@ -151,25 +151,52 @@ struct NotchView: View {
     /// and anything added on top of that was the reason the "glass" still read
     /// as a black bar over a dark desktop.
     private func veilOpacity(tinted: Bool) -> Double {
-        let translucency = min(1, max(0, preferences.islandTranslucency))
-        let heaviest: Double = tinted ? 0.72 : 0.58
-        let lightest: Double = tinted ? 0.10 : 0
-        return heaviest - (heaviest - lightest) * translucency
+        let heaviest: Double = tinted ? 0.62 : 0.46
+        return heaviest * (1 - translucency)
     }
 
+    private var translucency: Double {
+        min(1, max(0, preferences.islandTranslucency))
+    }
+
+    /// What light does to a sheet of glass, as opposed to what paint does to a
+    /// panel.
+    ///
+    /// The old sheen ran from a white corner to a flat 28% black one, and that
+    /// black was there whatever the slider said — over a dark desktop it was
+    /// most of why the island still read as a bar rather than a pane. Glass
+    /// does darken towards the edge it is lit away from, but by a fraction of
+    /// that, and the fraction shrinks as the sheet gets thinner.
     private var glassSheen: some View {
-        LinearGradient(colors: [MacBDesign.Island.glassHighlight, .clear, .black.opacity(0.28)],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
+        LinearGradient(stops: [
+            .init(color: .white.opacity(0.16 - 0.05 * translucency), location: 0),
+            .init(color: .white.opacity(0.05 - 0.02 * translucency), location: 0.22),
+            .init(color: .clear, location: 0.55),
+            .init(color: .black.opacity(0.22 * (1 - translucency) + 0.03), location: 1)
+        ], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
-    private var surfaceStroke: Color {
-        if presentation.layout.phase == .collapsed { return .clear }
-        // While music is playing the rim borrows the cover's colour, which is
-        // the quietest way for the whole panel to know what is on.
-        if media.isPlaying, let tint = media.tint { return tint.opacity(0.38) }
-        return preferences.islandAppearance == .pureBlack || reduceTransparency
-            ? MacBDesign.IslandToken.Fill.hairline
-            : MacBDesign.Island.glassStroke
+    /// The lit rim.
+    ///
+    /// The single most glass-like thing on a sheet of glass is its edge: it
+    /// gathers light along the top, almost vanishes down the sides, and picks
+    /// up a second, weaker line where it meets what is under it. A flat
+    /// one-colour hairline says "rounded rectangle"; this says "edge".
+    private var surfaceStrokeStyle: AnyShapeStyle {
+        if presentation.layout.phase == .collapsed { return AnyShapeStyle(Color.clear) }
+        if media.isPlaying, let tint = media.tint {
+            return AnyShapeStyle(LinearGradient(
+                colors: [tint.opacity(0.60), tint.opacity(0.20), tint.opacity(0.34)],
+                startPoint: .top, endPoint: .bottom))
+        }
+        if preferences.islandAppearance == .pureBlack || reduceTransparency {
+            return AnyShapeStyle(MacBDesign.IslandToken.Fill.hairline)
+        }
+        return AnyShapeStyle(LinearGradient(colors: [
+            .white.opacity(0.24 + 0.22 * translucency),
+            .white.opacity(0.06),
+            .white.opacity(0.10 + 0.08 * translucency)
+        ], startPoint: .top, endPoint: .bottom))
     }
 
     private var islandShape: UnevenRoundedRectangle {
