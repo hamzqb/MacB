@@ -283,7 +283,13 @@ private final class Flag: @unchecked Sendable {
             guard self.permissions.accessibility else { self.showSettings(); return }
             self.switcher.begin(backwards: backwards, shortcut: self.hotKey.activeShortcut ?? self.preferences.shortcut)
         }
-        radialMenu.perform = { [weak self] action in self?.performRadialAction(action) }
+        radialMenu.perform = { [weak self] slot in
+            switch slot {
+            case .action(let action): self?.performRadialAction(action)
+            // Exactly what a double-click in Finder would do, and nothing more.
+            case .open(let path): NSWorkspace.shared.open(URL(fileURLWithPath: path))
+            }
+        }
         radialMenu.hasAccessibility = { [weak self] in self?.permissions.accessibility ?? false }
         switcher.onWillOpen = { [weak self] in
             self?.dock.dismiss()
@@ -473,7 +479,7 @@ private final class Flag: @unchecked Sendable {
         if preferences.switcherEnabled { hotKey.register(preferences.shortcut) }
         else { hotKey.unregister(); switcher.dismiss() }
         windowLayout.setEnabled(preferences.windowManagementEnabled)
-        radialMenu.setLayout(preferences.radialMenuLayout)
+        radialMenu.setLayout(preferences.radialMenuLayout, perApp: preferences.radialMenuAppLayouts)
         radialMenu.setTranslucency(preferences.radialMenuTranslucency)
         radialMenu.setScale(preferences.radialMenuScale)
         radialMenu.setThreeFingerTap(preferences.radialMenuThreeFinger

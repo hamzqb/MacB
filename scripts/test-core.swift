@@ -1295,30 +1295,52 @@ struct CoreTestRunner {
                            "The ring was nudged even though it fitted")
             }),
             ("RadialMenu: a slice that cannot work is dropped, not left dead on the ring", {
-                let layout = RadialMenuLayout(actions: [.island, .switcher, .windowLeft, .clipboard, .shelf])
-                let granted = layout.usableActions(hasAccessibility: true)
-                try expect(granted.count == 5, "A granted ring lost slices")
-                let denied = layout.usableActions(hasAccessibility: false)
-                try expect(!denied.contains(.switcher) && !denied.contains(.windowLeft),
+                let safari = RadialSlot.open(path: "/Applications/Safari.app")
+                let gone = RadialSlot.open(path: "/Applications/Silindi.app")
+                let layout = RadialMenuLayout(slots: [.action(.island), .action(.switcher), .action(.windowLeft),
+                                                      safari, gone])
+                let granted = layout.usableSlots(hasAccessibility: true) { $0 != "/Applications/Silindi.app" }
+                try expect(granted == [.action(.island), .action(.switcher), .action(.windowLeft), safari],
+                           "A granted ring lost slices, or kept a deleted application: \(granted)")
+                let denied = layout.usableSlots(hasAccessibility: false) { _ in true }
+                try expect(!denied.contains(.action(.switcher)) && !denied.contains(.action(.windowLeft)),
                            "A slice that needs Accessibility survived without it")
-                try expect(denied.count >= RadialMenuGeometry.minimumSlices,
-                           "The ring shrank below the point where it is still a ring")
-                // Nothing but window work and the switcher should need the permission.
+                try expect(denied.contains(safari), "Opening an application was wrongly tied to Accessibility")
+                let nothing = RadialMenuLayout(slots: [gone]).usableSlots(hasAccessibility: true) { _ in false }
+                try expect(!nothing.isEmpty, "A ring of deleted applications opened empty")
                 try expect(!RadialAction.island.requiresAccessibility && !RadialAction.settings.requiresAccessibility,
                            "MacB's own panels claimed to need Accessibility")
+                try expect(safari.title == "Safari" && RadialSlot.open(path: "/Users/x/Notlar").title == "Notlar",
+                           "A slice's name was not taken from what it opens")
             }),
-            ("RadialMenu: a stored ring is clamped on the way back in", {
+            ("RadialMenu: a stored ring is clamped on the way back in, old shape included", {
                 let tooMany = RadialMenuLayout(actions: Array(repeating: .island, count: 30))
-                try expect(tooMany.actions.count == RadialMenuGeometry.maximumSlices,
+                try expect(tooMany.slots.count == RadialMenuGeometry.maximumSlices,
                            "A ring with thirty slices was allowed")
-                let tooFew = RadialMenuLayout(actions: [.settings])
-                try expect(tooFew.actions.count >= RadialMenuGeometry.minimumSlices,
-                           "A ring with one slice was allowed")
-                try expect(tooFew.actions.first == .settings, "Topping the ring up lost what was chosen")
+                try expect(RadialMenuLayout(slots: []).slots.count == 1, "An empty ring was allowed")
                 let encoded = try JSONEncoder().encode(RadialMenuLayout(actions: Array(repeating: .shelf, count: 30)))
                 let decoded = try JSONDecoder().decode(RadialMenuLayout.self, from: encoded)
-                try expect(decoded.actions.count == RadialMenuGeometry.maximumSlices,
+                try expect(decoded.slots.count == RadialMenuGeometry.maximumSlices,
                            "Decoding skipped the clamp that encoding respected")
+                // A ring saved before slices could open things.
+                let legacy = #"{"actions":["clipboard","settings"]}"#.data(using: .utf8)!
+                let migrated = try JSONDecoder().decode(RadialMenuLayout.self, from: legacy)
+                try expect(migrated.slots == [.action(.clipboard), .action(.settings)],
+                           "A ring saved in the old shape was lost: \(migrated.slots)")
+                let mixed = RadialMenuLayout(slots: [.action(.island), .open(path: "/Applications/Safari.app")])
+                let roundTrip = try JSONDecoder().decode(RadialMenuLayout.self, from: JSONEncoder().encode(mixed))
+                try expect(roundTrip == mixed, "An application slice did not survive being saved")
+            }),
+            ("RadialMenu: an application with its own ring gets it, every other gets the general one", {
+                let general = RadialMenuLayout.default
+                let finder = RadialMenuLayout(actions: [.shelf])
+                let perApp = ["com.apple.finder": finder]
+                try expect(RadialMenuProfiles.layout(for: "com.apple.finder", standard: general, perApp: perApp) == finder,
+                           "Finder did not get its own ring")
+                try expect(RadialMenuProfiles.layout(for: "com.apple.Safari", standard: general, perApp: perApp) == general,
+                           "An application without a ring got someone else's")
+                try expect(RadialMenuProfiles.layout(for: nil, standard: general, perApp: perApp) == general,
+                           "No frontmost application broke the ring")
             }),
             ("LidBlurLiveness: a hinge that goes quiet takes the blur down with it", {
                 var liveness = LidBlurLiveness()

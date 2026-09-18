@@ -188,6 +188,14 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         }
     }
     static let defaultAIModel = "gpt-6-astra"
+    /// Rings for particular applications, by bundle identifier. Anything not
+    /// in here gets `radialMenuLayout`.
+    @Published var radialMenuAppLayouts: [String: RadialMenuLayout] {
+        didSet {
+            guard let data = try? JSONEncoder().encode(radialMenuAppLayouts) else { return }
+            defaults.set(data, forKey: "radialMenuAppLayouts")
+        }
+    }
     /// What sits on the ring, clockwise from the top.
     @Published var radialMenuLayout: RadialMenuLayout {
         didSet {
@@ -255,6 +263,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         aiModel = defaults.string(forKey: "aiModel") ?? Preferences.defaultAIModel
         // A ring that cannot be decoded is a ring with the default slices, not
         // an app that refuses to start.
+        radialMenuAppLayouts = defaults.data(forKey: "radialMenuAppLayouts")
+            .flatMap { try? JSONDecoder().decode([String: RadialMenuLayout].self, from: $0) } ?? [:]
         radialMenuLayout = defaults.data(forKey: "radialMenuLayout")
             .flatMap { try? JSONDecoder().decode(RadialMenuLayout.self, from: $0) }
             ?? .default

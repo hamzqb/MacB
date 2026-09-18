@@ -14,7 +14,7 @@ import SwiftUI
 /// hand points at while a mouse button is still down, and a window that steals
 /// focus in the middle of that would end the gesture it exists to serve.
 struct RadialMenuView: View {
-    let actions: [RadialAction]
+    let slots: [RadialSlot]
     /// Which slice the hand is on, or nil while it is still in the middle.
     let selection: Int?
     /// 0 while the ring is arriving, 1 once it is there.
@@ -27,7 +27,7 @@ struct RadialMenuView: View {
     /// the ring is drawn solid and the slider is ignored.
     let isSolid: Bool
 
-    private var sliceCount: Int { max(1, actions.count) }
+    private var sliceCount: Int { max(1, slots.count) }
     private var step: Double { 360 / Double(sliceCount) }
     /// How heavily the ring paints over what is behind it.
     ///
@@ -37,8 +37,8 @@ struct RadialMenuView: View {
 
     var body: some View {
         ZStack {
-            ForEach(Array(actions.enumerated()), id: \.offset) { index, action in
-                slice(index: index, action: action)
+            ForEach(Array(slots.enumerated()), id: \.offset) { index, slot in
+                slice(index: index, slot: slot)
             }
             divider
             hub
@@ -51,7 +51,7 @@ struct RadialMenuView: View {
 
     // MARK: - Slices
 
-    @ViewBuilder private func slice(index: Int, action: RadialAction) -> some View {
+    @ViewBuilder private func slice(index: Int, slot: RadialSlot) -> some View {
         let isOn = selection == index
         ZStack {
             if isSolid {
@@ -64,7 +64,7 @@ struct RadialMenuView: View {
                 .stroke(isOn ? MacBDesign.IslandToken.accent.opacity(0.9)
                              : Color.white.opacity(0.08 + 0.06 * weight),
                         lineWidth: isOn ? 1.2 : 0.5)
-            label(index: index, action: action, isOn: isOn)
+            label(index: index, slot: slot, isOn: isOn)
         }
         .motion(MacBDesign.Motion.instant, value: selection)
     }
@@ -80,14 +80,28 @@ struct RadialMenuView: View {
                              outerRadius: metrics.outerRadius)
     }
 
-    private func label(index: Int, action: RadialAction, isOn: Bool) -> some View {
+    private func label(index: Int, slot: RadialSlot, isOn: Bool) -> some View {
         let centre = (-90 + Double(index) * step) * .pi / 180
         let radius = (metrics.innerRadius + metrics.outerRadius) / 2
-        return Image(systemName: action.symbol)
-            .font(.system(size: metrics.symbolSize, weight: isOn ? .semibold : .medium))
-            .foregroundStyle(isOn ? Color.white : MacBDesign.IslandToken.Ink.primary)
-            .offset(x: cos(centre) * radius, y: sin(centre) * radius)
-            .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+        return Group {
+            switch slot {
+            case .action(let action):
+                Image(systemName: action.symbol)
+                    .font(.system(size: metrics.symbolSize, weight: isOn ? .semibold : .medium))
+                    .foregroundStyle(isOn ? Color.white : MacBDesign.IslandToken.Ink.primary)
+                    .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+            case .open(let path):
+                // The application's own icon: nobody recognises Safari by a
+                // symbol MacB picked for it.
+                Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: metrics.symbolSize * 1.6, height: metrics.symbolSize * 1.6)
+                    .opacity(isOn ? 1 : 0.85)
+                    .scaleEffect(isOn ? 1.08 : 1)
+            }
+        }
+        .offset(x: cos(centre) * radius, y: sin(centre) * radius)
     }
 
     /// The hairline that closes the inner edge, so the hole looks cut rather
@@ -106,8 +120,8 @@ struct RadialMenuView: View {
     /// letting go now does nothing.
     private var hub: some View {
         Group {
-            if let selection, actions.indices.contains(selection) {
-                Text(actions[selection].title)
+            if let selection, slots.indices.contains(selection) {
+                Text(slots[selection].title)
                     .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)

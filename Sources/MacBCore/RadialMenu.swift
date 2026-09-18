@@ -185,50 +185,102 @@ public struct RadialMenuMetrics: Equatable, Sendable {
     public var symbolSize: Double { 15 * min(1.15, max(0.85, scale)) }
 }
 
-/// Which action sits on which slice.
+/// What one slice of the ring does: one of MacB's own actions, or opening an
+/// application, folder or file the user picked.
+///
+/// Opening is the only thing a user-chosen slice can do. It is the same thing a
+/// double-click in Finder does, so a slice cannot do anything the user could not
+/// already do by hand, and nothing on the ring runs a command or a script.
+public enum RadialSlot: Hashable, Codable, Sendable {
+    case action(RadialAction)
+    case open(path: String)
+
+    public var requiresAccessibility: Bool {
+        if case .action(let action) = self { return action.requiresAccessibility }
+        return false
+    }
+
+    /// What the hub shows while this slice is chosen.
+    public var title: String {
+        switch self {
+        case .action(let action): return action.title
+        case .open(let path):
+            let name = (path as NSString).lastPathComponent
+            return name.hasSuffix(".app") ? String(name.dropLast(4)) : name
+        }
+    }
+}
+
+/// Which slice does what.
 ///
 /// Stored as a plain list because the ring is a list: the order on screen is the
 /// order here, clockwise from the top, and reordering is moving an element.
 public struct RadialMenuLayout: Equatable, Codable, Sendable {
-    public private(set) var actions: [RadialAction]
+    public private(set) var slots: [RadialSlot]
 
     public static let `default` = RadialMenuLayout(actions: [
         .island, .clipboard, .shelf, .switcher
     ])
 
+    private enum CodingKeys: String, CodingKey { case slots, actions }
+
     /// Decoding goes through the same validation as everything else, so a file
-    /// edited by hand cannot produce a ring with twenty slices or none.
+    /// edited by hand cannot produce a ring with twenty slices or none. A ring
+    /// saved before slices could open things is read from its old shape rather
+    /// than thrown away.
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.init(actions: try container.decode([RadialAction].self, forKey: .actions))
+        if let slots = try container.decodeIfPresent([RadialSlot].self, forKey: .slots) {
+            self.init(slots: slots)
+        } else {
+            self.init(actions: try container.decode([RadialAction].self, forKey: .actions))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(slots, forKey: .slots)
+    }
+
+    public init(slots: [RadialSlot]) {
+        let clamped = Array(slots.prefix(RadialMenuGeometry.maximumSlices))
+        self.slots = clamped.isEmpty ? [.action(.island)] : clamped
     }
 
     public init(actions: [RadialAction]) {
-        self.actions = Array(actions.prefix(RadialMenuGeometry.maximumSlices))
-        if self.actions.count < RadialMenuGeometry.minimumSlices {
-            self.actions = RadialMenuLayout.fallback(filling: self.actions)
-        }
+        self.init(slots: actions.map(RadialSlot.action))
     }
 
     /// The slices that can actually run, in order.
     ///
-    /// An unavailable action is dropped rather than greyed out: a ring is aimed
+    /// An unavailable slice is dropped rather than greyed out: a ring is aimed
     /// at by angle, and a dead slice that still takes up a sixth of the circle
     /// costs every other slice its position. Somebody who has not granted
-    /// Accessibility gets a smaller ring rather than one where half the slices
-    /// do nothing and never say why.
-    public func usableActions(hasAccessibility: Bool) -> [RadialAction] {
-        let usable = actions.filter { hasAccessibility || !$0.requiresAccessibility }
-        return usable.count >= RadialMenuGeometry.minimumSlices
-            ? usable
-            : RadialMenuLayout.fallback(filling: usable)
+    /// Accessibility gets a smaller ring, and an application that has since been
+    /// deleted simply stops being on it.
+    public func usableSlots(hasAccessibility: Bool,
+                            exists: (String) -> Bool = { _ in true }) -> [RadialSlot] {
+        let usable = slots.filter { slot in
+            switch slot {
+            case .action(let action): return hasAccessibility || !action.requiresAccessibility
+            case .open(let path): return exists(path)
+            }
+        }
+        return usable.isEmpty ? [.action(.island)] : usable
     }
+}
 
-    /// Tops an empty list up, so the ring always has something on it.
-    ///
-    /// Only ever reached by a layout with nothing in it at all, since one slice
-    /// is a legitimate ring.
-    private static func fallback(filling actions: [RadialAction]) -> [RadialAction] {
-        actions.isEmpty ? [.island] : actions
+/// One ring for everywhere, and optionally a different one per application.
+///
+/// The slices worth having in Finder are not the ones worth having in a
+/// browser, and a ring that knows where it is saves a slice per app on the one
+/// that does not. An application without a ring of its own gets the general
+/// one, so setting nothing up changes nothing.
+public enum RadialMenuProfiles {
+    public static func layout(for bundleIdentifier: String?,
+                              standard: RadialMenuLayout,
+                              perApp: [String: RadialMenuLayout]) -> RadialMenuLayout {
+        guard let bundleIdentifier, let specific = perApp[bundleIdentifier] else { return standard }
+        return specific
     }
 }

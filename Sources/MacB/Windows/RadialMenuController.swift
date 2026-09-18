@@ -21,7 +21,7 @@ import SwiftUI
 /// let go, and the ring stays up until something is picked or Escape is pressed.
 @MainActor final class RadialMenuController: ObservableObject {
     /// Runs whatever the user picked. Set by whoever owns the app's services.
-    var perform: ((RadialAction) -> Void)?
+    var perform: ((RadialSlot) -> Void)?
     /// Whether MacB may drive other applications' windows right now. The ring
     /// leaves out the slices that cannot work without it.
     var hasAccessibility: () -> Bool = { false }
@@ -30,6 +30,8 @@ import SwiftUI
 
     private var enabled = false
     private var layout = RadialMenuLayout.default
+    /// Rings for particular applications, by bundle identifier.
+    private var appLayouts: [String: RadialMenuLayout] = [:]
     private var translucency: Double = 0.55
     private var metrics = RadialMenuMetrics()
     /// Whether a three-finger tap opens the ring as well as Fn + a click.
@@ -42,7 +44,7 @@ import SwiftUI
     private var host: NSHostingView<RadialMenuView>?
     private var glass: RadialGlassView?
     private var centre: CGPoint = .zero
-    private var actions: [RadialAction] = []
+    private var slots: [RadialSlot] = []
     private var selection: Int?
     private var presence: Double = 0
     private var openedAt: TimeInterval = 0
@@ -70,8 +72,9 @@ import SwiftUI
         }
     }
 
-    func setLayout(_ layout: RadialMenuLayout) {
+    func setLayout(_ layout: RadialMenuLayout, perApp: [String: RadialMenuLayout] = [:]) {
         self.layout = layout
+        appLayouts = perApp
         if isVisible { dismiss() }
     }
 
@@ -163,9 +166,15 @@ import SwiftUI
     /// case the tap hands it straight back to whatever is under the cursor.
     fileprivate func beginIfWanted(at location: CGPoint) -> Bool {
         guard enabled else { return false }
-        let usable = layout.usableActions(hasAccessibility: hasAccessibility())
+        // The ring belongs to whatever the user is working in, which is the
+        // frontmost application: MacB itself is never frontmost.
+        let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        let chosen = RadialMenuProfiles.layout(for: frontmost, standard: layout, perApp: appLayouts)
+        let usable = chosen.usableSlots(hasAccessibility: hasAccessibility()) {
+            FileManager.default.fileExists(atPath: $0)
+        }
         guard usable.count >= RadialMenuGeometry.minimumSlices else { return false }
-        actions = usable
+        slots = usable
         selection = nil
         isSticky = false
         openedAt = ProcessInfo.processInfo.systemUptime
@@ -178,7 +187,7 @@ import SwiftUI
         guard isVisible else { return }
         let offset = CGPoint(x: location.x - centre.x, y: location.y - centre.y)
         let next = RadialMenuGeometry.slice(dx: Double(offset.x), dy: Double(offset.y),
-                                            count: actions.count, deadZone: metrics.deadZone)
+                                            count: slots.count, deadZone: metrics.deadZone)
         guard next != selection else { return }
         selection = next
         // One tap of feedback per slice crossed, which is what makes a ring
@@ -219,8 +228,8 @@ import SwiftUI
     fileprivate var wantsClicks: Bool { isVisible && isSticky }
 
     private func fire(_ index: Int) {
-        guard actions.indices.contains(index) else { return dismiss() }
-        let action = actions[index]
+        guard slots.indices.contains(index) else { return dismiss() }
+        let action = slots[index]
         dismiss()
         perform?(action)
     }
@@ -278,7 +287,7 @@ import SwiftUI
         glass.state = .active
         glass.appearance = NSAppearance(named: .darkAqua)
         glass.autoresizingMask = [.width, .height]
-        let host = NSHostingView(rootView: RadialMenuView(actions: [], selection: nil, presence: 0,
+        let host = NSHostingView(rootView: RadialMenuView(slots: [], selection: nil, presence: 0,
                                                           metrics: metrics, translucency: translucency,
                                                           isSolid: isSolid))
         host.autoresizingMask = [.width, .height]
@@ -294,7 +303,7 @@ import SwiftUI
     }
 
     private func render() {
-        host?.rootView = RadialMenuView(actions: actions, selection: selection, presence: presence,
+        host?.rootView = RadialMenuView(slots: slots, selection: selection, presence: presence,
                                         metrics: metrics, translucency: translucency, isSolid: isSolid)
         // The frost thins with the slider, exactly as the island's does, and
         // steps out of the way entirely for Reduce Transparency.

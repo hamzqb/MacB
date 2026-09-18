@@ -1,6 +1,7 @@
 import AppKit
 import MacBCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
     case general = "Genel", windows = "Pencereler", widgets = "Widget'lar", tools = "Araçlar", automation = "Otomasyon", appearance = "Görünüm", privacy = "Gizlilik", permissions = "İzinler"
@@ -35,6 +36,9 @@ struct SettingsView: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     /// What is being typed into the key field. Cleared as soon as it is stored.
     @State private var aiKeyDraft = ""
+    /// Which ring the settings are editing: nil for the general one, or an
+    /// application's bundle identifier.
+    @State private var ringProfile: String?
     @ObservedObject var preferences: Preferences
     @ObservedObject var permissions: PermissionStore
     @ObservedObject var spotify: SpotifyService
@@ -999,37 +1003,69 @@ struct SettingsView: View {
                         message("Halka, tıklamayı yakalamak için Erişilebilirlik izni istiyor. İzin verilene kadar açılmaz.", warning: true)
                     }
                     rowDivider
-                    Text("Dilimler saat yönünde, yukarıdan başlayarak.")
-                        .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    ForEach(Array(preferences.radialMenuLayout.actions.enumerated()), id: \.offset) { index, action in
-                        HStack(spacing: MacBDesign.Space.regular) {
-                            Image(systemName: action.symbol)
-                                .font(.system(size: MacBDesign.TypeScale.body))
-                                .foregroundStyle(MacBDesign.accent)
-                                .frame(width: 20)
-                            Picker("", selection: radialSlice(at: index)) {
-                                ForEach(RadialAction.allCases, id: \.self) { candidate in
-                                    Text(candidate.title).tag(candidate)
-                                }
+                    HStack(spacing: MacBDesign.Space.regular) {
+                        Text("Halka")
+                            .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                        Picker("", selection: $ringProfile) {
+                            Text("Her yerde").tag(String?.none)
+                            ForEach(preferences.radialMenuAppLayouts.keys.sorted(), id: \.self) { bundleID in
+                                Text(Self.appName(for: bundleID)).tag(String?.some(bundleID))
                             }
-                            .labelsHidden()
-                            .accessibilityLabel("\(index + 1). dilim")
+                        }
+                        .labelsHidden()
+                        Button("Uygulama için…", action: addRingProfile)
+                            .help("Seçtiğin uygulama öndeyken bu halka açılır")
+                        if let profile = ringProfile {
                             Button {
-                                removeRadialSlice(at: index)
+                                preferences.radialMenuAppLayouts[profile] = nil
+                                ringProfile = nil
+                            } label: { Image(systemName: "trash") }
+                            .buttonStyle(.plain)
+                            .help("Bu uygulamanın halkasını sil; genel halka kullanılır")
+                        }
+                    }
+                    Text(ringProfile == nil
+                         ? "Kendi halkası olmayan her uygulamada bu açılır. Dilimler saat yönünde, yukarıdan başlayarak."
+                         : "\(Self.appName(for: ringProfile ?? "")) öndeyken yalnızca bu halka açılır.")
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(Array(editedRing.slots.enumerated()), id: \.offset) { index, slot in
+                        HStack(spacing: MacBDesign.Space.regular) {
+                            slotIcon(slot)
+                            switch slot {
+                            case .action:
+                                Picker("", selection: radialSlice(at: index)) {
+                                    ForEach(RadialAction.allCases, id: \.self) { candidate in
+                                        Text(candidate.title).tag(candidate)
+                                    }
+                                }
+                                .labelsHidden()
+                                .accessibilityLabel("\(index + 1). dilim")
+                            case .open(let path):
+                                Text(slot.title)
+                                    .font(.system(size: MacBDesign.TypeScale.body))
+                                    .lineLimit(1)
+                                    .help(path)
+                                Spacer(minLength: 0)
+                            }
+                            Button {
+                                editRing { slots in slots.remove(at: index) }
                             } label: {
                                 Image(systemName: "minus.circle")
                             }
                             .buttonStyle(.plain)
-                            .disabled(preferences.radialMenuLayout.actions.count <= RadialMenuGeometry.minimumSlices)
+                            .disabled(editedRing.slots.count <= RadialMenuGeometry.minimumSlices)
                             .help("Bu dilimi çıkar")
                         }
                     }
                     HStack(spacing: MacBDesign.Space.regular) {
-                        Button("Dilim ekle", action: addRadialSlice)
-                            .disabled(preferences.radialMenuLayout.actions.count >= RadialMenuGeometry.maximumSlices)
-                        Button("Varsayılana dön") { preferences.radialMenuLayout = .default }
+                        Button("Eylem ekle", action: addRadialSlice)
+                            .disabled(editedRing.slots.count >= RadialMenuGeometry.maximumSlices)
+                        Button("Uygulama ya da dosya…", action: addOpenSlice)
+                            .disabled(editedRing.slots.count >= RadialMenuGeometry.maximumSlices)
+                        Button("Varsayılana dön") { editRing { $0 = RadialMenuLayout.default.slots } }
                         Spacer()
-                        Text("\(preferences.radialMenuLayout.actions.count) dilim")
+                        Text("\(editedRing.slots.count) dilim")
                             .font(.system(size: MacBDesign.TypeScale.caption))
                             .foregroundStyle(MacBDesign.muted)
                     }
@@ -1149,39 +1185,103 @@ struct SettingsView: View {
 
     private var rowDivider: some View { Divider().opacity(0.45) }
 
-    /// One slice of the ring, as something a Picker can drive.
-    ///
-    /// The layout validates itself on the way in, so the binding hands it a
-    /// whole new list rather than reaching into the one it has.
+    /// The ring being edited: the general one, or one application's.
+    private var editedRing: RadialMenuLayout {
+        if let ringProfile, let specific = preferences.radialMenuAppLayouts[ringProfile] { return specific }
+        return preferences.radialMenuLayout
+    }
+
+    /// Changes the ring being edited. The layout validates itself on the way
+    /// in, so this always hands it a whole new list.
+    private func editRing(_ change: (inout [RadialSlot]) -> Void) {
+        var slots = editedRing.slots
+        change(&slots)
+        let updated = RadialMenuLayout(slots: slots)
+        if let ringProfile {
+            preferences.radialMenuAppLayouts[ringProfile] = updated
+        } else {
+            preferences.radialMenuLayout = updated
+        }
+    }
+
+    /// One action slice, as something a Picker can drive.
     private func radialSlice(at index: Int) -> Binding<RadialAction> {
         Binding(
             get: {
-                let actions = preferences.radialMenuLayout.actions
-                return actions.indices.contains(index) ? actions[index] : .island
+                let slots = editedRing.slots
+                guard slots.indices.contains(index), case .action(let action) = slots[index] else { return .island }
+                return action
             },
             set: { value in
-                var actions = preferences.radialMenuLayout.actions
-                guard actions.indices.contains(index) else { return }
-                actions[index] = value
-                preferences.radialMenuLayout = RadialMenuLayout(actions: actions)
+                editRing { slots in
+                    guard slots.indices.contains(index) else { return }
+                    slots[index] = .action(value)
+                }
             })
     }
 
     private func addRadialSlice() {
-        var actions = preferences.radialMenuLayout.actions
-        // The first thing not already on the ring, so adding a slice twice does
-        // not produce two of the same.
-        let next = RadialAction.allCases.first { !actions.contains($0) } ?? .island
-        actions.append(next)
-        preferences.radialMenuLayout = RadialMenuLayout(actions: actions)
+        editRing { slots in
+            // The first action not already on the ring, so adding twice does
+            // not produce two of the same.
+            let used = Set(slots)
+            let next = RadialAction.allCases.first { !used.contains(.action($0)) } ?? .island
+            slots.append(.action(next))
+        }
     }
 
-    private func removeRadialSlice(at index: Int) {
-        var actions = preferences.radialMenuLayout.actions
-        guard actions.indices.contains(index),
-              actions.count > RadialMenuGeometry.minimumSlices else { return }
-        actions.remove(at: index)
-        preferences.radialMenuLayout = RadialMenuLayout(actions: actions)
+    /// Puts an application, folder or file of the user's choosing on the ring.
+    private func addOpenSlice() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.prompt = "Halkaya ekle"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        editRing { slots in
+            let slot = RadialSlot.open(path: url.path)
+            guard !slots.contains(slot) else { return }
+            slots.append(slot)
+        }
+    }
+
+    /// Starts a ring for one application, copied from the general one so the
+    /// user edits from something rather than from nothing.
+    private func addRingProfile() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.prompt = "Bu uygulama için"
+        guard panel.runModal() == .OK, let url = panel.url,
+              let bundleID = Bundle(url: url)?.bundleIdentifier else { return }
+        if preferences.radialMenuAppLayouts[bundleID] == nil {
+            preferences.radialMenuAppLayouts[bundleID] = preferences.radialMenuLayout
+        }
+        ringProfile = bundleID
+    }
+
+    @ViewBuilder private func slotIcon(_ slot: RadialSlot) -> some View {
+        switch slot {
+        case .action(let action):
+            Image(systemName: action.symbol)
+                .font(.system(size: MacBDesign.TypeScale.body))
+                .foregroundStyle(MacBDesign.accent)
+                .frame(width: 20)
+        case .open(let path):
+            Image(nsImage: NSWorkspace.shared.icon(forFile: path))
+                .resizable()
+                .frame(width: 20, height: 20)
+        }
+    }
+
+    /// An application's name from its bundle identifier, or the identifier
+    /// itself if the application has since been removed.
+    static func appName(for bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
+        return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
     }
 
     private var runningBadge: some View {
