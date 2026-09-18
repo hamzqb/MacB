@@ -179,6 +179,15 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var radialMenuThreeFinger: Bool {
         didSet { defaults.set(radialMenuThreeFinger, forKey: "radialMenuThreeFinger") }
     }
+    /// Which OpenAI model answers. A name rather than a choice from a fixed
+    /// list, because the list changes more often than MacB does.
+    @Published var aiModel: String {
+        didSet {
+            let trimmed = aiModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            defaults.set(trimmed.isEmpty ? Self.defaultAIModel : trimmed, forKey: "aiModel")
+        }
+    }
+    static let defaultAIModel = "gpt-6-astra"
     /// What sits on the ring, clockwise from the top.
     @Published var radialMenuLayout: RadialMenuLayout {
         didSet {
@@ -212,6 +221,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "radialMenuTranslucency": 0.55,
                                     "radialMenuScale": 0.85,
                                     "radialMenuThreeFinger": false,
+                                    "aiModel": Preferences.defaultAIModel,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
         notchEnabled = defaults.bool(forKey: "notchEnabled")
@@ -242,6 +252,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         radialMenuScale = min(RadialMenuMetrics.maximumScale,
                               max(RadialMenuMetrics.minimumScale, defaults.double(forKey: "radialMenuScale")))
         radialMenuThreeFinger = defaults.bool(forKey: "radialMenuThreeFinger")
+        aiModel = defaults.string(forKey: "aiModel") ?? Preferences.defaultAIModel
         // A ring that cannot be decoded is a ring with the default slices, not
         // an app that refuses to start.
         radialMenuLayout = defaults.data(forKey: "radialMenuLayout")

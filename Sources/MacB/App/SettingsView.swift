@@ -199,7 +199,7 @@ struct SettingsView: View {
                 }
             }
             section("Yapay zekâ anahtarı", "key.horizontal") {
-                Text("Halkadaki yapay zekâ dilimi ve island'daki soru kutusu bu anahtarla çalışır. Anahtar Keychain'e yazılır — plist'e, dosyaya ya da koda değil — ve bir daha ekranda gösterilmez. Sadece OpenAI'ye gider.")
+                Text("Halkadaki Yapay zekâ dilimi ve menüdeki \u{201C}Yapay zekâya sor\u{201D} bu anahtarla çalışır. Anahtar Keychain'e yazılır — plist'e, dosyaya ya da koda değil — ve bir daha ekranda gösterilmez. Sadece OpenAI'ye gider; giden tek şey yazdığın soru.")
                     .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 if aiKey.hasKey {
@@ -234,6 +234,18 @@ struct SettingsView: View {
                 case .invalid(let text): message(text, warning: true)
                 }
                 if let error = aiKey.errorMessage { message(error, warning: true) }
+                rowDivider
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Text("Model")
+                        .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    TextField(Preferences.defaultAIModel, text: $preferences.aiModel)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("OpenAI modeli")
+                    Button("Varsayılan") { preferences.aiModel = Preferences.defaultAIModel }
+                }
+                Text("Cevaplar gerektiğinde internette aranır ve kaynaklarıyla gelir. Konuşma sadece bellekte tutulur, OpenAI tarafında saklanmaz.")
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                 message("Anahtarını bir yere yapıştırdıysan (sohbet, not, ekran görüntüsü) onu iptal et ve yenisini üret. Sızmış bir anahtar senin faturana çalışır.", warning: true)
             }
             section("Sistem", "gauge.with.dots.needle.67percent") {

@@ -14,6 +14,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
     case switcher
     case timer
     case quickNote
+    case askAI
     case keyboardLock
     case windowLeft
     case windowRight
@@ -30,6 +31,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         case .switcher: return "Pencereler"
         case .timer: return "Zamanlayıcı"
         case .quickNote: return "Hızlı not"
+        case .askAI: return "Yapay zekâ"
         case .keyboardLock: return "Klavye kilidi"
         case .windowLeft: return "Sol yarı"
         case .windowRight: return "Sağ yarı"
@@ -48,6 +50,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         case .switcher: return "square.on.square"
         case .timer: return "timer"
         case .quickNote: return "square.and.pencil"
+        case .askAI: return "sparkles"
         case .keyboardLock: return "keyboard"
         case .windowLeft: return "rectangle.lefthalf.filled"
         case .windowRight: return "rectangle.righthalf.filled"
@@ -66,7 +69,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         switch self {
         case .switcher, .windowLeft, .windowRight, .windowMaximize, .windowCenter, .windowNextDisplay:
             return true
-        case .island, .shelf, .clipboard, .timer, .quickNote, .keyboardLock, .settings:
+        case .island, .shelf, .clipboard, .timer, .quickNote, .askAI, .keyboardLock, .settings:
             return false
         }
     }

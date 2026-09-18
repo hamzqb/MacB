@@ -1211,6 +1211,40 @@ struct CoreTestRunner {
                 try expect(ThreeFingerTap.maximumDuration < 0.5,
                            "The window was long enough to swallow a swipe")
             }),
+            ("AIResponseStream: text, searching and sources are read out of the stream", {
+                try expect(AIResponseStream.event(fromData: #"data: {"type":"response.output_text.delta","delta":"Merhaba"}"#) == .text("Merhaba"),
+                           "A text delta was not read")
+                try expect(AIResponseStream.event(fromData: #"data: {"type":"response.web_search_call.searching"}"#) == .searching,
+                           "A search starting was not noticed")
+                let done = #"data: {"type":"response.completed","response":{"output":[{"type":"web_search_call"},{"type":"message","content":[{"type":"output_text","text":"x","annotations":[{"type":"url_citation","url":"https://a.com/1","title":"A"},{"type":"url_citation","url":"https://a.com/1","title":"A again"},{"type":"url_citation","url":"javascript:alert(1)","title":"bad"},{"type":"url_citation","url":"https://b.com","title":""}]}]}]}}"#
+                guard case .finished(let sources) = AIResponseStream.event(fromData: done) else {
+                    throw TestFailure(description: "A finished response was not recognised")
+                }
+                try expect(sources.map(\.url.absoluteString) == ["https://a.com/1", "https://b.com"],
+                           "Sources were duplicated, lost, or let a non-web link through: \(sources.map(\.url))")
+                try expect(sources[1].displayTitle == "b.com", "A source with no title had nothing to show")
+                if case .failed = AIResponseStream.event(fromData: #"data: {"type":"error","error":{"message":"bad model"}}"#) {} else {
+                    throw TestFailure(description: "An error from OpenAI was swallowed")
+                }
+                for noise in ["", "event: response.output_text.delta", "data: [DONE]", "data: {not json",
+                              #"data: {"type":"response.something_new"}"#] {
+                    try expect(AIResponseStream.event(fromData: noise) == .ignored, "\(noise) was not ignored")
+                }
+            }),
+            ("AIResponseStream: only the conversation goes out, never stored, history capped", {
+                let history = (0..<10).map { AITurn(question: "q\($0)", answer: "a\($0)") }
+                let body = AIResponseStream.requestBody(question: "son", model: "m", history: history)
+                try expect(body["store"] as? Bool == false, "The conversation was left for OpenAI to keep")
+                try expect(body["stream"] as? Bool == true, "The answer was not streamed")
+                let input = body["input"] as? [[String: Any]] ?? []
+                try expect(input.count == AIResponseStream.maximumHistory * 2 + 1,
+                           "History was not capped: \(input.count) messages")
+                try expect(input.last?["content"] as? String == "son", "The new question was not last")
+                let tools = body["tools"] as? [[String: Any]] ?? []
+                try expect(tools.first?["type"] as? String == "web_search", "Web search was not offered")
+                try expect(Set(body.keys) == ["model", "input", "stream", "store", "tools", "instructions"],
+                           "Something other than the conversation was sent: \(body.keys.sorted())")
+            }),
             ("AIKeyFormat: an obviously broken key is caught before it is stored", {
                 try expect(AIKeyFormat.looksLikeKey("sk-" + String(repeating: "a", count: 40)),
                            "A real-shaped key was rejected")

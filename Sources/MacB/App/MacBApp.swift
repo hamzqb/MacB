@@ -229,6 +229,13 @@ private final class Flag: @unchecked Sendable {
     private let updates = UpdateService()
     private let loginItem = LoginItemService()
     private let aiKey = AIKeyStore()
+    private lazy var assistant = AIAssistantService(keys: aiKey) { [weak self] in
+        self?.preferences.aiModel ?? Preferences.defaultAIModel
+    }
+    private lazy var aiPanel = AIPanelController(assistant: assistant) { [weak self] in
+        UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
+        self?.showSettings()
+    }
     private lazy var dock = DockController(windowService: windows, previewService: previews, preferences: preferences,
                                            favorites: favorites, recentTargets: recentTargets)
     private lazy var notch = NotchController(media: media, shelf: shelf, preferences: preferences,
@@ -440,6 +447,8 @@ private final class Flag: @unchecked Sendable {
         let layoutRoot = menu.addItem(withTitle: "Pencere Yerleşimi", action: nil, keyEquivalent: "")
         menu.setSubmenu(layouts, for: layoutRoot)
         layoutMenuItem = layoutRoot
+        let ask = menu.addItem(withTitle: "Yapay zekâya sor…", action: #selector(openAIPanel), keyEquivalent: "")
+        ask.target = self
         let cleanKeyboard = menu.addItem(withTitle: "Klavyeyi 1 dakika kilitle", action: #selector(startKeyboardCleaning), keyEquivalent: "")
         cleanKeyboard.target = self
         let settings = menu.addItem(withTitle: "Ayarlar ve izinler…", action: #selector(showSettings), keyEquivalent: ",")
@@ -505,6 +514,7 @@ private final class Flag: @unchecked Sendable {
         case .windowCenter: windowLayout.perform(.center)
         case .windowNextDisplay: windowLayout.perform(.nextDisplay)
         case .settings: showSettings()
+        case .askAI: aiPanel.show()
         }
     }
 
@@ -537,6 +547,7 @@ private final class Flag: @unchecked Sendable {
         notch.openPanel()
     }
     @objc private func addFiles() { shelf.chooseFiles(); openNotch() }
+    @objc private func openAIPanel() { aiPanel.show() }
     @objc private func startKeyboardCleaning() { keyboardCleaning.start(duration: 60) }
     @objc private func checkForUpdates() { updates.check() }
     @objc private func performWindowLayout(_ sender: NSMenuItem) {
