@@ -52,7 +52,16 @@ xattr -cr "$app_dir"
 xattr -d -r com.apple.provenance "$app_dir" 2>/dev/null || true
 xattr -d com.apple.FinderInfo "$app_dir" 2>/dev/null || true
 xattr -d 'com.apple.fileprovider.fpfs#P' "$app_dir" 2>/dev/null || true
-signing_identity="${MACB_SIGNING_IDENTITY:--}"
+# A real identity keeps macOS's permission grants across rebuilds: TCC and the
+# Keychain remember an app by its signing certificate, and an ad-hoc signature
+# has none, so every rebuild looked like a new app. `MacB Local Signing` is a
+# self-signed certificate that lives only in this Mac's login keychain; it is
+# used when present, and a machine without it falls back to ad-hoc as before.
+default_identity="-"
+if security find-certificate -c "MacB Local Signing" >/dev/null 2>&1; then
+    default_identity="MacB Local Signing"
+fi
+signing_identity="${MACB_SIGNING_IDENTITY:-$default_identity}"
 if [[ "$signing_identity" == "-" ]]; then
     # Keep a stable designated requirement for local ad-hoc builds. Without this,
     # every rebuild is identified only by its changing CDHash and macOS drops the
