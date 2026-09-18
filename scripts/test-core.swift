@@ -1134,23 +1134,24 @@ struct CoreTestRunner {
                 }
             }),
             ("RadialMenu: slice zero is straight up and the rest run clockwise", {
-                let up = RadialMenuGeometry.slice(dx: 0, dy: 80, count: 4)
-                let right = RadialMenuGeometry.slice(dx: 80, dy: 0, count: 4)
-                let down = RadialMenuGeometry.slice(dx: 0, dy: -80, count: 4)
-                let left = RadialMenuGeometry.slice(dx: -80, dy: 0, count: 4)
+                let zone = RadialMenuMetrics().deadZone
+                let up = RadialMenuGeometry.slice(dx: 0, dy: 80, count: 4, deadZone: zone)
+                let right = RadialMenuGeometry.slice(dx: 80, dy: 0, count: 4, deadZone: zone)
+                let down = RadialMenuGeometry.slice(dx: 0, dy: -80, count: 4, deadZone: zone)
+                let left = RadialMenuGeometry.slice(dx: -80, dy: 0, count: 4, deadZone: zone)
                 try expect(up == 0, "Up was not the first slice, it was \(String(describing: up))")
                 try expect(right == 1, "The ring did not run clockwise")
                 try expect(down == 2, "Down landed on \(String(describing: down))")
                 try expect(left == 3, "Left landed on \(String(describing: left))")
                 // A slice is centred on its direction, so either side of straight
                 // up is still the first slice.
-                try expect(RadialMenuGeometry.slice(dx: 20, dy: 80, count: 6) == 0, "Up drifted off slice zero")
-                try expect(RadialMenuGeometry.slice(dx: -20, dy: 80, count: 6) == 0, "Up drifted off slice zero")
+                try expect(RadialMenuGeometry.slice(dx: 20, dy: 80, count: 6, deadZone: zone) == 0, "Up drifted off slice zero")
+                try expect(RadialMenuGeometry.slice(dx: -20, dy: 80, count: 6, deadZone: zone) == 0, "Up drifted off slice zero")
                 for count in RadialMenuGeometry.minimumSlices...RadialMenuGeometry.maximumSlices {
                     for step in 0..<count {
                         let angle = RadialMenuGeometry.midAngle(step, count: count)
                         let picked = RadialMenuGeometry.slice(dx: sin(angle) * 90, dy: cos(angle) * 90,
-                                                              count: count)
+                                                              count: count, deadZone: zone)
                         try expect(picked == step,
                                    "Aiming at the middle of slice \(step) of \(count) picked \(String(describing: picked))")
                     }
@@ -1174,13 +1175,41 @@ struct CoreTestRunner {
                            "An entry with nothing in it matched")
             }),
             ("RadialMenu: one slice is a real ring, aimed in any direction", {
+                let zone = RadialMenuMetrics().deadZone
                 for degrees in stride(from: 0.0, to: 360.0, by: 15) {
                     let radians = degrees * .pi / 180
-                    let picked = RadialMenuGeometry.slice(dx: sin(radians) * 70, dy: cos(radians) * 70, count: 1)
+                    let picked = RadialMenuGeometry.slice(dx: sin(radians) * 70, dy: cos(radians) * 70,
+                                                          count: 1, deadZone: zone)
                     try expect(picked == 0, "A one-slice ring missed at \(degrees)°")
                 }
-                try expect(RadialMenuGeometry.slice(dx: 0, dy: 0, count: 1) == nil,
+                try expect(RadialMenuGeometry.slice(dx: 0, dy: 0, count: 1, deadZone: zone) == nil,
                            "A one-slice ring fired from the middle")
+            }),
+            ("ThreeFingerTap: a tap opens the ring, a swipe and a wrong count do not", {
+                func tap(fingers: [Int], step: Double) -> Bool {
+                    var recogniser = ThreeFingerTap()
+                    var now = 0.0
+                    var fired = false
+                    for count in fingers {
+                        if recogniser.frame(fingers: count, at: now) { fired = true }
+                        now += step
+                    }
+                    return fired
+                }
+                // Three fingers landing a little apart and leaving together.
+                try expect(tap(fingers: [1, 2, 3, 3, 0], step: 0.02),
+                           "A three-finger tap was not recognised")
+                try expect(tap(fingers: [3, 3, 2, 1, 0], step: 0.02),
+                           "A tap whose fingers came off one at a time was missed")
+                // A swipe: three fingers, held far longer than a tap.
+                try expect(!tap(fingers: Array(repeating: 3, count: 30) + [0], step: 0.02),
+                           "A three-finger swipe opened the ring")
+                try expect(!tap(fingers: [2, 2, 0], step: 0.02), "Two fingers counted as three")
+                try expect(!tap(fingers: [3, 4, 4, 0], step: 0.02), "Four fingers counted as three")
+                try expect(!tap(fingers: [1, 1, 0], step: 0.02), "One finger counted as three")
+                try expect(!tap(fingers: [0, 0, 0], step: 0.02), "Nothing at all counted as a tap")
+                try expect(ThreeFingerTap.maximumDuration < 0.5,
+                           "The window was long enough to swallow a swipe")
             }),
             ("AIKeyFormat: an obviously broken key is caught before it is stored", {
                 try expect(AIKeyFormat.looksLikeKey("sk-" + String(repeating: "a", count: 40)),
@@ -1195,19 +1224,31 @@ struct CoreTestRunner {
                            "A key with a space in the middle of it was accepted")
                 try expect(!AIKeyFormat.looksLikeKey(""), "An empty field was accepted")
             }),
-            ("RadialMenu: the middle chooses nothing, which is how somebody backs out", {
-                try expect(RadialMenuGeometry.slice(dx: 0, dy: 0, count: 6) == nil,
-                           "The ring fired at the point the click landed")
-                let justInside = RadialMenuGeometry.deadZone - 0.5
-                try expect(RadialMenuGeometry.slice(dx: justInside, dy: 0, count: 6) == nil,
-                           "The dead zone was smaller than it claims")
-                let justOutside = RadialMenuGeometry.deadZone + 0.5
-                try expect(RadialMenuGeometry.slice(dx: justOutside, dy: 0, count: 6) != nil,
-                           "Nothing outside the dead zone could be picked")
+            ("RadialMenu: the middle chooses nothing, at every size", {
+                for scale in [RadialMenuMetrics.minimumScale, 0.85, 1, RadialMenuMetrics.maximumScale] {
+                    let metrics = RadialMenuMetrics(scale: scale)
+                    let zone = metrics.deadZone
+                    try expect(RadialMenuGeometry.slice(dx: 0, dy: 0, count: 6, deadZone: zone) == nil,
+                               "The ring fired at the point the click landed, at \(scale)")
+                    try expect(RadialMenuGeometry.slice(dx: zone - 0.5, dy: 0, count: 6, deadZone: zone) == nil,
+                               "The dead zone was smaller than it claims, at \(scale)")
+                    try expect(RadialMenuGeometry.slice(dx: zone + 0.5, dy: 0, count: 6, deadZone: zone) != nil,
+                               "Nothing outside the dead zone could be picked, at \(scale)")
+                    // The hand has to be able to leave the middle and still land
+                    // on the band it can see.
+                    try expect(zone < metrics.innerRadius,
+                               "The dead zone reached past the hole at \(scale)")
+                    try expect(metrics.outerRadius > metrics.innerRadius + 20,
+                               "The band was too thin to aim at, at \(scale)")
+                }
+                try expect(RadialMenuMetrics(scale: 99).scale == RadialMenuMetrics.maximumScale,
+                           "The size dial had no ceiling")
+                try expect(RadialMenuMetrics(scale: 0).scale == RadialMenuMetrics.minimumScale,
+                           "The size dial had no floor")
             }),
             ("RadialMenu: the ring stays on screen even in a corner", {
                 let screen = (x: 0.0, y: 0.0, width: 1440.0, height: 900.0)
-                let size = RadialMenuGeometry.outerRadius * 2
+                let size = RadialMenuMetrics().side
                 for cursor in [(x: 0.0, y: 0.0), (x: 1440.0, y: 900.0), (x: 2.0, y: 898.0)] {
                     let origin = RadialMenuGeometry.origin(forCursor: cursor, size: size, screen: screen)
                     try expect(origin.x >= screen.x && origin.x + size <= screen.x + screen.width,

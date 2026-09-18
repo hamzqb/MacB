@@ -89,24 +89,6 @@ public enum RadialMenuGeometry {
     public static let minimumSlices = 1
     public static let maximumSlices = 8
 
-    /// The hole in the middle, in points.
-    ///
-    /// A gesture is a press and a flick, and the press lands before the flick
-    /// does: without a dead zone the slice under the cursor at the instant of
-    /// the click would fire on every single use. Inside this radius the ring is
-    /// showing but has chosen nothing, which is also how somebody backs out —
-    /// come back to the middle and let go.
-    public static let deadZone: Double = 30
-
-    /// Where the drawn ring starts and ends, measured from the cursor.
-    ///
-    /// Small on purpose. This appears under the hand, mid-gesture, over
-    /// whatever somebody was looking at, and every point of radius is more of
-    /// their work covered up. A band thin enough to read as a control rather
-    /// than a window is the whole point of the shape.
-    public static let innerRadius: Double = 42
-    public static let outerRadius: Double = 88
-
     public static func clampSliceCount(_ count: Int) -> Int {
         min(maximumSlices, max(minimumSlices, count))
     }
@@ -116,7 +98,7 @@ public enum RadialMenuGeometry {
     /// `dx` grows to the right and `dy` grows upwards, which is AppKit's screen
     /// orientation rather than a view's. Slice zero is straight up and the rest
     /// run clockwise, because that is the order they are read in.
-    public static func slice(dx: Double, dy: Double, count: Int) -> Int? {
+    public static func slice(dx: Double, dy: Double, count: Int, deadZone: Double) -> Int? {
         let slices = clampSliceCount(count)
         guard (dx * dx + dy * dy).squareRoot() >= deadZone else { return nil }
         let step = 2 * Double.pi / Double(slices)
@@ -150,6 +132,54 @@ public enum RadialMenuGeometry {
         return (x: min(max(cursor.x - half, minX), max(minX, maxX)),
                 y: min(max(cursor.y - half, minY), max(minY, maxY)))
     }
+}
+
+/// How big the ring is drawn, on one dial.
+///
+/// Every radius comes off the same number so the proportions cannot drift: the
+/// band keeps its thickness relative to the hole, and the dead zone keeps its
+/// relationship to both. A ring where the hole grew and the band did not is a
+/// ring whose slices are suddenly hard to hit.
+///
+/// Small by default, and the slider only goes so far. This appears under the
+/// hand, mid-gesture, over whatever somebody was looking at, so every point of
+/// radius is more of their work covered up.
+public struct RadialMenuMetrics: Equatable, Sendable {
+    public static let minimumScale: Double = 0.6
+    public static let maximumScale: Double = 1.4
+    /// The radii at scale 1, in points.
+    private static let baseOuter: Double = 76
+    private static let baseInner: Double = 34
+    private static let baseDeadZone: Double = 24
+
+    public let scale: Double
+
+    public init(scale: Double = 1) {
+        self.scale = min(Self.maximumScale, max(Self.minimumScale, scale))
+    }
+
+    public var outerRadius: Double { Self.baseOuter * scale }
+    public var innerRadius: Double { Self.baseInner * scale }
+
+    /// The hole in the middle.
+    ///
+    /// A gesture is a press and a flick, and the press lands before the flick
+    /// does: without a dead zone the slice under the cursor at the instant of
+    /// the click would fire on every single use. Inside this radius the ring is
+    /// showing but has chosen nothing, which is also how somebody backs out —
+    /// come back to the middle and let go.
+    ///
+    /// Kept inside the drawn hole rather than matching it, so a hand that has
+    /// only just left the middle is already choosing something and can see
+    /// which.
+    public var deadZone: Double { Self.baseDeadZone * scale }
+
+    /// The window's side, which is the ring plus nothing at all.
+    public var side: Double { outerRadius * 2 }
+
+    /// The size of the icon on a slice, which has to shrink with the band or it
+    /// stops fitting inside it.
+    public var symbolSize: Double { 15 * min(1.15, max(0.85, scale)) }
 }
 
 /// Which action sits on which slice.

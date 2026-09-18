@@ -1025,6 +1025,27 @@ struct SettingsView: View {
                         .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     rowDivider
+                    settingToggle("Üç parmakla dokunma",
+                                  detail: "Fn ve tıklama olmadan, trackpad'e üç parmakla kısa bir dokunuş da halkayı açar. Üç parmakla kaydırma (Mission Control, masaüstleri) etkilenmez — halka yalnızca dokunuşta açılır. macOS'ta \u{201C}üç parmakla dokunup ara\u{201D} açıksa ikisi birden çalışır.",
+                                  isOn: $preferences.radialMenuThreeFinger)
+                    if preferences.radialMenuThreeFinger && !TrackpadContacts.isSupported {
+                        message("Bu macOS sürümünde trackpad parmak sayısı okunamıyor. Fn + iki parmak çalışmaya devam ediyor.", warning: true)
+                    }
+                    rowDivider
+                    HStack {
+                        Text("Boyut")
+                            .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                        Spacer(minLength: 8)
+                        Text("%\(Int((preferences.radialMenuScale * 100).rounded()))")
+                            .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold)).monospacedDigit()
+                            .foregroundStyle(MacBDesign.accent)
+                    }
+                    Slider(value: $preferences.radialMenuScale,
+                           in: RadialMenuMetrics.minimumScale...RadialMenuMetrics.maximumScale)
+                    Text("Halka imlecin üstünde açılır, yani her fazladan piksel senin işinin üstünü örter. Yeni boyut bir sonraki açılışta geçerli olur.")
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    rowDivider
                     HStack {
                         Text("Saydamlık")
                             .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))

@@ -166,6 +166,19 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
             defaults.set(clamped, forKey: "radialMenuTranslucency")
         }
     }
+    /// How big the ring is drawn, as a multiplier on its natural size.
+    @Published var radialMenuScale: Double {
+        didSet {
+            let clamped = min(RadialMenuMetrics.maximumScale,
+                              max(RadialMenuMetrics.minimumScale, radialMenuScale))
+            if clamped != radialMenuScale { radialMenuScale = clamped; return }
+            defaults.set(clamped, forKey: "radialMenuScale")
+        }
+    }
+    /// Whether a three-finger tap opens the ring, with no Fn and no click.
+    @Published var radialMenuThreeFinger: Bool {
+        didSet { defaults.set(radialMenuThreeFinger, forKey: "radialMenuThreeFinger") }
+    }
     /// What sits on the ring, clockwise from the top.
     @Published var radialMenuLayout: RadialMenuLayout {
         didSet {
@@ -197,6 +210,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "automationEnabled": false,
                                     "radialMenuEnabled": true,
                                     "radialMenuTranslucency": 0.55,
+                                    "radialMenuScale": 0.85,
+                                    "radialMenuThreeFinger": false,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
         notchEnabled = defaults.bool(forKey: "notchEnabled")
@@ -224,6 +239,9 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         automationEnabled = defaults.bool(forKey: "automationEnabled")
         radialMenuEnabled = defaults.bool(forKey: "radialMenuEnabled")
         radialMenuTranslucency = min(1, max(0, defaults.double(forKey: "radialMenuTranslucency")))
+        radialMenuScale = min(RadialMenuMetrics.maximumScale,
+                              max(RadialMenuMetrics.minimumScale, defaults.double(forKey: "radialMenuScale")))
+        radialMenuThreeFinger = defaults.bool(forKey: "radialMenuThreeFinger")
         // A ring that cannot be decoded is a ring with the default slices, not
         // an app that refuses to start.
         radialMenuLayout = defaults.data(forKey: "radialMenuLayout")

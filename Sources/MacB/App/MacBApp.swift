@@ -268,6 +268,7 @@ private final class Flag: @unchecked Sendable {
         // An older MacB could leave the macOS indicator helper stopped. Undo it
         // once, before anything else, so nobody is left without indicators.
         SystemHUDRepair.resumeIndicatorHelper()
+        buildMainMenu()
         buildMenu()
         hotKey.onPress = { [weak self] backwards in
             guard let self, self.preferences.switcherEnabled else { return }
@@ -378,6 +379,46 @@ private final class Flag: @unchecked Sendable {
         }
     }
 
+    /// The menu bar MacB never shows, which is the only reason ⌘V works.
+    ///
+    /// An accessory application has no menu bar on screen, so this was left out
+    /// — and text fields stopped taking ⌘C, ⌘V, ⌘X and ⌘A, because those are
+    /// not built into the text system. They are key equivalents on the standard
+    /// Edit menu, and a responder chain with no main menu has nothing to match
+    /// them against. Typing worked; pasting an API key did not, which is the one
+    /// field nobody types by hand.
+    ///
+    /// The items are never seen. They exist to be matched.
+    private func buildMainMenu() {
+        let main = NSMenu()
+
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Ayarlar ve izinler…", action: #selector(showSettings), keyEquivalent: ",")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Pencereyi gizle", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "MacB'den çık", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        main.addItem(appItem)
+
+        let editItem = NSMenuItem()
+        let edit = NSMenu(title: "Düzen")
+        edit.addItem(withTitle: "Geri al", action: Selector(("undo:")), keyEquivalent: "z")
+        let redo = edit.addItem(withTitle: "Yinele", action: Selector(("redo:")), keyEquivalent: "z")
+        redo.keyEquivalentModifierMask = [.command, .shift]
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Kes", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "Kopyala", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "Yapıştır", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "Sil", action: #selector(NSText.delete(_:)), keyEquivalent: "")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "Tümünü seç", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = edit
+        main.addItem(editItem)
+
+        NSApp.mainMenu = main
+    }
+
     private func buildMenu() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "rectangle.topthird.inset.filled", accessibilityDescription: "MacB")
@@ -425,6 +466,10 @@ private final class Flag: @unchecked Sendable {
         windowLayout.setEnabled(preferences.windowManagementEnabled)
         radialMenu.setLayout(preferences.radialMenuLayout)
         radialMenu.setTranslucency(preferences.radialMenuTranslucency)
+        radialMenu.setScale(preferences.radialMenuScale)
+        radialMenu.setThreeFingerTap(preferences.radialMenuThreeFinger
+                                     && preferences.radialMenuEnabled
+                                     && permissions.accessibility)
         radialMenu.setEnabled(preferences.radialMenuEnabled && permissions.accessibility)
         lid.setOpenAngle(preferences.lidHingeAngle)
         lid.setEnabled(preferences.lidHingeEnabled && preferences.notchEnabled)

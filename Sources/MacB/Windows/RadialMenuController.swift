@@ -31,6 +31,10 @@ import SwiftUI
     private var enabled = false
     private var layout = RadialMenuLayout.default
     private var translucency: Double = 0.55
+    private var metrics = RadialMenuMetrics()
+    /// Whether a three-finger tap opens the ring as well as Fn + a click.
+    private var threeFingerEnabled = false
+    private var tapRecogniser = ThreeFingerTap()
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
 
@@ -57,7 +61,13 @@ import SwiftUI
     func setEnabled(_ enabled: Bool) {
         guard enabled != self.enabled else { return }
         self.enabled = enabled
-        if enabled { install() } else { uninstall(); dismiss() }
+        if enabled {
+            install()
+        } else {
+            uninstall()
+            dismiss()
+            TrackpadContacts.shared.stop()
+        }
     }
 
     func setLayout(_ layout: RadialMenuLayout) {
@@ -69,6 +79,43 @@ import SwiftUI
     func setTranslucency(_ value: Double) {
         translucency = min(1, max(0, value))
         if isVisible { render() }
+    }
+
+    /// How big the ring is drawn. Takes effect the next time it opens, since
+    /// resizing a ring somebody is currently aiming at would move the target
+    /// under their hand.
+    func setScale(_ value: Double) {
+        metrics = RadialMenuMetrics(scale: value)
+    }
+
+    /// Whether a three-finger tap on the trackpad opens the ring too.
+    func setThreeFingerTap(_ enabled: Bool) {
+        guard enabled != threeFingerEnabled else { return }
+        threeFingerEnabled = enabled
+        tapRecogniser.reset()
+        guard enabled else { return TrackpadContacts.shared.stop() }
+        TrackpadContacts.shared.onFrame = { [weak self] fingers, time in
+            self?.trackpadFrame(fingers: fingers, at: time)
+        }
+        TrackpadContacts.shared.start()
+    }
+
+    /// One frame from the trackpad.
+    ///
+    /// The ring opens on a tap rather than on three fingers being down, so a
+    /// three-finger swipe — which macOS itself uses for spaces — is not
+    /// interrupted by a ring appearing under it halfway through.
+    private func trackpadFrame(fingers: Int, at time: Double) {
+        guard threeFingerEnabled, enabled, !isVisible else {
+            if isVisible { tapRecogniser.reset() }
+            return
+        }
+        guard tapRecogniser.frame(fingers: fingers, at: time) else { return }
+        // No button is down, so there is nothing to release: the ring goes
+        // straight into the state where it waits to be clicked.
+        guard beginIfWanted(at: NSEvent.mouseLocation) else { return }
+        isSticky = true
+        listenForEscape()
     }
 
     /// Somebody who asked the system for less transparency gets a solid ring:
@@ -131,7 +178,7 @@ import SwiftUI
         guard isVisible else { return }
         let offset = CGPoint(x: location.x - centre.x, y: location.y - centre.y)
         let next = RadialMenuGeometry.slice(dx: Double(offset.x), dy: Double(offset.y),
-                                            count: actions.count)
+                                            count: actions.count, deadZone: metrics.deadZone)
         guard next != selection else { return }
         selection = next
         // One tap of feedback per slice crossed, which is what makes a ring
@@ -181,7 +228,7 @@ import SwiftUI
     // MARK: - Window
 
     private func show(at location: CGPoint) {
-        let side = RadialMenuGeometry.outerRadius * 2
+        let side = metrics.side
         let screen = NSScreen.screens.first { NSMouseInRect(location, $0.frame, false) }
             ?? NSScreen.main ?? NSScreen.screens.first
         guard let screen else { return }
@@ -193,6 +240,7 @@ import SwiftUI
         centre = CGPoint(x: frame.midX, y: frame.midY)
 
         let window = panel ?? makePanel()
+        glass?.metrics = metrics
         window.setFrame(frame, display: false)
         presence = 0
         render()
@@ -224,13 +272,15 @@ import SwiftUI
         let container = NSView(frame: .zero)
         container.autoresizingMask = [.width, .height]
         let glass = RadialGlassView()
+        glass.metrics = metrics
         glass.material = .hudWindow
         glass.blendingMode = .behindWindow
         glass.state = .active
         glass.appearance = NSAppearance(named: .darkAqua)
         glass.autoresizingMask = [.width, .height]
         let host = NSHostingView(rootView: RadialMenuView(actions: [], selection: nil, presence: 0,
-                                                          translucency: translucency, isSolid: isSolid))
+                                                          metrics: metrics, translucency: translucency,
+                                                          isSolid: isSolid))
         host.autoresizingMask = [.width, .height]
         container.addSubview(glass)
         container.addSubview(host, positioned: .above, relativeTo: glass)
@@ -245,7 +295,7 @@ import SwiftUI
 
     private func render() {
         host?.rootView = RadialMenuView(actions: actions, selection: selection, presence: presence,
-                                        translucency: translucency, isSolid: isSolid)
+                                        metrics: metrics, translucency: translucency, isSolid: isSolid)
         // The frost thins with the slider, exactly as the island's does, and
         // steps out of the way entirely for Reduce Transparency.
         glass?.isHidden = isSolid

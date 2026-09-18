@@ -19,6 +19,8 @@ struct RadialMenuView: View {
     let selection: Int?
     /// 0 while the ring is arriving, 1 once it is there.
     let presence: Double
+    /// How big the ring is drawn.
+    let metrics: RadialMenuMetrics
     /// How much of the screen behind the ring comes through, 0 to 1.
     let translucency: Double
     /// Set when the system has been asked for less transparency, in which case
@@ -41,8 +43,7 @@ struct RadialMenuView: View {
             divider
             hub
         }
-        .frame(width: RadialMenuGeometry.outerRadius * 2,
-               height: RadialMenuGeometry.outerRadius * 2)
+        .frame(width: metrics.side, height: metrics.side)
         .scaleEffect(0.86 + 0.14 * presence)
         .opacity(presence)
         .allowsHitTesting(false)
@@ -75,15 +76,15 @@ struct RadialMenuView: View {
         let centre = -90 + Double(index) * step
         return AnnularSector(startAngle: .degrees(centre - step / 2 + gap / 2),
                              endAngle: .degrees(centre + step / 2 - gap / 2),
-                             innerRadius: RadialMenuGeometry.innerRadius,
-                             outerRadius: RadialMenuGeometry.outerRadius)
+                             innerRadius: metrics.innerRadius,
+                             outerRadius: metrics.outerRadius)
     }
 
     private func label(index: Int, action: RadialAction, isOn: Bool) -> some View {
         let centre = (-90 + Double(index) * step) * .pi / 180
-        let radius = (RadialMenuGeometry.innerRadius + RadialMenuGeometry.outerRadius) / 2
+        let radius = (metrics.innerRadius + metrics.outerRadius) / 2
         return Image(systemName: action.symbol)
-            .font(.system(size: 15, weight: isOn ? .semibold : .medium))
+            .font(.system(size: metrics.symbolSize, weight: isOn ? .semibold : .medium))
             .foregroundStyle(isOn ? Color.white : MacBDesign.IslandToken.Ink.primary)
             .offset(x: cos(centre) * radius, y: sin(centre) * radius)
             .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
@@ -94,8 +95,7 @@ struct RadialMenuView: View {
     private var divider: some View {
         Circle()
             .stroke(Color.white.opacity(0.08 + 0.08 * weight), lineWidth: 0.5)
-            .frame(width: RadialMenuGeometry.innerRadius * 2,
-                   height: RadialMenuGeometry.innerRadius * 2)
+            .frame(width: metrics.innerRadius * 2, height: metrics.innerRadius * 2)
     }
 
     /// The middle: the name of the thing about to happen, and nothing else.
@@ -116,7 +116,7 @@ struct RadialMenuView: View {
                     .shadow(color: .black.opacity(0.5), radius: 3)
             }
         }
-        .frame(width: RadialMenuGeometry.innerRadius * 1.6)
+        .frame(width: metrics.innerRadius * 1.7)
         .motion(MacBDesign.Motion.instant, value: selection)
     }
 }
@@ -145,6 +145,10 @@ struct AnnularSector: Shape {
 /// Same lesson as the island: this has to be a sibling of the hosting view in
 /// the window, not a layer inside the SwiftUI tree, or it samples nothing.
 final class RadialGlassView: NSVisualEffectView {
+    var metrics = RadialMenuMetrics() {
+        didSet { if metrics != oldValue { maskedSize = .zero; needsLayout = true } }
+    }
+
     private var maskedSize: CGSize = .zero
 
     override func layout() {
@@ -153,18 +157,15 @@ final class RadialGlassView: NSVisualEffectView {
         maskedSize = bounds.size
         let size = bounds.size
         guard size.width > 1, size.height > 1 else { return }
+        let outerRadius = metrics.outerRadius, innerRadius = metrics.innerRadius
         maskImage = NSImage(size: size, flipped: false) { rect in
             let centre = NSPoint(x: rect.midX, y: rect.midY)
             let outer = NSBezierPath(ovalIn: NSRect(
-                x: centre.x - RadialMenuGeometry.outerRadius,
-                y: centre.y - RadialMenuGeometry.outerRadius,
-                width: RadialMenuGeometry.outerRadius * 2,
-                height: RadialMenuGeometry.outerRadius * 2))
+                x: centre.x - outerRadius, y: centre.y - outerRadius,
+                width: outerRadius * 2, height: outerRadius * 2))
             let inner = NSBezierPath(ovalIn: NSRect(
-                x: centre.x - RadialMenuGeometry.innerRadius,
-                y: centre.y - RadialMenuGeometry.innerRadius,
-                width: RadialMenuGeometry.innerRadius * 2,
-                height: RadialMenuGeometry.innerRadius * 2))
+                x: centre.x - innerRadius, y: centre.y - innerRadius,
+                width: innerRadius * 2, height: innerRadius * 2))
             outer.append(inner.reversed)
             outer.windingRule = .evenOdd
             outer.fill()
