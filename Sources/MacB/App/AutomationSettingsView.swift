@@ -130,6 +130,7 @@ enum AutomationText {
         case .chargerConnected: return "Şarj takılınca"
         case .chargerDisconnected: return "Şarj çıkınca"
         case .batteryBelow(let percent): return "Pil %\(percent) altına inince"
+        case .chargedAbove(let percent): return "Şarjda %\(percent) olunca"
         case .mediaStarted: return "Müzik başlayınca"
         case .mediaStopped: return "Müzik durunca"
         case .timerFinished: return "Zamanlayıcı bitince"
@@ -196,10 +197,10 @@ struct AutomationRuleEditor: View {
         self.cancel = cancel
         _triggerKind = State(initialValue: TriggerKind(rule.trigger))
         _actionKind = State(initialValue: ActionKind(rule.action))
-        if case .batteryBelow(let percent) = rule.trigger {
-            _batteryPercent = State(initialValue: Double(percent))
-        } else {
-            _batteryPercent = State(initialValue: 20)
+        switch rule.trigger {
+        case .batteryBelow(let percent): _batteryPercent = State(initialValue: Double(percent))
+        case .chargedAbove(let percent): _batteryPercent = State(initialValue: Double(percent))
+        default: _batteryPercent = State(initialValue: 20)
         }
         switch rule.trigger {
         case .appLaunched(let identifier), .appQuit(let identifier):
@@ -220,7 +221,7 @@ struct AutomationRuleEditor: View {
 
     enum TriggerKind: String, CaseIterable, Identifiable {
         case lidOpened, lidClosing, chargerConnected, chargerDisconnected
-        case batteryBelow, mediaStarted, mediaStopped, timerFinished, appLaunched, appQuit
+        case batteryBelow, chargedAbove, mediaStarted, mediaStopped, timerFinished, appLaunched, appQuit
         var id: String { rawValue }
 
         init(_ trigger: AutomationTrigger) {
@@ -230,6 +231,7 @@ struct AutomationRuleEditor: View {
             case .chargerConnected: self = .chargerConnected
             case .chargerDisconnected: self = .chargerDisconnected
             case .batteryBelow: self = .batteryBelow
+            case .chargedAbove: self = .chargedAbove
             case .mediaStarted: self = .mediaStarted
             case .mediaStopped: self = .mediaStopped
             case .timerFinished: self = .timerFinished
@@ -245,6 +247,7 @@ struct AutomationRuleEditor: View {
             case .chargerConnected: return "Şarj takılınca"
             case .chargerDisconnected: return "Şarj çıkınca"
             case .batteryBelow: return "Pil belirli seviyenin altına inince"
+            case .chargedAbove: return "Şarjdayken belirli seviyeye gelince"
             case .mediaStarted: return "Müzik başlayınca"
             case .mediaStopped: return "Müzik durunca"
             case .timerFinished: return "Zamanlayıcı bitince"
@@ -288,6 +291,7 @@ struct AutomationRuleEditor: View {
         case .chargerConnected: return .chargerConnected
         case .chargerDisconnected: return .chargerDisconnected
         case .batteryBelow: return .batteryBelow(percent: Int(batteryPercent))
+        case .chargedAbove: return .chargedAbove(percent: Int(batteryPercent))
         case .mediaStarted: return .mediaStarted
         case .mediaStopped: return .mediaStopped
         case .timerFinished: return .timerFinished
@@ -326,12 +330,23 @@ struct AutomationRuleEditor: View {
                     ForEach(TriggerKind.allCases) { Text($0.title).tag($0) }
                 }
                 .labelsHidden().frame(maxWidth: 280)
+                // The two battery triggers live at opposite ends of the scale,
+                // so switching between them starts from a level that makes sense
+                // for the new one rather than one it cannot even hold.
+                .onChange(of: triggerKind) { _, kind in
+                    if kind == .chargedAbove, !AutomationTrigger.chargeRange.contains(Int(batteryPercent)) {
+                        batteryPercent = 80
+                    } else if kind == .batteryBelow, !AutomationTrigger.batteryRange.contains(Int(batteryPercent)) {
+                        batteryPercent = 20
+                    }
+                }
             }
-            if triggerKind == .batteryBelow {
+            if triggerKind == .batteryBelow || triggerKind == .chargedAbove {
+                let range = triggerKind == .chargedAbove ? AutomationTrigger.chargeRange : AutomationTrigger.batteryRange
                 labelled("Eşik") {
                     HStack(spacing: MacBDesign.Space.regular) {
                         Slider(value: $batteryPercent,
-                               in: Double(AutomationTrigger.batteryRange.lowerBound)...Double(AutomationTrigger.batteryRange.upperBound),
+                               in: Double(range.lowerBound)...Double(range.upperBound),
                                step: 5)
                             .frame(maxWidth: 200)
                         Text("%\(Int(batteryPercent))").font(.system(size: MacBDesign.TypeScale.body, weight: .semibold)).monospacedDigit()

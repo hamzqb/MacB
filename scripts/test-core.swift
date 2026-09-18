@@ -1245,6 +1245,28 @@ struct CoreTestRunner {
                 try expect(Set(body.keys) == ["model", "input", "stream", "store", "tools", "instructions"],
                            "Something other than the conversation was sent: \(body.keys.sorted())")
             }),
+            ("Automation: a charging rule speaks once on the way up, and again only after the next low charge", {
+                let rule = AutomationRule(title: "Şarj", trigger: .chargedAbove(percent: 80), action: .showNotice("Şarjı çıkar"))
+                var engine = AutomationEngine(rules: [rule])
+                let start = Date(timeIntervalSince1970: 1_000_000)
+                var fired = 0
+                for (offset, level) in [60, 70, 79, 80, 85, 95, 100, 100].enumerated() {
+                    fired += engine.actions(for: .chargingLevel(level),
+                                            now: start.addingTimeInterval(Double(offset) * 3600)).count
+                }
+                try expect(fired == 1, "The rule fired \(fired) times on one charge")
+                // Plugged in already full: nothing to say.
+                var full = AutomationEngine(rules: [rule])
+                try expect(full.actions(for: .chargingLevel(100), now: start).isEmpty,
+                           "A Mac plugged in at a hundred was told it had reached eighty")
+                // Discharge is not charging, so it cannot trip the rule.
+                try expect(engine.actions(for: .batteryLevel(90), now: start.addingTimeInterval(90_000)).isEmpty,
+                           "Running on battery fired a charging rule")
+                // Next time it is plugged in low, it may speak again.
+                _ = engine.actions(for: .chargingLevel(40), now: start.addingTimeInterval(100_000))
+                try expect(engine.actions(for: .chargingLevel(81), now: start.addingTimeInterval(110_000)).count == 1,
+                           "The next charge past eighty was ignored")
+            }),
             ("ScreenshotDetection: macOS's own mark decides, the name is only a fallback", {
                 try expect(ScreenshotDetection.isScreenshot(fileName: "Adsız.png", hasCaptureAttribute: true),
                            "A marked screenshot with an unusual name was missed")

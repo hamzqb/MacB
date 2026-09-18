@@ -137,7 +137,9 @@ import MacBCore
         }
         lastCharging = snapshot.isCharging
         if let percent = snapshot.batteryPercent {
-            handle(.batteryLevel(Int(percent.rounded())))
+            let level = Int(percent.rounded())
+            handle(.batteryLevel(level))
+            if snapshot.isCharging { handle(.chargingLevel(level)) }
         }
     }
 

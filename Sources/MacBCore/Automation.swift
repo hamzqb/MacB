@@ -11,6 +11,8 @@ public enum AutomationEvent: Equatable, Sendable {
     case chargerDisconnected
     /// The current charge, offered on every reading. Rules decide what is low.
     case batteryLevel(Int)
+    /// The current charge, offered on every reading taken while plugged in.
+    case chargingLevel(Int)
     case mediaStarted
     case mediaStopped
     case timerFinished
@@ -25,6 +27,13 @@ public enum AutomationTrigger: Codable, Equatable, Hashable, Sendable {
     case chargerConnected
     case chargerDisconnected
     case batteryBelow(percent: Int)
+    /// Charging has carried the battery past a level.
+    ///
+    /// The habit this exists for: most people leave a MacBook on the charger
+    /// all day, and being told once, at eighty, is the whole of what MacB can
+    /// usefully do about it. It cannot stop the charge — that belongs to the
+    /// system — only say so.
+    case chargedAbove(percent: Int)
     case mediaStarted
     case mediaStopped
     case timerFinished
@@ -36,6 +45,9 @@ public enum AutomationTrigger: Codable, Equatable, Hashable, Sendable {
     /// Above ninety a rule would fire almost permanently, and below five the
     /// Mac is about to sleep and will not get to run anything.
     public static let batteryRange = 5...90
+    /// The levels a charging rule may wait for. Below fifty it would fire on
+    /// almost every plug-in.
+    public static let chargeRange = 50...100
 }
 
 /// What a rule does about it.
@@ -164,6 +176,14 @@ public struct AutomationEngine: Equatable, Sendable {
             // Fires on the way down, once, and only becomes possible again
             // after the battery has been back above the line.
             guard level < threshold else { armed.insert(rule.id); return false }
+            guard armed.contains(rule.id) else { return false }
+            armed.remove(rule.id)
+            return true
+        case (.chargedAbove(let threshold), .chargingLevel(let level)):
+            // Fires once on the way up, and becomes possible again only after a
+            // charge has been seen below the line — the next time it is plugged
+            // in low, not every reading while it sits at a hundred.
+            guard level >= threshold else { armed.insert(rule.id); return false }
             guard armed.contains(rule.id) else { return false }
             armed.remove(rule.id)
             return true
