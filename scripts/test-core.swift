@@ -1245,6 +1245,27 @@ struct CoreTestRunner {
                 try expect(Set(body.keys) == ["model", "input", "stream", "store", "tools", "instructions"],
                            "Something other than the conversation was sent: \(body.keys.sorted())")
             }),
+            ("ScreenshotDetection: macOS's own mark decides, the name is only a fallback", {
+                try expect(ScreenshotDetection.isScreenshot(fileName: "Adsız.png", hasCaptureAttribute: true),
+                           "A marked screenshot with an unusual name was missed")
+                try expect(ScreenshotDetection.isScreenshot(fileName: "Ekran Resmi 2026-09-18 10.12.03.png", hasCaptureAttribute: nil),
+                           "A Turkish screenshot name was not recognised")
+                try expect(ScreenshotDetection.isScreenshot(fileName: "Screenshot 2026-09-18 at 10.12.03.png", hasCaptureAttribute: nil),
+                           "An English screenshot name was not recognised")
+                try expect(!ScreenshotDetection.isScreenshot(fileName: ".Ekran Resmi 2026.png", hasCaptureAttribute: true),
+                           "The half-written temporary file was taken")
+                try expect(!ScreenshotDetection.isScreenshot(fileName: "tatil.png", hasCaptureAttribute: nil),
+                           "An ordinary picture was taken for a screenshot")
+                try expect(!ScreenshotDetection.isScreenshot(fileName: "Screenshot notlar.txt", hasCaptureAttribute: nil),
+                           "A text file was taken for a screenshot")
+                let home = URL(fileURLWithPath: "/Users/x")
+                try expect(ScreenshotDetection.folder(configured: nil, home: home, exists: { _ in true }).path == "/Users/x/Desktop",
+                           "The default folder was not the Desktop")
+                try expect(ScreenshotDetection.folder(configured: "/Users/x/Pics", home: home, exists: { _ in false }).path == "/Users/x/Desktop",
+                           "A configured folder that no longer exists was watched")
+                try expect(ScreenshotDetection.folder(configured: "/Users/x/Pics", home: home, exists: { _ in true }).path == "/Users/x/Pics",
+                           "The user's chosen folder was ignored")
+            }),
             ("AIKeyFormat: an obviously broken key is caught before it is stored", {
                 try expect(AIKeyFormat.looksLikeKey("sk-" + String(repeating: "a", count: 40)),
                            "A real-shaped key was rejected")

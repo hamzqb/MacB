@@ -1126,7 +1126,24 @@ struct SettingsView: View {
             section("Raf yardımcıları", "tray") {
                 settingToggle("Son dosyalar", detail: "Downloads, Desktop ve Documents içinden son dosyaları öner. macOS klasör erişimi isteyebilir.", isOn: $preferences.recentFilesEnabled)
                 rowDivider
+                settingToggle("Ekran görüntüleri rafa", detail: "Aldığın her ekran görüntüsü rafa düşer, oradan sürükleyip istediğin yere bırakırsın. Dosya yerinde kalır; MacB kopyalamaz, taşımaz. macOS klasör erişimi isteyebilir.", isOn: $preferences.screenshotShelfEnabled)
+                rowDivider
                 settingToggle("Mini pano rafı", detail: "Son kopyaladığın metinleri Pano görünümünde tut.", isOn: $preferences.clipboardShelfEnabled)
+                if preferences.clipboardShelfEnabled {
+                    HStack {
+                        Text("Geçmiş uzunluğu")
+                            .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                        Spacer()
+                        Picker("", selection: $preferences.clipboardHistoryLimit) {
+                            ForEach(Preferences.clipboardHistoryLimits, id: \.self) { Text("\($0) öğe").tag($0) }
+                        }
+                        .labelsHidden()
+                        .fixedSize()
+                    }
+                    settingToggle("Geçmişi yeniden başlatınca da tut",
+                                  detail: "Kapalıyken yalnızca yıldızladıkların kalır. Açıkken metin, bağlantı, renk ve dosya kayıtları diske yazılır — görseller hiçbir zaman. Şifre yöneticilerinden kopyalananlar zaten hiç tutulmaz. Kapatınca kayıtlı geçmiş boşaltılır.",
+                                  isOn: $preferences.clipboardKeepsHistory)
+                }
                 rowDivider
                 settingToggle("İndirme göstergesi", detail: "Downloads klasöründeki yeni dosyaları göster. macOS klasör erişimi isteyebilir.", isOn: $preferences.fileActivityEnabled)
             }

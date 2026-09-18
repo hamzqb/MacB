@@ -110,6 +110,19 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var smartNotchEnabled: Bool { didSet { defaults.set(smartNotchEnabled, forKey: "smartNotchEnabled") } }
     @Published var favoriteWindowsEnabled: Bool { didSet { defaults.set(favoriteWindowsEnabled, forKey: "favoriteWindowsEnabled") } }
     @Published var recentFilesEnabled: Bool { didSet { defaults.set(recentFilesEnabled, forKey: "recentFilesEnabled") } }
+    /// Whether the clipboard history survives a restart. Off unless chosen.
+    @Published var clipboardKeepsHistory: Bool { didSet { defaults.set(clipboardKeepsHistory, forKey: "clipboardKeepsHistory") } }
+    /// How many clipboard entries are kept, favourites aside.
+    @Published var clipboardHistoryLimit: Int {
+        didSet {
+            let clamped = Self.clipboardHistoryLimits.contains(clipboardHistoryLimit) ? clipboardHistoryLimit : 30
+            if clamped != clipboardHistoryLimit { clipboardHistoryLimit = clamped; return }
+            defaults.set(clamped, forKey: "clipboardHistoryLimit")
+        }
+    }
+    static let clipboardHistoryLimits = [30, 100, 250]
+    /// Whether new screenshots are put on the shelf as they are taken.
+    @Published var screenshotShelfEnabled: Bool { didSet { defaults.set(screenshotShelfEnabled, forKey: "screenshotShelfEnabled") } }
     @Published var peekEnabled: Bool { didSet { defaults.set(peekEnabled, forKey: "peekEnabled") } }
     @Published var groupedWindowsEnabled: Bool { didSet { defaults.set(groupedWindowsEnabled, forKey: "groupedWindowsEnabled") } }
     @Published var clipboardShelfEnabled: Bool { didSet { defaults.set(clipboardShelfEnabled, forKey: "clipboardShelfEnabled") } }
@@ -212,6 +225,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "compactIndicators": true, "animationsEnabled": true,
                                     "smartNotchEnabled": true, "favoriteWindowsEnabled": true,
                                     "recentFilesEnabled": false, "peekEnabled": true,
+                                    "screenshotShelfEnabled": false,
+                                    "clipboardKeepsHistory": false, "clipboardHistoryLimit": 30,
                                     "groupedWindowsEnabled": true,
                                     "clipboardShelfEnabled": true, "focusModeEnabled": false,
                                     "fileActivityEnabled": false,
@@ -240,6 +255,10 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         smartNotchEnabled = defaults.bool(forKey: "smartNotchEnabled")
         favoriteWindowsEnabled = defaults.bool(forKey: "favoriteWindowsEnabled")
         recentFilesEnabled = defaults.bool(forKey: "recentFilesEnabled")
+        screenshotShelfEnabled = defaults.bool(forKey: "screenshotShelfEnabled")
+        clipboardKeepsHistory = defaults.bool(forKey: "clipboardKeepsHistory")
+        let storedLimit = defaults.integer(forKey: "clipboardHistoryLimit")
+        clipboardHistoryLimit = Preferences.clipboardHistoryLimits.contains(storedLimit) ? storedLimit : 30
         peekEnabled = defaults.bool(forKey: "peekEnabled")
         groupedWindowsEnabled = defaults.bool(forKey: "groupedWindowsEnabled")
         clipboardShelfEnabled = defaults.bool(forKey: "clipboardShelfEnabled")

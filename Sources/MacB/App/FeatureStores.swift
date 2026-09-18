@@ -135,10 +135,27 @@ struct ClipboardShelfItem: Identifiable, Codable {
     @Published private(set) var items: [ClipboardShelfItem] = []
     @Published var errorMessage: String?
     var favorites: [ClipboardShelfItem] { items.filter(\.isFavorite) }
-    var maximumHistoryCount = 30
+    var maximumHistoryCount = 30 { didSet { if maximumHistoryCount != oldValue { trimHistory(); saveHistoryIfKept() } } }
+    /// Whether the history outlives a restart, rather than only the favourites.
+    ///
+    /// Off by default. A clipboard history is whatever somebody copied, which
+    /// over a week is an address, a message, half a contract; keeping that on
+    /// disk is a choice they have to make, not one MacB makes for them. Images
+    /// are never written — they are the largest thing on a clipboard and the
+    /// most likely to be a screenshot of something private — so a kept history
+    /// is text, links, colours and file references.
+    var keepsHistory = false {
+        didSet {
+            guard keepsHistory != oldValue else { return }
+            // Read before writing: switching this on at launch must pick the
+            // stored history up, not overwrite it with the empty one in memory.
+            if keepsHistory { restoreHistory(); saveHistoryIfKept() } else { forgetStoredHistory() }
+        }
+    }
     private var timer: Timer?
     private var lastChangeCount = NSPasteboard.general.changeCount
     private let fileURL: URL
+    private var historyURL: URL { fileURL.deletingLastPathComponent().appendingPathComponent("clipboard-history.json") }
     private var storageReadable = true
     var enabled = true { didSet { enabled ? start() : stop() } }
 
@@ -183,6 +200,38 @@ struct ClipboardShelfItem: Identifiable, Codable {
         guard !items.contains(where: { equivalent($0, item) }) else { return }
         items.insert(item, at: 0)
         trimHistory()
+        saveHistoryIfKept()
+    }
+
+    /// Reads a kept history back in, under the favourites, after a restart.
+    private func restoreHistory() {
+        guard keepsHistory, let data = try? Data(contentsOf: historyURL),
+              let stored = try? JSONDecoder().decode([ClipboardShelfItem].self, from: data) else { return }
+        let fresh = stored.filter { entry in !items.contains(where: { equivalent($0, entry) }) }
+        items.append(contentsOf: fresh)
+        trimHistory()
+    }
+
+    private func saveHistoryIfKept() {
+        guard keepsHistory else { return }
+        let history = items.filter { !$0.isFavorite && $0.kind != .image }
+        do {
+            try FileManager.default.createDirectory(at: historyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(history).write(to: historyURL, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: historyURL.path)
+        } catch {
+            errorMessage = "Pano geçmişi kaydedilemedi: \(error.localizedDescription)"
+        }
+    }
+
+    /// Empties the kept history when keeping it is switched off.
+    ///
+    /// Overwritten with nothing rather than the file being moved anywhere: the
+    /// point of switching this off is that the copied text stops existing on
+    /// disk, and moving it to the Trash would only move where it sits.
+    private func forgetStoredHistory() {
+        guard FileManager.default.fileExists(atPath: historyURL.path) else { return }
+        try? Data("[]".utf8).write(to: historyURL, options: .atomic)
     }
 
     func copy(_ item: ClipboardShelfItem) {
@@ -239,6 +288,7 @@ struct ClipboardShelfItem: Identifiable, Codable {
         let updated = items.filter { $0.id != item.id }
         if item.isFavorite && !saveFavorites(updated) { return }
         items = updated
+        saveHistoryIfKept()
     }
 
     private func trimHistory() {

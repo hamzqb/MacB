@@ -207,6 +207,7 @@ private final class Flag: @unchecked Sendable {
     private let recentTargets = RecentTargetStore()
     private let hotKey = HotKeyController()
     private let radialMenu = RadialMenuController()
+    private let screenshots = ScreenshotWatcher()
     private lazy var windowLayout = WindowLayoutService(preferences: preferences)
     private let aiActivity = AIActivityService()
     private let systemMonitor = SystemMonitorService()
@@ -491,6 +492,14 @@ private final class Flag: @unchecked Sendable {
         automation.notice = { [weak self] text in self?.notch.showRuleNotice(text) }
         automation.setEnabled(preferences.automationEnabled && preferences.notchEnabled)
         recentFiles.enabled = preferences.recentFilesEnabled
+        screenshots.onScreenshot = { [weak self] url in
+            guard let self else { return }
+            self.shelf.add(urls: [url])
+            self.notch.showRuleNotice("Ekran görüntüsü rafta")
+        }
+        screenshots.setEnabled(preferences.screenshotShelfEnabled)
+        clipboardShelf.maximumHistoryCount = preferences.clipboardHistoryLimit
+        clipboardShelf.keepsHistory = preferences.clipboardKeepsHistory
         clipboardShelf.enabled = preferences.clipboardShelfEnabled
         fileActivity.enabled = preferences.fileActivityEnabled
         layoutMenuItem?.isEnabled = preferences.windowManagementEnabled && permissions.accessibility
