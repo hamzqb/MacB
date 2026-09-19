@@ -251,6 +251,22 @@ private final class Flag: @unchecked Sendable {
     private let translator = OfflineTranslator()
     private let keepAwake = KeepAwakeService.shared
     private let arrangements = WindowArrangementService()
+    private let jarvisHotKey = JarvisHotKey()
+    private let jarvisMemory = JarvisMemoryStore()
+    private lazy var jarvis = JarvisSession(
+        keys: aiKey, memory: jarvisMemory,
+        voice: { [weak self] in JarvisVoice(rawValue: self?.preferences.jarvisVoice ?? "") ?? .cedar },
+        model: { [weak self] in self?.preferences.jarvisModel ?? JarvisProtocol.defaultModel })
+    private lazy var jarvisTools = MacBJarvisToolbox(
+        keys: aiKey, searchModel: { [weak self] in self?.preferences.aiModel ?? Preferences.defaultAIModel },
+        media: media, timer: islandTimer, windowLayout: windowLayout, arrangements: arrangements, note: quickNote,
+        selection: selectedText, systemMonitor: systemMonitor, weather: weather, aiActivity: aiActivity,
+        memory: jarvisMemory,
+        notify: { [weak self] symbol, message in self?.notch.notify(symbol: symbol, message: message) })
+    private lazy var jarvisPanel = JarvisPanelController(session: jarvis) { [weak self] in
+        UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
+        self?.showSettings()
+    }
     private lazy var aiPanel = AIPanelController(assistant: assistant, speech: speech,
                                                  selection: selectedText) { [weak self] in
         UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
@@ -313,6 +329,8 @@ private final class Flag: @unchecked Sendable {
             }
         }
         radialMenu.hasAccessibility = { [weak self] in self?.permissions.accessibility ?? false }
+        jarvis.toolbox = jarvisTools
+        jarvisHotKey.onPress = { [weak self] in self?.toggleJarvis() }
         switcher.onWillOpen = { [weak self] in
             self?.dock.dismiss()
             self?.dock.enabled = false
@@ -481,6 +499,8 @@ private final class Flag: @unchecked Sendable {
         menu.setSubmenu(arrangementMenu, for: menu.addItem(withTitle: "Pencere düzenleri", action: nil, keyEquivalent: ""))
         let ask = menu.addItem(withTitle: "Yapay zekâya sor…", action: #selector(openAIPanel), keyEquivalent: "")
         ask.target = self
+        let talk = menu.addItem(withTitle: "Jarvis ile konuş (\(JarvisHotKey.displayKeys))", action: #selector(toggleJarvis), keyEquivalent: "")
+        talk.target = self
         let awakeMenu = NSMenu(title: "Uyanık tut")
         awakeMenu.delegate = self
         keepAwakeMenu = awakeMenu
@@ -637,6 +657,7 @@ private final class Flag: @unchecked Sendable {
                                      && preferences.radialMenuEnabled
                                      && permissions.accessibility)
         radialMenu.setEnabled(preferences.radialMenuEnabled && permissions.accessibility)
+        jarvisHotKey.setEnabled(preferences.jarvisHotKeyEnabled)
         lid.setOpenAngle(preferences.lidHingeAngle)
         lid.setEnabled(preferences.lidHingeEnabled && preferences.notchEnabled)
         automation.notice = { [weak self] text in self?.notch.showRuleNotice(text) }
@@ -680,6 +701,7 @@ private final class Flag: @unchecked Sendable {
         case .windowNextDisplay: windowLayout.perform(.nextDisplay)
         case .settings: showSettings()
         case .askAI: aiPanel.show()
+        case .jarvis: toggleJarvis()
         case .voiceAsk: aiPanel.showListening()
         case .summarizeSelection: runOnSelection(.summarize)
         case .fixSelection: runOnSelection(.fix)
@@ -706,6 +728,10 @@ private final class Flag: @unchecked Sendable {
         DispatchQueue.main.asyncAfter(deadline: .now() + (turnedOn ? 0.35 : 0.12)) {
             NotificationCenter.default.post(name: .macBFocusQuickNote, object: nil)
         }
+    }
+
+    @objc private func toggleJarvis() {
+        if jarvisPanel.isVisible { jarvisPanel.close() } else { aiPanel.close(); jarvisPanel.show() }
     }
 
     private func openIsland(showing content: NotchContent) {
@@ -788,6 +814,7 @@ private final class Flag: @unchecked Sendable {
             updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher, automation: automation,
             loginItem: loginItem, aiKey: aiKey, arrangements: arrangements, keepAwake: keepAwake,
+            jarvisHotKeyFailed: jarvisHotKey.failed, jarvisMemory: jarvisMemory,
             openPanel: { [weak self] in self?.openNotch() }))
     }
 
@@ -858,6 +885,7 @@ private final class Flag: @unchecked Sendable {
 
     private func suspendServices() {
         speech.cancel()
+        jarvisPanel.close()
         switcher.dismiss()
         dock.stop()
         notch.stop()
@@ -889,6 +917,7 @@ private final class Flag: @unchecked Sendable {
 
     func applicationWillTerminate(_ notification: Notification) {
         speech.cancel()
+        jarvis.stop()
         keepAwake.stop()
         hotKey.unregister()
         windowLayout.stop()

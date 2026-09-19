@@ -64,6 +64,8 @@ struct SettingsView: View {
     @ObservedObject var aiKey: AIKeyStore
     @ObservedObject var arrangements: WindowArrangementService
     @ObservedObject var keepAwake: KeepAwakeService
+    var jarvisHotKeyFailed = false
+    @ObservedObject var jarvisMemory: JarvisMemoryStore
     var openPanel: () -> Void
     /// The name typed for the next saved window arrangement.
     @State private var arrangementName = ""
@@ -305,6 +307,59 @@ struct SettingsView: View {
                     .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 message("Anahtarını bir yere yapıştırdıysan (sohbet, not, ekran görüntüsü) onu iptal et ve yenisini üret. Sızmış bir anahtar senin faturana çalışır.", warning: true)
+            }
+            section("Jarvis", "person.wave.2") {
+                Text("Canlı sesli asistan: konuşursun, konuşarak cevap verir, lafını bölebilirsin. İnternette araştırır, uygulama açar, müziği ve sesi yönetir, zamanlayıcı kurar, takvimine bakar, istersen ekranına bakıp okur.")
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                settingToggle("\(JarvisHotKey.displayKeys) ile aç", detail: "Halkadaki Jarvis dilimi ve menüdeki \u{201C}Jarvis ile konuş\u{201D} her zaman çalışır.",
+                              isOn: $preferences.jarvisHotKeyEnabled)
+                if jarvisHotKeyFailed {
+                    message("\(JarvisHotKey.displayKeys) başka bir uygulama tarafından kullanılıyor.", warning: true)
+                }
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Text("Ses").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Ses", selection: $preferences.jarvisVoice) {
+                        ForEach(JarvisVoice.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                    }
+                    .labelsHidden().fixedSize()
+                }
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Text("Model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    TextField(JarvisProtocol.defaultModel, text: $preferences.jarvisModel)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Jarvis modeli")
+                    Button("Varsayılan") { preferences.jarvisModel = JarvisProtocol.defaultModel }
+                }
+                message("Jarvis açıkken mikrofon sesi canlı olarak OpenAI'ye gider (Sesle sor'dan farkı bu). Kaydedilmez; panel kapanınca ya da 90 saniye sessiz kalınca bağlantı kapanır. Ekran görüntüsü ve takvime ekleme her seferinde onayını ister.")
+                message("Canlı ses ücretlidir: yaklaşık dakikası birkaç sent, uzun konuşmada daha fazla.", warning: true)
+                message("Ekrandan, seçimden ya da internetten bir şey okuduktan sonra Jarvis bir şey açmak, panoya koymak ya da not almak isterse önce sana sorar. Böylece bir sayfadaki yazı onu yönlendiremez.")
+                rowDivider
+                HStack {
+                    Text("Hafıza (\(jarvisMemory.facts.count))").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer()
+                    Button("Dosyayı göster") {
+                        NSWorkspace.shared.activateFileViewerSelecting([jarvisMemory.fileURL])
+                    }
+                    .disabled(jarvisMemory.facts.isEmpty)
+                    Button("Hepsini unut", role: .destructive) { jarvisMemory.removeAll() }
+                        .disabled(jarvisMemory.facts.isEmpty)
+                }
+                if jarvisMemory.facts.isEmpty {
+                    message("Jarvis'e \u{201C}bunu aklında tut\u{201D} dediğin şeyler burada durur ve her konuşmada ona hatırlatılır.")
+                } else {
+                    ForEach(Array(jarvisMemory.facts.enumerated()), id: \.offset) { index, fact in
+                        HStack(alignment: .top, spacing: MacBDesign.Space.regular) {
+                            Text(fact).font(.system(size: MacBDesign.TypeScale.caption))
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 8)
+                            Button { jarvisMemory.remove(at: index) } label: { Image(systemName: "minus.circle") }
+                                .buttonStyle(.plain).foregroundStyle(MacBDesign.muted)
+                                .accessibilityLabel("Bunu unut: \(fact)")
+                        }
+                    }
+                }
             }
             section("Seçili metin ve ses", "text.line.3.summary") {
                 Text("Halkaya Seçimi özetle, Seçimi düzelt, Seçimi çevir ve Sesle sor dilimlerini ekleyebilirsin. Sonuç panele gelir ve panoya kopyalanır; uygulama izin veriyorsa seçimin yerine de konabilir.")

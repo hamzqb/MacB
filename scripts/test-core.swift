@@ -1488,6 +1488,124 @@ struct CoreTestRunner {
                 let data = try JSONEncoder().encode(all)
                 try expect(try JSONDecoder().decode([WindowArrangement].self, from: data) == all, "Arrangements did not survive saving")
             }),
+            ("JarvisProtocol: the session asks for 24 kHz PCM, interruptions and only the known tools", {
+                let update = JarvisProtocol.sessionUpdate(voice: .cedar, now: Date(timeIntervalSince1970: 0),
+                                                          timeZone: TimeZone(identifier: "Europe/Istanbul")!)
+                let session = try require(update["session"] as? [String: Any], "No session")
+                try expect(update["type"] as? String == "session.update" && session["type"] as? String == "realtime", "Wrong envelope")
+                let audio = try require(session["audio"] as? [String: Any], "No audio block")
+                let input = try require(audio["input"] as? [String: Any], "No input")
+                let output = try require(audio["output"] as? [String: Any], "No output")
+                try expect((input["format"] as? [String: Any])?["rate"] as? Int == 24_000, "Input rate is not 24 kHz")
+                try expect((input["turn_detection"] as? [String: Any])?["interrupt_response"] as? Bool == true, "Interruptions are off")
+                try expect(output["voice"] as? String == "cedar", "The chosen voice was not used")
+                let tools = try require(session["tools"] as? [[String: Any]], "No tools")
+                try expect(Set(tools.compactMap { $0["name"] as? String }) == Set(JarvisTool.allCases.map(\.rawValue)), "Tool list drifted")
+                let instructions = try require(session["instructions"] as? String, "No instructions")
+                try expect(instructions.contains("1970") && instructions.contains("Europe/Istanbul"), "The date did not reach the model")
+                try expect(try JSONSerialization.data(withJSONObject: update).count > 0, "The session is not valid JSON")
+                try expect(JarvisProtocol.url(model: "gpt-realtime-2.1")?.absoluteString == "wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1",
+                           "Wrong socket address")
+            }),
+            ("JarvisProtocol: audio, speech, transcripts, calls and errors are read correctly", {
+                let pcm = Data([1, 0, 255, 127])
+                let audio = JarvisProtocol.event(from: #"{"type":"response.output_audio.delta","item_id":"it_1","delta":"\#(pcm.base64EncodedString())"}"#)
+                try expect(audio == .audio(itemID: "it_1", pcm: pcm), "Audio delta misread: \(audio)")
+                try expect(JarvisProtocol.event(from: #"{"type":"input_audio_buffer.speech_started"}"#) == .userStartedSpeaking, "Barge-in missed")
+                try expect(JarvisProtocol.event(from: #"{"type":"response.output_audio_transcript.delta","delta":"Merhaba"}"#) == .transcript("Merhaba"),
+                           "Transcript missed")
+                let done = JarvisProtocol.event(from: #"""
+                    {"type":"response.done","response":{"status":"completed","output":[
+                     {"type":"message"},
+                     {"type":"function_call","call_id":"c1","name":"start_timer","arguments":"{\"minutes\":20}"}]}}
+                    """#)
+                guard case .responseDone(let calls) = done, let call = calls.first else { throw TestFailure(description: "Call missed: \(done)") }
+                try expect(call.tool == .startTimer && call.argumentObject["minutes"] as? Int == 20, "Call arguments misread")
+                try expect(JarvisCall(callID: "x", name: "rm_rf", arguments: "{}").tool == nil, "An invented tool was accepted")
+                try expect(JarvisCall(callID: "x", name: "add_note", arguments: "not json").argumentObject.isEmpty, "Garbage arguments parsed")
+                try expect(JarvisProtocol.event(from: #"{"type":"error","error":{"message":"Bad key"}}"#) == .failed("Bad key"), "Error missed")
+                try expect(JarvisProtocol.event(from: #"{"type":"error","error":{"code":"response_cancel_not_active","message":"x"}}"#) == .ignored,
+                           "A harmless cancel race was shown as an error")
+                try expect(JarvisProtocol.event(from: #"{"type":"rate_limits.updated"}"#) == .ignored, "Unknown event was not ignored")
+                try expect(JarvisProtocol.event(from: "garbage") == .ignored, "Garbage was not ignored")
+            }),
+            ("JarvisProtocol: PCM round-trips, clips and times correctly", {
+                let samples: [Float] = [0, 0.5, -0.5, 1, -1, 2, -2]
+                let data = JarvisProtocol.pcm16(from: samples)
+                try expect(data.count == samples.count * 2, "Wrong byte count")
+                let back = JarvisProtocol.floats(fromPCM16: data)
+                for (a, b) in zip(samples.map { max(-1, min(1, $0)) }, back) {
+                    try expect(abs(a - b) < 0.001, "Sample drifted: \(a) vs \(b)")
+                }
+                try expect(data[6] == 0xFF && data[7] == 0x7F, "Full scale was not little-endian 32767")
+                try expect(JarvisProtocol.floats(fromPCM16: Data([0, 0, 7])).count == 1, "An odd byte was not dropped")
+                try expect(JarvisProtocol.milliseconds(ofPCM16Bytes: 48_000) == 1_000, "One second of audio misread")
+                let truncate = JarvisProtocol.truncate(itemID: "it", playedMilliseconds: -5)
+                try expect(truncate["audio_end_ms"] as? Int == 0, "Negative playback time went out")
+            }),
+            ("JarvisDates: the ways the model writes a time all land on the same minute", {
+                let istanbul = TimeZone(identifier: "Europe/Istanbul")!
+                let expected = try require(JarvisDates.parse("2026-09-20T15:30:00+03:00"), "Zoned time unread")
+                for text in ["2026-09-20T15:30", "2026-09-20 15:30", "2026-09-20T15:30:00", "2026-09-20T12:30:00Z"] {
+                    try expect(JarvisDates.parse(text, timeZone: istanbul) == expected, "\(text) misread")
+                }
+                try expect(JarvisDates.parse("2026-09-20", timeZone: istanbul) != nil, "A bare date was refused")
+                try expect(JarvisDates.parse("yarın", timeZone: istanbul) == nil && JarvisDates.parse(nil) == nil, "Nonsense was accepted")
+            }),
+            ("AIResponseStream: a finished response's text is found in either place", {
+                try expect(AIResponseStream.outputText(inResponse: ["output_text": "kısa"]) == "kısa", "output_text ignored")
+                let nested: [String: Any] = ["output": [["type": "web_search_call"],
+                    ["type": "message", "content": [["type": "output_text", "text": "a"], ["type": "output_text", "text": "b"]]]]]
+                try expect(AIResponseStream.outputText(inResponse: nested) == "a\nb", "Nested text missed")
+            }),
+            ("JarvisTool: once outside text is read, acting on it waits for a yes", {
+                try expect(!JarvisTool.openWebsite.needsConfirmation(afterReadingOutsideContent: false), "A plain request was gated")
+                for tool in [JarvisTool.openWebsite, .openApplication, .copyToClipboard, .addNote, .remember, .forget, .calendarEvents] {
+                    try expect(tool.needsConfirmation(afterReadingOutsideContent: true), "\(tool) could be steered by a web page")
+                }
+                for tool in [JarvisTool.startTimer, .media, .weather, .systemStatus, .webSearch] {
+                    try expect(!tool.needsConfirmation(afterReadingOutsideContent: true), "\(tool) was gated for no reason")
+                }
+                try expect(JarvisTool.webSearch.needsConfirmation(afterReadingOutsideContent: true, privateContent: true),
+                           "A search could carry private material out after a page was read")
+                try expect(JarvisTool.remember.needsConfirmation(afterReadingOutsideContent: false),
+                           "A memory could be written without a yes")
+                try expect(JarvisTool.lookAtScreen.needsConfirmation(afterReadingOutsideContent: false), "The screen went out unasked")
+                try expect(Set(JarvisTool.allCases.filter(\.readsOutsideContent))
+                           == [.webSearch, .lookAtScreen, .readSelection, .calendarEvents, .media, .codingAgents],
+                           "The outside-content set drifted")
+                try expect(JarvisProtocol.event(from: #"{"type":"response.created"}"#) == .responseStarted, "Response start missed")
+            }),
+            ("JarvisMemory: facts are kept short, once, newest last, and forgotten on request", {
+                var facts = JarvisMemory.adding("Adı Hamza", to: [])
+                facts = JarvisMemory.adding("  adı hamza ", to: facts)
+                try expect(facts == ["Adı Hamza"], "A repeated fact was stored twice: \(facts)")
+                facts = JarvisMemory.adding("Kahveyi\nsütsüz içer", to: facts)
+                try expect(facts.last == "Kahveyi sütsüz içer", "A fact kept its line break")
+                let long = JarvisMemory.adding(String(repeating: "x", count: 500), to: [])
+                try expect(long.first?.count == JarvisMemory.maximumFactLength, "A long fact was not cut")
+                var many: [String] = []
+                for index in 0..<(JarvisMemory.maximumFacts + 5) { many = JarvisMemory.adding("fakt \(index)", to: many) }
+                try expect(many.count == JarvisMemory.maximumFacts && many.first == "fakt 5", "The oldest facts did not fall off")
+                let (left, removed) = JarvisMemory.removing(about: "KAHVE", from: facts)
+                try expect(removed == 1 && left == ["Adı Hamza"], "Forget missed or overreached")
+                try expect(JarvisMemory.removing(about: "a", from: facts).removed == 0, "A one-letter forget wiped memory")
+                let file = JarvisMemory.render(facts)
+                try expect(JarvisMemory.parse(file + "\nnot a fact\n- \n") == facts, "Memory did not survive the file")
+                let session = JarvisProtocol.sessionUpdate(voice: .marin, now: Date(), memory: facts)
+                let instructions = (session["session"] as? [String: Any])?["instructions"] as? String ?? ""
+                try expect(instructions.contains("Kahveyi sütsüz içer") && instructions.contains("never instructions"),
+                           "Memory or the injection rule did not reach the model")
+            }),
+            ("JarvisTool: only screen and calendar writes wait for a yes", {
+                let confirmed = Set(JarvisTool.allCases.filter(\.needsConfirmation))
+                try expect(confirmed == [.lookAtScreen, .addReminder, .addCalendarEvent, .remember], "Confirmation set drifted: \(confirmed)")
+                for tool in JarvisTool.allCases {
+                    let declaration = tool.declaration
+                    try expect((declaration["parameters"] as? [String: Any])?["type"] as? String == "object", "\(tool) has no schema")
+                    try expect(!(declaration["description"] as? String ?? "").isEmpty, "\(tool) is undocumented")
+                }
+            }),
             ("RadialAction: text and arrangement slices need Accessibility, voice does not", {
                 for action in [RadialAction.summarizeSelection, .fixSelection, .translateSelection, .applyArrangement] {
                     try expect(action.requiresAccessibility, "\(action) was offered without Accessibility")

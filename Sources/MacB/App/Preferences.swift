@@ -123,6 +123,17 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     static let clipboardHistoryLimits = [30, 100, 250]
     /// Whether new screenshots are put on the shelf as they are taken.
     @Published var screenshotShelfEnabled: Bool { didSet { defaults.set(screenshotShelfEnabled, forKey: "screenshotShelfEnabled") } }
+    /// The voice Jarvis speaks with.
+    @Published var jarvisVoice: String { didSet { defaults.set(jarvisVoice, forKey: "jarvisVoice") } }
+    /// The Realtime model behind Jarvis.
+    @Published var jarvisModel: String {
+        didSet {
+            let trimmed = jarvisModel.trimmingCharacters(in: .whitespacesAndNewlines)
+            defaults.set(trimmed.isEmpty ? JarvisProtocol.defaultModel : trimmed, forKey: "jarvisModel")
+        }
+    }
+    /// ⌃⌥Space opens and closes Jarvis.
+    @Published var jarvisHotKeyEnabled: Bool { didSet { defaults.set(jarvisHotKeyEnabled, forKey: "jarvisHotKeyEnabled") } }
     /// The language a selection is translated into (unless it is already in it).
     @Published var translationTarget: String { didSet { defaults.set(translationTarget, forKey: "translationTarget") } }
     /// How long "stay awake" lasts when started from the ring, in minutes; 0 for no end.
@@ -231,6 +242,9 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "recentFilesEnabled": false, "peekEnabled": true,
                                     "screenshotShelfEnabled": false,
                                     "translationTarget": "tr",
+                                    "jarvisVoice": JarvisVoice.cedar.rawValue,
+                                    "jarvisModel": JarvisProtocol.defaultModel,
+                                    "jarvisHotKeyEnabled": true,
                                     "keepAwakeMinutes": 60,
                                     "clipboardKeepsHistory": false, "clipboardHistoryLimit": 30,
                                     "groupedWindowsEnabled": true,
@@ -263,6 +277,9 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         recentFilesEnabled = defaults.bool(forKey: "recentFilesEnabled")
         screenshotShelfEnabled = defaults.bool(forKey: "screenshotShelfEnabled")
         translationTarget = defaults.string(forKey: "translationTarget") ?? "tr"
+        jarvisVoice = defaults.string(forKey: "jarvisVoice") ?? JarvisVoice.cedar.rawValue
+        jarvisModel = defaults.string(forKey: "jarvisModel") ?? JarvisProtocol.defaultModel
+        jarvisHotKeyEnabled = defaults.bool(forKey: "jarvisHotKeyEnabled")
         keepAwakeMinutes = defaults.integer(forKey: "keepAwakeMinutes")
         clipboardKeepsHistory = defaults.bool(forKey: "clipboardKeepsHistory")
         let storedLimit = defaults.integer(forKey: "clipboardHistoryLimit")

@@ -15,6 +15,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
     case timer
     case quickNote
     case askAI
+    case jarvis
     case voiceAsk
     case summarizeSelection
     case fixSelection
@@ -38,6 +39,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         case .timer: return "Zamanlayıcı"
         case .quickNote: return "Hızlı not"
         case .askAI: return "Yapay zekâ"
+        case .jarvis: return "Jarvis"
         case .voiceAsk: return "Sesle sor"
         case .summarizeSelection: return "Seçimi özetle"
         case .fixSelection: return "Seçimi düzelt"
@@ -63,6 +65,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         case .timer: return "timer"
         case .quickNote: return "square.and.pencil"
         case .askAI: return "sparkles"
+        case .jarvis: return "person.wave.2"
         case .voiceAsk: return "waveform"
         case .summarizeSelection: return "text.line.3.summary"
         case .fixSelection: return "text.badge.checkmark"
@@ -89,7 +92,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         case .switcher, .windowLeft, .windowRight, .windowMaximize, .windowCenter, .windowNextDisplay,
              .summarizeSelection, .fixSelection, .translateSelection, .applyArrangement:
             return true
-        case .island, .shelf, .clipboard, .timer, .quickNote, .askAI, .voiceAsk, .keepAwake,
+        case .island, .shelf, .clipboard, .timer, .quickNote, .askAI, .jarvis, .voiceAsk, .keepAwake,
              .keyboardLock, .settings:
             return false
         }

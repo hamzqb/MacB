@@ -55,14 +55,62 @@ import MacBCore
             return {
                 let delay = Double(value(after: "--selection-probe") ?? "") ?? 0
                 if delay > 0 { try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000)) }
-                switch await SelectedTextService().read() {
+                let service = SelectedTextService()
+                switch await service.read() {
                 case .success(let selection):
                     print("app: \(selection.appName)  chars: \(selection.text.count)  via: \(selection.element == nil ? "⌘C" : "AX")  replaceable: \(selection.canReplace)")
                     if let replacement = value(after: "--replace-with") {
-                        print("replaced: \(SelectedTextService().replace(selection, with: replacement))")
+                        print("replaced: \(service.replace(selection, with: replacement))")
                     }
                 case .failure(let failure): print("error: \(failure.message)")
                 }
+            }
+        }
+        // Opens a Realtime session with the stored key and the real session
+        // settings, waits for the server to accept them, and closes. No audio
+        // is sent; with --say it asks one short text question, answered as text.
+        if arguments.contains("--jarvis-probe") {
+            return {
+                guard let key = AIKeyStore().read() else { print("error: no key"); return }
+                let model = value(after: "--model") ?? JarvisProtocol.defaultModel
+                guard let url = JarvisProtocol.url(model: model) else { print("error: bad model"); return }
+                var request = URLRequest(url: url)
+                request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+                let socket = URLSession.shared.webSocketTask(with: request)
+                socket.resume()
+                func send(_ object: [String: Any]) async throws {
+                    let data = try JSONSerialization.data(withJSONObject: object)
+                    try await socket.send(.string(String(decoding: data, as: UTF8.self)))
+                }
+                do {
+                    try await send(JarvisProtocol.sessionUpdate(voice: .cedar, now: Date()))
+                    var said = false
+                    let deadline = Date().addingTimeInterval(25)
+                    while Date() < deadline {
+                        let message = try await socket.receive()
+                        guard case .string(let text) = message,
+                              let object = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+                              let type = object["type"] as? String else { continue }
+                        let event = JarvisProtocol.event(from: text)
+                        switch event {
+                        case .audio(_, let pcm): print("\(type) \(pcm.count) bytes")
+                        default: print(type, event == .ignored ? "" : "→ \(event)")
+                        }
+                        if type == "error" { print(text.prefix(400)) }
+                        if case .sessionReady = event {
+                            guard let question = value(after: "--say"), !said else { break }
+                            said = true
+                            try await send(JarvisProtocol.text(question))
+                            try await send(["type": "response.create", "response": ["output_modalities": ["text"]]])
+                        }
+                        if case .responseDone(let calls) = event {
+                            print("calls: \(calls.map(\.name))")
+                            break
+                        }
+                        if type == "response.output_text.delta", let delta = object["delta"] as? String { print("  " + delta) }
+                    }
+                } catch { print("error: \(error.localizedDescription)  status: \((socket.response as? HTTPURLResponse)?.statusCode ?? 0)") }
+                socket.cancel(with: .normalClosure, reason: nil)
             }
         }
         if arguments.contains("--arrangement-probe") {

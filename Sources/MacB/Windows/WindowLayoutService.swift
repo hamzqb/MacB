@@ -53,12 +53,16 @@ import MacBCore
                                            MemoryLayout<EventHotKeyID>.size, nil, &identifier)
             guard result == noErr else { return result }
             let service = Unmanaged<WindowLayoutService>.fromOpaque(context).takeUnretainedValue()
-            MainActor.assumeIsolated {
+            // Someone else's hot key passes on untouched. Answering noErr for
+            // it swallowed every other MacB shortcut registered before this
+            // handler was (re)installed.
+            let handled = MainActor.assumeIsolated { () -> Bool in
                 guard identifier.signature == service.signature,
-                      let action = service.actionByID[identifier.id] else { return }
+                      let action = service.actionByID[identifier.id] else { return false }
                 service.perform(action)
+                return true
             }
-            return noErr
+            return handled ? noErr : OSStatus(eventNotHandledErr)
         }, 1, &eventType, context, &handler)
 
         guard status == noErr else {

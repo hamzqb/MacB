@@ -17,7 +17,9 @@
     <key>CFBundleDevelopmentRegion</key><string>tr</string>
     <key>NSAppleEventsUsageDescription</key><string>MacB; Spotify, Apple Music ve tarayıcıda gerçekten oynayan medyayı göstermek ve seçtiğiniz oynatma komutlarını uygulamak için izin ister.</string>
     <key>NSCameraUsageDescription</key><string>MacB, yalnız kamera önizlemesini açtığınızda veya Yüzle Kilit Açma taraması başlattığınızda kamerayı kullanır. Görüntüler kaydedilmez veya paylaşılmaz.</string>
-    <key>NSMicrophoneUsageDescription</key><string>MacB, yalnız "Sesle sor" dediğinde mikrofonu açar. Ses bu Mac'te yazıya çevrilir; kaydedilmez ve hiçbir yere gönderilmez.</string>
+    <key>NSMicrophoneUsageDescription</key><string>MacB mikrofonu yalnız sen istediğinde açar. "Sesle sor" sesi bu Mac'te yazıya çevirir ve hiçbir yere göndermez. Jarvis açıkken ise ses, canlı cevap alabilmek için OpenAI'ye aktarılır. Ses hiçbir durumda kaydedilmez.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key><string>Jarvis'e sorduğunda takvimini okuyup söyler; etkinlik eklemeden önce her seferinde onayını ister.</string>
+    <key>NSRemindersFullAccessUsageDescription</key><string>Jarvis'e sorduğunda hatırlatıcılarını okur; yenisini eklemeden önce her seferinde onayını ister.</string>
     <key>NSSpeechRecognitionUsageDescription</key><string>MacB, söylediğini yazıya çevirmek için macOS'un cihaz üstü konuşma tanımasını kullanır. Ses Mac'ten çıkmaz.</string>
     <key>NSScreenCaptureUsageDescription</key><string>MacB, yalnız açık pencere önizlemeleri için görüntü alır. Görüntüler diske kaydedilmez veya paylaşılmaz.</string>
 </dict>
