@@ -26,6 +26,8 @@ struct NotchView: View {
     @ObservedObject var weather: WeatherService
     @ObservedObject var note: QuickNoteStore
     @ObservedObject var faceUnlock: FaceUnlockService
+    /// One process-wide assertion, so there is one shared instance of it.
+    @ObservedObject private var keepAwake = KeepAwakeService.shared
     var open: () -> Void
     var close: () -> Void
     var select: (NotchContent) -> Void
@@ -383,6 +385,10 @@ struct NotchView: View {
             result.append(CollapsedIndicator(symbol: "timer", value: timer.remainingText,
                                              label: "Zamanlayıcı", tint: MacBDesign.IslandToken.accent))
         }
+        if keepAwake.isActive {
+            result.append(CollapsedIndicator(symbol: "cup.and.heat.waves.fill", value: keepAwake.remainingText,
+                                             label: "Uyanık", tint: MacBDesign.IslandToken.accent))
+        }
         if !shelf.items.isEmpty {
             result.append(CollapsedIndicator(symbol: "tray.full.fill", value: "\(shelf.items.count)",
                                              label: "Rafta", tint: MacBDesign.IslandToken.secondaryText))
@@ -439,6 +445,17 @@ struct NotchView: View {
                 if let error = shelf.errorMessage { Text(error).foregroundStyle(.orange).lineLimit(1) }
                 else { Text("\(shelf.items.count) öğe").foregroundStyle(MacBDesign.IslandToken.Ink.faint) }
                 Spacer()
+                if shelfPDFs.count > 1 {
+                    Button { convert("PDF'ler birleştirildi") { try await ShelfConverter.merge(shelfPDFs) } } label: {
+                        Label("\(shelfPDFs.count) PDF'i birleştir", systemImage: "arrow.triangle.merge")
+                    }.buttonStyle(.plain).help("Sıradaki PDF'leri tek dosyada birleştir; asıllar olduğu gibi kalır")
+                }
+                if !shelfFiles.isEmpty {
+                    Button {
+                        if !ShelfConverter.airDrop(shelfFiles) { notify("exclamationmark.triangle", "AirDrop kullanılamıyor") }
+                    } label: { Image(systemName: "dot.radiowaves.left.and.right").frame(width: 26, height: 24) }
+                        .buttonStyle(.plain).help("Raftaki dosyaları AirDrop ile gönder")
+                }
                 Button(action: shelf.chooseFiles) { Image(systemName: "plus").frame(width: 26, height: 24) }.buttonStyle(.plain).help("Dosya ekle")
             }.font(.system(size: MacBDesign.TypeScale.micro))
         }
@@ -448,8 +465,52 @@ struct NotchView: View {
         HStack(spacing: MacBDesign.Space.tight) {
             NativeFileDragView(item: item).frame(height: 32)
             rowButton("doc.on.doc", "Kopyala") { shelf.copy(item: item); notify("doc.on.doc", "Kopyalandı") }
+            if item.isAvailable, let url = item.url, !item.isDirectory { fileMenu(url) }
             rowButton("xmark", "Raftan kaldır") { shelf.remove(id: item.id) }
         }.padding(.horizontal, MacBDesign.Space.snug).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 9))
+    }
+
+    /// Files on the shelf that exist and are not folders, in shelf order.
+    private var shelfFiles: [URL] {
+        shelf.items.compactMap { item in item.isAvailable && !item.isDirectory ? item.url : nil }
+    }
+
+    private var shelfPDFs: [URL] { shelfFiles.filter(ShelfConversion.isPDF) }
+
+    /// What else can be done with one file. Every conversion writes a new file
+    /// beside the original and puts it on the shelf; the original is untouched.
+    private func fileMenu(_ url: URL) -> some View {
+        Menu {
+            if ShelfConversion.canConvertToJPEG(url) {
+                Button("JPEG kopyası oluştur") { convert("JPEG hazır") { try await ShelfConverter.jpegCopy(of: url) } }
+            }
+            if ShelfConversion.isImage(url) {
+                Button("Küçük kopya oluştur (1600 px)") { convert("Küçük kopya hazır") { try await ShelfConverter.reducedCopy(of: url) } }
+            }
+            Button("AirDrop ile gönder") {
+                if !ShelfConverter.airDrop([url]) { notify("exclamationmark.triangle", "AirDrop kullanılamıyor") }
+            }
+        } label: {
+            Image(systemName: "ellipsis").font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold)).frame(width: 25, height: 25)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
+        .help("Dönüştür veya gönder")
+        .accessibilityLabel("Dosya işlemleri")
+    }
+
+    private func convert(_ done: String, _ work: @escaping () async throws -> URL) {
+        Task { @MainActor in
+            do {
+                let result = try await work()
+                shelf.add(urls: [result])
+                notify("checkmark.circle", done)
+            } catch {
+                notify("exclamationmark.triangle", error.localizedDescription)
+            }
+        }
     }
 
     private func recentFileRow(_ item: RecentFileItem) -> some View {

@@ -38,7 +38,7 @@ import Security
 
     init(service: String = "dev.hamzababal.MacB.ai") {
         self.service = service
-        hasKey = read() != nil
+        hasKey = exists()
     }
 
     // MARK: - Storage
@@ -93,6 +93,21 @@ import Security
               let data = item as? Data,
               let key = String(data: data, encoding: .utf8) else { return nil }
         return key
+    }
+
+    /// Whether an item is stored, without reading the secret.
+    ///
+    /// Asking for attributes only never decrypts the item, so it never puts a
+    /// Keychain permission prompt on screen. Reading the key itself at launch
+    /// did: after a re-signed build, the app sat blocked in `init`, before any
+    /// window or status item existed, until someone answered a prompt they had
+    /// no reason to expect.
+    private func exists() -> Bool {
+        var query = baseQuery()
+        query[kSecReturnAttributes as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var item: CFTypeRef?
+        return SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess
     }
 
     private func baseQuery() -> [String: Any] {

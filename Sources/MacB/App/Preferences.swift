@@ -123,6 +123,10 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     static let clipboardHistoryLimits = [30, 100, 250]
     /// Whether new screenshots are put on the shelf as they are taken.
     @Published var screenshotShelfEnabled: Bool { didSet { defaults.set(screenshotShelfEnabled, forKey: "screenshotShelfEnabled") } }
+    /// The language a selection is translated into (unless it is already in it).
+    @Published var translationTarget: String { didSet { defaults.set(translationTarget, forKey: "translationTarget") } }
+    /// How long "stay awake" lasts when started from the ring, in minutes; 0 for no end.
+    @Published var keepAwakeMinutes: Int { didSet { defaults.set(keepAwakeMinutes, forKey: "keepAwakeMinutes") } }
     @Published var peekEnabled: Bool { didSet { defaults.set(peekEnabled, forKey: "peekEnabled") } }
     @Published var groupedWindowsEnabled: Bool { didSet { defaults.set(groupedWindowsEnabled, forKey: "groupedWindowsEnabled") } }
     @Published var clipboardShelfEnabled: Bool { didSet { defaults.set(clipboardShelfEnabled, forKey: "clipboardShelfEnabled") } }
@@ -226,6 +230,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "smartNotchEnabled": true, "favoriteWindowsEnabled": true,
                                     "recentFilesEnabled": false, "peekEnabled": true,
                                     "screenshotShelfEnabled": false,
+                                    "translationTarget": "tr",
+                                    "keepAwakeMinutes": 60,
                                     "clipboardKeepsHistory": false, "clipboardHistoryLimit": 30,
                                     "groupedWindowsEnabled": true,
                                     "clipboardShelfEnabled": true, "focusModeEnabled": false,
@@ -256,6 +262,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         favoriteWindowsEnabled = defaults.bool(forKey: "favoriteWindowsEnabled")
         recentFilesEnabled = defaults.bool(forKey: "recentFilesEnabled")
         screenshotShelfEnabled = defaults.bool(forKey: "screenshotShelfEnabled")
+        translationTarget = defaults.string(forKey: "translationTarget") ?? "tr"
+        keepAwakeMinutes = defaults.integer(forKey: "keepAwakeMinutes")
         clipboardKeepsHistory = defaults.bool(forKey: "clipboardKeepsHistory")
         let storedLimit = defaults.integer(forKey: "clipboardHistoryLimit")
         clipboardHistoryLimit = Preferences.clipboardHistoryLimits.contains(storedLimit) ? storedLimit : 30

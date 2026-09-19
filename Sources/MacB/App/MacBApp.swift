@@ -143,6 +143,19 @@ import MacBCore
             }
             return
         }
+        // Probes for the ring's text, shelf and window tools, so each can be
+        // exercised on a real Mac without a trackpad gesture. They print
+        // counts and results, never window titles or selected text beyond
+        // what was passed in.
+        if let probe = Probe.run(CommandLine.arguments) {
+            let finished = Flag()
+            Task { @MainActor in
+                await probe()
+                finished.set()
+            }
+            while !finished.isSet, RunLoop.current.run(mode: .default, before: .distantFuture) {}
+            return
+        }
         if CommandLine.arguments.contains("--scan-caches") {
             let items = CacheSweepService().scan()
             let total = items.reduce(Int64(0)) { $0 + $1.size }
@@ -187,7 +200,7 @@ private final class Flag: @unchecked Sendable {
     func set() { lock.withLock { value = true } }
 }
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuDelegate {
     private let preferences = Preferences()
     private let permissions = PermissionStore()
     private let windows = WindowService()
@@ -233,7 +246,13 @@ private final class Flag: @unchecked Sendable {
     private lazy var assistant = AIAssistantService(keys: aiKey) { [weak self] in
         self?.preferences.aiModel ?? Preferences.defaultAIModel
     }
-    private lazy var aiPanel = AIPanelController(assistant: assistant) { [weak self] in
+    private let speech = SpeechInputService()
+    private let selectedText = SelectedTextService()
+    private let translator = OfflineTranslator()
+    private let keepAwake = KeepAwakeService.shared
+    private let arrangements = WindowArrangementService()
+    private lazy var aiPanel = AIPanelController(assistant: assistant, speech: speech,
+                                                 selection: selectedText) { [weak self] in
         UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
         self?.showSettings()
     }
@@ -259,6 +278,8 @@ private final class Flag: @unchecked Sendable {
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
     private var layoutMenuItem: NSMenuItem?
+    private var keepAwakeMenu: NSMenu?
+    private var arrangementMenu: NSMenu?
     private var updateMenuItem: NSMenuItem?
     private var subscriptions: Set<AnyCancellable> = []
     private var workspaceObservers: [NSObjectProtocol] = []
@@ -454,8 +475,16 @@ private final class Flag: @unchecked Sendable {
         let layoutRoot = menu.addItem(withTitle: "Pencere Yerleşimi", action: nil, keyEquivalent: "")
         menu.setSubmenu(layouts, for: layoutRoot)
         layoutMenuItem = layoutRoot
+        let arrangementMenu = NSMenu(title: "Pencere düzenleri")
+        arrangementMenu.delegate = self
+        self.arrangementMenu = arrangementMenu
+        menu.setSubmenu(arrangementMenu, for: menu.addItem(withTitle: "Pencere düzenleri", action: nil, keyEquivalent: ""))
         let ask = menu.addItem(withTitle: "Yapay zekâya sor…", action: #selector(openAIPanel), keyEquivalent: "")
         ask.target = self
+        let awakeMenu = NSMenu(title: "Uyanık tut")
+        awakeMenu.delegate = self
+        keepAwakeMenu = awakeMenu
+        menu.setSubmenu(awakeMenu, for: menu.addItem(withTitle: "Uyanık tut", action: nil, keyEquivalent: ""))
         let cleanKeyboard = menu.addItem(withTitle: "Klavyeyi 1 dakika kilitle", action: #selector(startKeyboardCleaning), keyEquivalent: "")
         cleanKeyboard.target = self
         let settings = menu.addItem(withTitle: "Ayarlar ve izinler…", action: #selector(showSettings), keyEquivalent: ",")
@@ -469,6 +498,127 @@ private final class Flag: @unchecked Sendable {
         menu.addItem(withTitle: "MacB’den çık", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         item.menu = menu
         statusItem = item
+    }
+
+    /// The two submenus whose contents change: rebuilt each time they open.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        if menu === keepAwakeMenu {
+            if keepAwake.isActive {
+                menu.addItem(withTitle: keepAwake.endDate == nil ? "Açık, süresiz" : "Açık · \(keepAwake.remainingText) kaldı",
+                             action: nil, keyEquivalent: "")
+                let off = menu.addItem(withTitle: "Kapat", action: #selector(stopKeepAwake), keyEquivalent: "")
+                off.target = self
+                menu.addItem(.separator())
+            }
+            for minutes in KeepAwakeDuration.choices {
+                let item = menu.addItem(withTitle: KeepAwakeDuration.title(minutes: minutes),
+                                        action: #selector(startKeepAwake(_:)), keyEquivalent: "")
+                item.target = self
+                item.tag = minutes
+            }
+        } else if menu === arrangementMenu {
+            let trusted = permissions.accessibility
+            for arrangement in arrangements.arrangements.sorted(by: { $0.savedAt > $1.savedAt }) {
+                let item = menu.addItem(withTitle: arrangement.name, action: #selector(applyArrangement(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = arrangement.id.uuidString
+                item.isEnabled = trusted
+            }
+            if !arrangements.arrangements.isEmpty { menu.addItem(.separator()) }
+            let save = menu.addItem(withTitle: "Şimdiki düzeni kaydet", action: #selector(saveArrangement), keyEquivalent: "")
+            save.target = self
+            save.isEnabled = trusted
+            let manage = menu.addItem(withTitle: "Düzenleri yönet…", action: #selector(showArrangementSettings), keyEquivalent: "")
+            manage.target = self
+        }
+    }
+
+    @objc private func startKeepAwake(_ sender: NSMenuItem) { startKeepAwake(minutes: sender.tag) }
+    @objc private func stopKeepAwake() {
+        keepAwake.stop()
+        notch.notify(symbol: "moon.zzz", message: "Uyanık tutma kapandı")
+    }
+    private func startKeepAwake(minutes: Int) {
+        guard keepAwake.start(minutes: minutes) else {
+            notch.notify(symbol: "exclamationmark.triangle", message: "Uyanık tutulamadı")
+            return
+        }
+        notch.notify(symbol: "cup.and.heat.waves", message: "Uyanık · \(KeepAwakeDuration.title(minutes: minutes).lowercased())")
+    }
+
+    @objc private func applyArrangement(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let id = UUID(uuidString: raw),
+              let arrangement = arrangements.arrangements.first(where: { $0.id == id }) else { return }
+        arrangements.apply(arrangement)
+        if let message = arrangements.lastMessage { notch.notify(symbol: "rectangle.3.group", message: message) }
+    }
+
+    @objc private func saveArrangement() {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "tr_TR")
+        formatter.dateFormat = "d MMM HH:mm"
+        let name = "\(WindowArrangementService.currentSignature().summary) · \(formatter.string(from: Date()))"
+        arrangements.saveCurrent(named: name)
+        if let message = arrangements.lastMessage { notch.notify(symbol: "rectangle.3.group", message: message) }
+    }
+
+    @objc private func showArrangementSettings() {
+        UserDefaults.standard.set("Pencereler", forKey: "settingsPage")
+        showSettings()
+    }
+
+    /// Reads the selection in the application in front and hands it to `work`,
+    /// or says in the AI panel why there is nothing to work on.
+    private func withSelection(_ work: @escaping (SelectedTextService.Selection) -> Void) {
+        permissions.refresh()
+        guard permissions.accessibility else { return showSettings() }
+        Task { @MainActor in
+            switch await selectedText.read() {
+            case .success(let selection): work(selection)
+            case .failure(let failure):
+                assistant.report(failure.message)
+                aiPanel.show(focusQuestion: false)
+            }
+        }
+    }
+
+    /// Summarise or fix. Without a key nothing is read at all — not even the
+    /// clipboard fallback — since there would be nowhere to send it.
+    private func runOnSelection(_ task: AITextTask) {
+        guard assistant.hasKey else {
+            assistant.report(AIAssistantService.missingKeyMessage)
+            return aiPanel.show(focusQuestion: false)
+        }
+        withSelection { [weak self] selection in
+            self?.assistant.run(task, on: selection)
+            self?.aiPanel.show(focusQuestion: false)
+        }
+    }
+
+    private func translateSelection() {
+        withSelection { [weak self] selection in self?.translate(selection) }
+    }
+
+    private func translate(_ selection: SelectedTextService.Selection) {
+        Task { @MainActor in
+            switch await self.translator.translate(selection.text, preferredTarget: self.preferences.translationTarget) {
+            case .success(let result):
+                let question = "Çeviri, \(OfflineTranslator.Failure.name(result.source)) → "
+                    + "\(OfflineTranslator.Failure.name(result.target)): “\(AITextTask.preview(selection.text))”"
+                self.assistant.show(localResult: result.text, question: question, selection: selection)
+                self.aiPanel.show(focusQuestion: false)
+            case .failure(let failure):
+                var download: AIAssistantService.LanguageDownload?
+                if case .notDownloaded(let source, let target) = failure {
+                    download = .init(source: source, target: target) { [weak self] in
+                        self?.translate(selection)
+                    }
+                }
+                self.assistant.report(failure.message, download: download)
+                self.aiPanel.show(focusQuestion: false)
+            }
+        }
     }
 
     private func applyPreferences() {
@@ -530,6 +680,16 @@ private final class Flag: @unchecked Sendable {
         case .windowNextDisplay: windowLayout.perform(.nextDisplay)
         case .settings: showSettings()
         case .askAI: aiPanel.show()
+        case .voiceAsk: aiPanel.showListening()
+        case .summarizeSelection: runOnSelection(.summarize)
+        case .fixSelection: runOnSelection(.fix)
+        case .translateSelection: translateSelection()
+        case .keepAwake:
+            if keepAwake.isActive { stopKeepAwake() } else { startKeepAwake(minutes: preferences.keepAwakeMinutes) }
+        case .applyArrangement:
+            permissions.refresh()
+            guard permissions.accessibility else { return showSettings() }
+            notch.notify(symbol: "rectangle.3.group", message: arrangements.applyPreferred())
         }
     }
 
@@ -555,7 +715,14 @@ private final class Flag: @unchecked Sendable {
     }
 
     @objc private func switcherClosed() { dock.enabled = preferences.dockEnabled && !isSleeping && !isSessionInactive }
-    @objc private func displayChanged() { switcher.dismiss(); dock.dismiss() }
+    @objc private func displayChanged() {
+        switcher.dismiss()
+        dock.dismiss()
+        guard permissions.accessibility else { return }
+        arrangements.displaysChanged { [weak self] message in
+            self?.notch.notify(symbol: "rectangle.3.group", message: message)
+        }
+    }
     @objc private func openNotch() {
         if !preferences.notchEnabled { preferences.notchEnabled = true }
         notch.start()
@@ -620,7 +787,7 @@ private final class Flag: @unchecked Sendable {
             processes: processes, lid: lid, keyboardCleaning: keyboardCleaning,
             updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher, automation: automation,
-            loginItem: loginItem, aiKey: aiKey,
+            loginItem: loginItem, aiKey: aiKey, arrangements: arrangements, keepAwake: keepAwake,
             openPanel: { [weak self] in self?.openNotch() }))
     }
 
@@ -690,6 +857,7 @@ private final class Flag: @unchecked Sendable {
     }
 
     private func suspendServices() {
+        speech.cancel()
         switcher.dismiss()
         dock.stop()
         notch.stop()
@@ -720,6 +888,8 @@ private final class Flag: @unchecked Sendable {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        speech.cancel()
+        keepAwake.stop()
         hotKey.unregister()
         windowLayout.stop()
         switcher.dismiss()

@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import Foundation
 import MacBCore
@@ -5,9 +6,10 @@ import MacBCore
 /// Asks OpenAI a question and streams the answer back, with a web search when
 /// the model decides it needs one.
 ///
-/// Only what the user typed goes out, plus the last few exchanges of the same
-/// conversation so a follow-up makes sense. No file, no clipboard entry, no
-/// window title, nothing about the Mac. `store` is off on every request, so
+/// Only what the user typed or said goes out — or, when they pick "summarise"
+/// or "fix" on the ring, the text they had selected — plus the last few
+/// exchanges of the same conversation so a follow-up makes sense. No file, no
+/// clipboard entry, no window title, nothing about the Mac. `store` is off on every request, so
 /// OpenAI keeps no retrievable copy of the conversation, and MacB keeps it only
 /// in memory: closing the panel's conversation forgets it.
 @MainActor final class AIAssistantService: ObservableObject {
@@ -15,6 +17,39 @@ import MacBCore
     @Published private(set) var isAnswering = false
     @Published private(set) var isSearching = false
     @Published private(set) var errorMessage: String?
+    /// The answer that is about a selection, and what has been done with it.
+    @Published private(set) var selectionResult: SelectionResult?
+    /// A translation that needs a language macOS has not downloaded yet.
+    @Published private(set) var languageDownload: LanguageDownload?
+    /// macOS's own download sheet is up; the panel must not close under it.
+    @Published var isDownloadingLanguage = false
+
+    struct LanguageDownload {
+        let source: String
+        let target: String
+        /// Runs the translation again once the language is there.
+        let retry: () -> Void
+    }
+
+    /// A result that came from text selected in another application: copied
+    /// when it is complete, and, where that application allows it, able to
+    /// replace the selection.
+    struct SelectionResult {
+        /// Whether "put it back" may be offered at all.
+        var canReplace: Bool { isComplete && !isTruncated && !isReplaced && selection.canReplace }
+
+        let turnID: UUID
+        let selection: SelectedTextService.Selection
+        /// Only part of the selection was sent, so the answer covers only part
+        /// of it and must never be written over the whole.
+        var isTruncated = false
+        /// The answer arrived in full. A stopped or failed one is never
+        /// offered as a replacement.
+        var isComplete = false
+        var isCopied = false
+        var isReplaced = false
+        var note: String?
+    }
 
     private let keys: AIKeyStore
     private let model: () -> String
@@ -31,21 +66,104 @@ import MacBCore
 
     var hasKey: Bool { keys.hasKey }
 
+    static let missingKeyMessage = "Önce Ayarlar → Araçlar'dan OpenAI anahtarını gir."
+
     func ask(_ raw: String) {
         let question = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !question.isEmpty, !isAnswering else { return }
+        send(AITurn(question: question))
+    }
+
+    /// Summarises or corrects text selected in another application. Starts a
+    /// fresh conversation: the selection is the subject, not an aside in
+    /// whatever was being discussed before.
+    func run(_ task: AITextTask, on selection: SelectedTextService.Selection) {
+        stop()
+        turns = []
+        errorMessage = nil
+        let (text, truncated) = AITextTask.clip(selection.text)
+        let turn = AITurn(question: task.question(for: text), prompt: task.prompt(for: text))
+        selectionResult = SelectionResult(turnID: turn.id, selection: selection, isTruncated: truncated,
+                                          note: truncated ? "Seçim uzundu; ilk \(AITextTask.maximumLength) karakter gönderildi, yerine koyma kapalı." : nil)
+        send(turn)
+    }
+
+    /// Shows a result that was produced on the Mac, such as a translation, in
+    /// the same place and with the same copy and replace controls.
+    func show(localResult answer: String, question: String, selection: SelectedTextService.Selection) {
+        stop()
+        errorMessage = nil
+        languageDownload = nil
+        let turn = AITurn(question: question, answer: answer)
+        turns = [turn]
+        selectionResult = SelectionResult(turnID: turn.id, selection: selection, isComplete: true)
+        copyResult()
+    }
+
+    /// Shows a problem without a question, such as nothing being selected.
+    func report(_ message: String, download: LanguageDownload? = nil) {
+        stop()
+        turns = []
+        selectionResult = nil
+        errorMessage = message
+        languageDownload = download
+    }
+
+    /// The language arrived (or the download was refused): take the offer down.
+    func finishLanguageDownload(success: Bool) {
+        let download = languageDownload
+        languageDownload = nil
+        isDownloadingLanguage = false
+        if success {
+            errorMessage = nil
+            download?.retry()
+        } else {
+            errorMessage = "Dil paketi indirilemedi. Sistem Ayarları › Genel › Dil ve Bölge › Çeviri Dilleri'nden de indirebilirsin."
+        }
+    }
+
+    /// Puts the finished answer on the clipboard.
+    func copyResult() {
+        guard var result = selectionResult,
+              let answer = turns.first(where: { $0.id == result.turnID })?.answer,
+              !answer.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(answer, forType: .string)
+        result.isCopied = true
+        selectionResult = result
+    }
+
+    /// Writes the finished answer over the text it was made from.
+    func replaceSelection(using reader: SelectedTextService) {
+        guard var result = selectionResult, result.canReplace,
+              let answer = turns.first(where: { $0.id == result.turnID })?.answer,
+              !answer.isEmpty else { return }
+        // The selection's own leading and trailing whitespace goes back around
+        // the answer, so replacing a paragraph does not glue it to the next.
+        let original = result.selection.text
+        let leading = original.prefix { $0.isWhitespace || $0.isNewline }
+        let trailing = String(original.reversed().prefix { $0.isWhitespace || $0.isNewline }.reversed())
+        let replacement = String(leading) + answer.trimmingCharacters(in: .whitespacesAndNewlines) + trailing
+        result.isReplaced = reader.replace(result.selection, with: replacement)
+        if !result.isReplaced {
+            result.note = "Yerine konmadı: seçim değişmiş ya da \(result.selection.appName) izin vermiyor. Sonuç panoda."
+        }
+        selectionResult = result
+    }
+
+    private func send(_ turn: AITurn) {
         guard let key = keys.read() else {
-            errorMessage = "Önce Ayarlar → Araçlar'dan OpenAI anahtarını gir."
+            errorMessage = Self.missingKeyMessage
             return
         }
         let history = turns
-        let turn = AITurn(question: question)
         turns.append(turn)
         errorMessage = nil
         isAnswering = true
         isSearching = false
 
-        let body = AIResponseStream.requestBody(question: question, model: model(), history: history)
+        let body = AIResponseStream.requestBody(question: turn.prompt, model: model(), history: history)
         task = Task { [weak self] in
             await self?.stream(body: body, key: key, turnID: turn.id)
         }
@@ -64,6 +182,8 @@ import MacBCore
         stop()
         turns = []
         errorMessage = nil
+        selectionResult = nil
+        languageDownload = nil
     }
 
     private func stream(body: [String: Any], key: String, turnID: UUID) async {
@@ -104,6 +224,10 @@ import MacBCore
                     isSearching = true
                 case .finished(let citations):
                     update(turnID) { $0.citations = citations }
+                    if selectionResult?.turnID == turnID {
+                        selectionResult?.isComplete = true
+                        copyResult()
+                    }
                 case .failed(let message):
                     errorMessage = message
                 case .ignored:

@@ -1397,6 +1397,104 @@ struct CoreTestRunner {
                 liveness.reset()
                 try expect(!liveness.isStalled(at: 1_000),
                            "A blur that was never asked for reported itself as stalled")
+            }),
+            ("AITextTask: a selection is labelled short, sent whole and cut when huge", {
+                let text = "Birinci satır\nikinci satır " + String(repeating: "uzun ", count: 40)
+                let label = AITextTask.summarize.question(for: text)
+                try expect(label.hasPrefix("Özetle: “Birinci satır ikinci"), "The label kept line breaks or lost its title")
+                try expect(label.count < 90, "The label carried the whole selection")
+                let prompt = AITextTask.fix.prompt(for: text)
+                try expect(prompt.contains("<text>\n" + text + "\n</text>"), "The selection was not sent intact")
+                let (clipped, cut) = AITextTask.clip(String(repeating: "a", count: AITextTask.maximumLength + 50))
+                try expect(cut && clipped.count == AITextTask.maximumLength, "A huge selection went out uncut")
+                try expect(AITextTask.clip("  kısa  ") == ("kısa", false), "A short selection was trimmed wrongly or flagged")
+                let turn = AITurn(question: label, prompt: prompt, answer: "x")
+                let body = AIResponseStream.requestBody(question: "daha kısa", model: "m", history: [turn])
+                let input = try require(body["input"] as? [[String: Any]], "No input")
+                try expect(input.first?["content"] as? String == prompt, "A follow-up lost the text it was about")
+            }),
+            ("TranslationDirection: reads in the preferred language, the other way when already in it", {
+                try expect(TranslationDirection.target(source: "en", preferred: "tr") == "tr", "English was not translated to Turkish")
+                try expect(TranslationDirection.target(source: "tr-TR", preferred: "tr") == "en", "Turkish was translated to itself")
+                try expect(TranslationDirection.target(source: nil, preferred: "tr_TR") == "tr", "Unknown source broke the target")
+                try expect(TranslationDirection.target(source: "en", preferred: "en") == "tr", "English readers got English back")
+                try expect(TranslationDirection.target(source: "de", preferred: "en") == "en", "German was not translated to English")
+            }),
+            ("ShelfConversion: new files beside the original, never over anything", {
+                let folder = URL(fileURLWithPath: "/Users/x/Masaüstü")
+                let photo = folder.appendingPathComponent("Tatil.HEIC")
+                var taken: Set<String> = ["/Users/x/Masaüstü/Tatil.jpg", "/Users/x/Masaüstü/Tatil 2.jpg"]
+                let jpeg = ShelfConversion.jpegURL(for: photo) { taken.contains($0.path) }
+                try expect(jpeg.path == "/Users/x/Masaüstü/Tatil 3.jpg", "A taken name was reused: \(jpeg.path)")
+                taken = []
+                try expect(ShelfConversion.reducedURL(for: photo) { taken.contains($0.path) }.lastPathComponent == "Tatil (küçük).jpg",
+                           "The reduced copy was misnamed")
+                try expect(ShelfConversion.canConvertToJPEG(photo), "HEIC was not convertible")
+                try expect(!ShelfConversion.canConvertToJPEG(folder.appendingPathComponent("a.JPG")), "JPEG was offered as a conversion to JPEG")
+                try expect(!ShelfConversion.isImage(folder.appendingPathComponent("a.pdf")), "A PDF counted as an image")
+                let merged = ShelfConversion.mergedURL(for: [folder.appendingPathComponent("Rapor.pdf")]) { _ in false }
+                try expect(merged?.lastPathComponent == "Rapor (birleşik).pdf", "The merged PDF was misnamed")
+                try expect(ShelfConversion.mergedURL(for: []) { _ in false } == nil, "Merging nothing produced a file")
+            }),
+            ("ShelfConversion: a reduced copy keeps its shape and is never enlarged", {
+                let wide = ShelfConversion.reducedSize(for: CGSize(width: 4032, height: 3024))
+                try expect(wide == CGSize(width: 1600, height: 1200), "A photo was scaled wrongly: \(wide)")
+                let tall = ShelfConversion.reducedSize(for: CGSize(width: 1170, height: 2532))
+                try expect(tall.height == 1600 && abs(tall.width - 739) <= 1, "A portrait shot was scaled wrongly: \(tall)")
+                try expect(ShelfConversion.reducedSize(for: CGSize(width: 800, height: 600)) == CGSize(width: 800, height: 600),
+                           "A small image was enlarged")
+            }),
+            ("KeepAwakeDuration: countdown and titles read naturally", {
+                let now = Date(timeIntervalSince1970: 1_000)
+                try expect(KeepAwakeDuration.remainingText(until: nil, now: now) == "∞", "No end did not read as endless")
+                try expect(KeepAwakeDuration.remainingText(until: now.addingTimeInterval(65 * 60), now: now) == "1:05", "An hour and five minutes misread")
+                try expect(KeepAwakeDuration.remainingText(until: now.addingTimeInterval(11 * 60 + 5), now: now) == "12 dk", "Partial minutes were not rounded up")
+                try expect(KeepAwakeDuration.remainingText(until: now.addingTimeInterval(-5), now: now) == "0 dk", "A past end went negative")
+                try expect(KeepAwakeDuration.title(minutes: 0) == "Kapatana kadar", "Endless was misnamed")
+                try expect(KeepAwakeDuration.title(minutes: 120) == "2 saat", "Two hours misnamed")
+                try expect(KeepAwakeDuration.title(minutes: 30) == "30 dakika", "Half an hour misnamed")
+            }),
+            ("WindowArrangement: titles first, then order, no window used twice", {
+                let saved = [
+                    SavedWindow(bundleIdentifier: "com.apple.Safari", appName: "Safari", title: "Mail", index: 0, frame: .zero),
+                    SavedWindow(bundleIdentifier: "com.apple.Safari", appName: "Safari", title: "Docs", index: 1, frame: .zero),
+                    SavedWindow(bundleIdentifier: "com.apple.Notes", appName: "Notlar", title: "", index: 0, frame: .zero),
+                    SavedWindow(bundleIdentifier: "com.closed.App", appName: "Kapalı", title: "X", index: 0, frame: .zero)
+                ]
+                let live = [
+                    LiveWindow(bundleIdentifier: "com.apple.Safari", title: "Başka", index: 0),
+                    LiveWindow(bundleIdentifier: "com.apple.Safari", title: "Mail", index: 1),
+                    LiveWindow(bundleIdentifier: "com.apple.Notes", title: "Liste", index: 0)
+                ]
+                let match = WindowArrangementMatcher.match(saved: saved, live: live)
+                try expect(match == [1, 0, 2, nil], "Windows were paired wrongly: \(match)")
+            }),
+            ("WindowArrangement: the right one comes back for a display setup", {
+                let laptop = DisplaySignature(bounds: [CGRect(x: 0, y: 0, width: 1512, height: 982)])
+                let desk = DisplaySignature(bounds: [CGRect(x: 1512, y: 0, width: 2560, height: 1440),
+                                                     CGRect(x: 0, y: 0, width: 1512, height: 982)])
+                try expect(desk == DisplaySignature(bounds: desk.bounds.reversed()), "Display order changed the setup")
+                let old = WindowArrangement(name: "eski", displays: desk, windows: [], restoresAutomatically: true,
+                                            savedAt: Date(timeIntervalSince1970: 1))
+                let new = WindowArrangement(name: "yeni", displays: desk, windows: [], restoresAutomatically: true,
+                                            savedAt: Date(timeIntervalSince1970: 2))
+                let manual = WindowArrangement(name: "el", displays: laptop, windows: [], savedAt: Date(timeIntervalSince1970: 3))
+                let all = [old, new, manual]
+                try expect(WindowArrangementMatcher.automatic(for: desk, in: all)?.name == "yeni", "The newest automatic one did not win")
+                try expect(WindowArrangementMatcher.automatic(for: laptop, in: all) == nil, "A manual arrangement came back by itself")
+                try expect(WindowArrangementMatcher.preferred(for: laptop, in: all)?.name == "el", "The ring ignored the current setup")
+                let other = DisplaySignature(bounds: [CGRect(x: 0, y: 0, width: 800, height: 600)])
+                try expect(WindowArrangementMatcher.preferred(for: other, in: all)?.name == "el", "No fallback to the newest")
+                let data = try JSONEncoder().encode(all)
+                try expect(try JSONDecoder().decode([WindowArrangement].self, from: data) == all, "Arrangements did not survive saving")
+            }),
+            ("RadialAction: text and arrangement slices need Accessibility, voice does not", {
+                for action in [RadialAction.summarizeSelection, .fixSelection, .translateSelection, .applyArrangement] {
+                    try expect(action.requiresAccessibility, "\(action) was offered without Accessibility")
+                }
+                try expect(!RadialAction.voiceAsk.requiresAccessibility && !RadialAction.keepAwake.requiresAccessibility,
+                           "Voice or stay-awake demanded Accessibility")
+                try expect(Set(RadialAction.allCases.map(\.title)).count == RadialAction.allCases.count, "Two slices share a name")
             })
         ]
         var failures = 0

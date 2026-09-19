@@ -15,6 +15,12 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
     case timer
     case quickNote
     case askAI
+    case voiceAsk
+    case summarizeSelection
+    case fixSelection
+    case translateSelection
+    case keepAwake
+    case applyArrangement
     case keyboardLock
     case windowLeft
     case windowRight
@@ -32,6 +38,12 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         case .timer: return "Zamanlayıcı"
         case .quickNote: return "Hızlı not"
         case .askAI: return "Yapay zekâ"
+        case .voiceAsk: return "Sesle sor"
+        case .summarizeSelection: return "Seçimi özetle"
+        case .fixSelection: return "Seçimi düzelt"
+        case .translateSelection: return "Seçimi çevir"
+        case .keepAwake: return "Uyanık tut"
+        case .applyArrangement: return "Pencere düzeni"
         case .keyboardLock: return "Klavye kilidi"
         case .windowLeft: return "Sol yarı"
         case .windowRight: return "Sağ yarı"
@@ -51,6 +63,12 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         case .timer: return "timer"
         case .quickNote: return "square.and.pencil"
         case .askAI: return "sparkles"
+        case .voiceAsk: return "waveform"
+        case .summarizeSelection: return "text.line.3.summary"
+        case .fixSelection: return "text.badge.checkmark"
+        case .translateSelection: return "translate"
+        case .keepAwake: return "cup.and.heat.waves"
+        case .applyArrangement: return "rectangle.3.group"
         case .keyboardLock: return "keyboard"
         case .windowLeft: return "rectangle.lefthalf.filled"
         case .windowRight: return "rectangle.righthalf.filled"
@@ -63,13 +81,16 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
 
     /// Whether this needs the Accessibility permission to do anything.
     ///
-    /// Moving somebody else's window and reading the window list both do; the
-    /// rest of the ring is MacB's own panels and needs nothing.
+    /// Moving somebody else's window, reading the window list and reading the
+    /// text selected in another application all do; the rest of the ring is
+    /// MacB's own panels and needs nothing.
     public var requiresAccessibility: Bool {
         switch self {
-        case .switcher, .windowLeft, .windowRight, .windowMaximize, .windowCenter, .windowNextDisplay:
+        case .switcher, .windowLeft, .windowRight, .windowMaximize, .windowCenter, .windowNextDisplay,
+             .summarizeSelection, .fixSelection, .translateSelection, .applyArrangement:
             return true
-        case .island, .shelf, .clipboard, .timer, .quickNote, .askAI, .keyboardLock, .settings:
+        case .island, .shelf, .clipboard, .timer, .quickNote, .askAI, .voiceAsk, .keepAwake,
+             .keyboardLock, .settings:
             return false
         }
     }

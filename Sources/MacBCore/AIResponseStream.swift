@@ -115,7 +115,7 @@ public enum AIResponseStream {
                                    history: [AITurn] = []) -> [String: Any] {
         var input: [[String: Any]] = []
         for turn in history.suffix(maximumHistory) {
-            input.append(["role": "user", "content": turn.question])
+            input.append(["role": "user", "content": turn.prompt])
             if !turn.answer.isEmpty { input.append(["role": "assistant", "content": turn.answer]) }
         }
         input.append(["role": "user", "content": question])
@@ -145,14 +145,75 @@ public enum AIResponseStream {
 /// One question and the answer it got.
 public struct AITurn: Equatable, Sendable, Identifiable {
     public let id: UUID
+    /// What the panel shows as the question.
     public let question: String
+    /// What was actually sent. The same as `question` for anything typed or
+    /// spoken; for work on selected text it is the instruction plus the text,
+    /// which is too long to show but has to ride along with a follow-up.
+    public let prompt: String
     public var answer: String
     public var citations: [AICitation]
 
-    public init(id: UUID = UUID(), question: String, answer: String = "", citations: [AICitation] = []) {
+    public init(id: UUID = UUID(), question: String, prompt: String? = nil,
+                answer: String = "", citations: [AICitation] = []) {
         self.id = id
         self.question = question
+        self.prompt = prompt ?? question
         self.answer = answer
         self.citations = citations
+    }
+}
+
+/// Something done to a piece of text the user selected in another application.
+///
+/// The instruction is written into the prompt rather than the system
+/// instructions so the conversation that follows ("shorter", "now in English")
+/// still knows what the text was and what was asked of it.
+public enum AITextTask: String, CaseIterable, Sendable {
+    case summarize
+    case fix
+
+    /// Past this many characters a selection is cut. A stray ⌘A on a long
+    /// document should cost cents, not dollars.
+    public static let maximumLength = 12_000
+
+    public var title: String {
+        switch self {
+        case .summarize: return "Özetle"
+        case .fix: return "Düzelt"
+        }
+    }
+
+    /// The label the panel shows in place of the whole selection.
+    public func question(for text: String) -> String {
+        "\(title): “\(Self.preview(text))”"
+    }
+
+    /// A selection on one line, cut to fit a heading.
+    public static func preview(_ text: String) -> String {
+        let flat = text.split(whereSeparator: \.isNewline).joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+        return flat.count > 70 ? String(flat.prefix(70)) + "…" : flat
+    }
+
+    public func prompt(for text: String) -> String {
+        let instruction: String
+        switch self {
+        case .summarize:
+            instruction = "Summarize the text between the <text> tags in the language it is written in. "
+                + "A few short bullet points, most important first. Reply with the summary only."
+        case .fix:
+            instruction = "Correct spelling, grammar and punctuation in the text between the <text> tags. "
+                + "Keep its language, meaning, tone, line breaks and formatting. Do not search the web. "
+                + "Reply with the corrected text only: no preface, no explanation, no quotes."
+        }
+        return "\(instruction)\n<text>\n\(text)\n</text>"
+    }
+
+    /// The selection as it will be sent, and whether it had to be cut.
+    public static func clip(_ text: String) -> (text: String, truncated: Bool) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > maximumLength else { return (trimmed, false) }
+        return (String(trimmed.prefix(maximumLength)), true)
     }
 }

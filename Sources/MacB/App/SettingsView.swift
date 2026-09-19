@@ -62,7 +62,11 @@ struct SettingsView: View {
     @ObservedObject var automation: AutomationService
     @ObservedObject var loginItem: LoginItemService
     @ObservedObject var aiKey: AIKeyStore
+    @ObservedObject var arrangements: WindowArrangementService
+    @ObservedObject var keepAwake: KeepAwakeService
     var openPanel: () -> Void
+    /// The name typed for the next saved window arrangement.
+    @State private var arrangementName = ""
     @AppStorage("settingsPage") private var selectedPage: SettingsPage = .general
     @State private var showRemovalConfirmation = false
     @State private var showCacheConfirmation = false
@@ -176,6 +180,56 @@ struct SettingsView: View {
                     shortcutRow("Sonraki ekran", symbol: "display.2", keys: "⌃⌥⌘→")
                 }
             }
+            section("Pencere düzenleri", "rectangle.3.group") {
+                Text("Açık pencerelerin yerini kaydet, sonra tek hareketle geri getir. Sadece çalışan uygulamaların pencereleri taşınır; hiçbir şey açılmaz ya da kapanmaz.")
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !permissions.accessibility {
+                    message("Erişilebilirlik izni gerekir.", warning: true)
+                }
+                ForEach(arrangements.arrangements) { arrangement in
+                    arrangementRow(arrangement)
+                    rowDivider
+                }
+                HStack(spacing: MacBDesign.Space.regular) {
+                    TextField("Ad (ör. Masa, Sunum)", text: $arrangementName)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel("Düzen adı")
+                    Button("Şimdiki düzeni kaydet") {
+                        if arrangements.saveCurrent(named: arrangementName) != nil { arrangementName = "" }
+                    }
+                    .disabled(!permissions.accessibility)
+                }
+                if let note = arrangements.lastMessage { message(note) }
+                Text("\u{201C}Ekran değişince\u{201D} açık olan düzen, aynı ekran düzeni geri geldiğinde (monitör takılınca, çıkarılınca) kendiliğinden uygulanır. Halkadaki Pencere düzeni dilimi bu ekrana ait düzeni, yoksa en yenisini uygular.")
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func arrangementRow(_ arrangement: WindowArrangement) -> some View {
+        HStack(spacing: MacBDesign.Space.regular) {
+            Image(systemName: "rectangle.3.group").foregroundStyle(MacBDesign.accent).frame(width: 22)
+            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                Text(arrangement.name).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                Text("\(arrangement.windows.count) pencere · \(arrangement.displays.summary)")
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+            }
+            Spacer(minLength: 8)
+            Toggle("Ekran değişince", isOn: Binding(
+                get: { arrangement.restoresAutomatically },
+                set: { arrangements.setAutomatic(arrangement.id, $0) }))
+                .toggleStyle(.checkbox)
+                .help("Bu ekran düzeni geri geldiğinde kendiliğinden uygula")
+            Button("Uygula") { arrangements.apply(arrangement) }
+                .disabled(!permissions.accessibility)
+            Menu {
+                Button("Şimdiki pencerelerle güncelle") { arrangements.update(arrangement.id) }
+                Button("Listeden çıkar") { arrangements.forget(arrangement.id) }
+            } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .accessibilityLabel("\(arrangement.name) seçenekleri")
         }
     }
 
@@ -251,6 +305,53 @@ struct SettingsView: View {
                     .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 message("Anahtarını bir yere yapıştırdıysan (sohbet, not, ekran görüntüsü) onu iptal et ve yenisini üret. Sızmış bir anahtar senin faturana çalışır.", warning: true)
+            }
+            section("Seçili metin ve ses", "text.line.3.summary") {
+                Text("Halkaya Seçimi özetle, Seçimi düzelt, Seçimi çevir ve Sesle sor dilimlerini ekleyebilirsin. Sonuç panele gelir ve panoya kopyalanır; uygulama izin veriyorsa seçimin yerine de konabilir.")
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Text("Çeviri dili").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Çeviri dili", selection: $preferences.translationTarget) {
+                        ForEach(TranslationDirection.choices, id: \.code) { Text($0.title).tag($0.code) }
+                    }
+                    .labelsHidden().fixedSize()
+                }
+                Text("Çeviri tamamen bu Mac'te yapılır, anahtar gerekmez ve metin hiçbir yere gitmez. Metin zaten bu dildeyse İngilizceye çevrilir (İngilizce seçiliyse Türkçeye). Dil paketi yoksa macOS Ayarlar'ından indirilir.")
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                rowDivider
+                Text("Özetleme ve düzeltme OpenAI anahtarıyla çalışır: yalnız o an seçtiğin metin gönderilir, en fazla \(AITextTask.maximumLength) karakter. Parola alanları okunmaz.")
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Sesle sor: konuşma bu Mac'te yazıya çevrilir, ses kaydedilmez ve gönderilmez; OpenAI'ye yalnız yazı gider. İlk kullanımda mikrofon ve konuşma tanıma izni istenir.")
+                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            section("Uyanık tut", "cup.and.heat.waves") {
+                HStack(spacing: MacBDesign.Space.regular) {
+                    VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                        Text(keepAwake.isActive ? "Açık" : "Kapalı")
+                            .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                        Text(keepAwake.isActive
+                             ? (keepAwake.endDate == nil ? "Sen kapatana kadar ekran uyumaz." : "\(keepAwake.remainingText) sonra kapanır.")
+                             : "Ekran ve Mac, süre bitene kadar uykuya geçmez. Kapak kapanınca Mac yine uyur.")
+                            .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                    }
+                    Spacer(minLength: 8)
+                    Button(keepAwake.isActive ? "Kapat" : "Başlat") {
+                        keepAwake.toggle(minutes: preferences.keepAwakeMinutes)
+                    }
+                }
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Text("Halkadan başlatınca").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Süre", selection: $preferences.keepAwakeMinutes) {
+                        ForEach(KeepAwakeDuration.choices, id: \.self) { Text(KeepAwakeDuration.title(minutes: $0)).tag($0) }
+                    }
+                    .labelsHidden().fixedSize()
+                }
             }
             section("Sistem", "gauge.with.dots.needle.67percent") {
                 HStack(spacing: MacBDesign.Space.regular) {

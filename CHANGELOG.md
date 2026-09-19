@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- Radial shortcut ring (Fn + two-finger click or three-finger tap) with app, file and per-application slices.
+- AI panel with web search and sources; selected text can be summarised or corrected from the ring, copied and written back in place.
+- Voice questions with on-device speech recognition; on-device translation of selected text.
+- Shelf conversions (JPEG copy, smaller copy, PDF merge) and AirDrop; screenshots can land on the shelf.
+- Stay-awake timer with an island countdown; saved window arrangements restored by hand or when displays change.
+- Searchable, optionally persistent clipboard history; a charging-level automation trigger.
+- Fixed: launching no longer blocks on a Keychain prompt while checking for a stored API key.
+
 ## 0.3.0
 
 - Rebuilt the notch panel around a responsive, customizable widget library with media, weather, system, timer, calendar, notes, tasks, apps, files and clipboard cards.
