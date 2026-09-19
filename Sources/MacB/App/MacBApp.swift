@@ -258,17 +258,20 @@ private final class Flag: @unchecked Sendable {
     private lazy var briefing = BriefingService(preferences: preferences, weather: weather,
                                                 monitor: systemMonitor, activity: aiActivity)
     private let jarvisMemory = JarvisMemoryStore()
+    private lazy var scenarios = ScenarioStore(keepAwake: keepAwake, arrangements: arrangements,
+                                               media: media, timer: islandTimer)
     private lazy var jarvis = JarvisSession(
         keys: aiKey, memory: jarvisMemory, cost: aiCost,
         voice: { [weak self] in JarvisVoice(rawValue: self?.preferences.jarvisVoice ?? "") ?? .marin },
         persona: { [weak self] in JarvisPersona(rawValue: self?.preferences.jarvisPersona ?? "") ?? .warm },
+        scenarioNames: { [weak self] in self?.scenarios.scenarios.map(\.name) ?? [] },
         model: { [weak self] in self?.preferences.jarvisModel ?? JarvisProtocol.defaultModel })
     private lazy var jarvisTools = MacBJarvisToolbox(
         keys: aiKey, searchModel: { [weak self] in self?.preferences.aiModel ?? Preferences.defaultAIModel },
         cost: aiCost,
         media: media, timer: islandTimer, windowLayout: windowLayout, arrangements: arrangements, note: quickNote,
         selection: selectedText, systemMonitor: systemMonitor, weather: weather, aiActivity: aiActivity,
-        memory: jarvisMemory,
+        memory: jarvisMemory, scenarios: scenarios,
         notify: { [weak self] symbol, message in self?.notch.notify(symbol: symbol, message: message) })
     private lazy var aiPanel = AIPanelController(assistant: assistant, speech: speech,
                                                  selection: selectedText) { [weak self] in
@@ -301,6 +304,7 @@ private final class Flag: @unchecked Sendable {
     private var layoutMenuItem: NSMenuItem?
     private var keepAwakeMenu: NSMenu?
     private var arrangementMenu: NSMenu?
+    private var scenarioMenu: NSMenu?
     private var updateMenuItem: NSMenuItem?
     private var subscriptions: Set<AnyCancellable> = []
     private var workspaceObservers: [NSObjectProtocol] = []
@@ -514,6 +518,12 @@ private final class Flag: @unchecked Sendable {
         ask.target = self
         let talk = menu.addItem(withTitle: "MacB ile konuş (\(JarvisHotKey.displayKeys))", action: #selector(toggleJarvis), keyEquivalent: "")
         talk.target = self
+        let scenarioMenu = NSMenu(title: "Senaryolar")
+        scenarioMenu.delegate = self
+        self.scenarioMenu = scenarioMenu
+        menu.setSubmenu(scenarioMenu, for: menu.addItem(withTitle: "Senaryolar", action: nil, keyEquivalent: ""))
+        let brief = menu.addItem(withTitle: "Brifingi göster", action: #selector(showBriefing), keyEquivalent: "")
+        brief.target = self
         let awakeMenu = NSMenu(title: "Uyanık tut")
         awakeMenu.delegate = self
         keepAwakeMenu = awakeMenu
@@ -564,7 +574,36 @@ private final class Flag: @unchecked Sendable {
             save.isEnabled = trusted
             let manage = menu.addItem(withTitle: "Düzenleri yönet…", action: #selector(showArrangementSettings), keyEquivalent: "")
             manage.target = self
+        } else if menu === scenarioMenu {
+            for scenario in scenarios.scenarios where scenario.isRunnable {
+                let item = menu.addItem(withTitle: scenario.name, action: #selector(runScenario(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = scenario.id.uuidString
+            }
+            if scenarios.scenarios.contains(where: \.isRunnable) { menu.addItem(.separator()) }
+            let manage = menu.addItem(withTitle: "Senaryoları yönet…", action: #selector(showScenarioSettings),
+                                      keyEquivalent: "")
+            manage.target = self
         }
+    }
+
+    @objc private func runScenario(_ sender: NSMenuItem) {
+        guard let identifier = sender.representedObject as? String,
+              let scenario = scenarios.scenarios.first(where: { $0.id.uuidString == identifier }) else { return }
+        Task { [weak self] in
+            guard let self else { return }
+            let message = await self.scenarios.run(scenario)
+            self.notch.notify(symbol: "wand.and.stars", message: message)
+        }
+    }
+
+    @objc private func showScenarioSettings() {
+        UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
+        showSettings()
+    }
+
+    @objc private func showBriefing() {
+        briefing.give()
     }
 
     @objc private func startKeepAwake(_ sender: NSMenuItem) { startKeepAwake(minutes: sender.tag) }
@@ -834,7 +873,8 @@ private final class Flag: @unchecked Sendable {
             processes: processes, lid: lid, keyboardCleaning: keyboardCleaning,
             updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher, automation: automation,
-            loginItem: loginItem, aiKey: aiKey, aiCost: aiCost, briefing: briefing, assistant: assistant,
+            loginItem: loginItem, aiKey: aiKey, aiCost: aiCost, briefing: briefing, scenarios: scenarios,
+            assistant: assistant,
             arrangements: arrangements, keepAwake: keepAwake,
             jarvisHotKeyFailed: jarvisHotKey.failed, jarvisMemory: jarvisMemory,
             openPanel: { [weak self] in self?.openNotch() }))

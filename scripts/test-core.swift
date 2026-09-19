@@ -1772,6 +1772,46 @@ struct CoreTestRunner {
                 try expect(JarvisVoice.ordered.count == JarvisVoice.allCases.count, "A voice is missing from the list")
                 try expect(JarvisVoice.ordered.first == .marin, "The recommended voice is not first")
             }),
+            ("Scenario: a name is matched carefully, never loosely", {
+                let scenarios = [Scenario(name: "Toplantı modu"), Scenario(name: "Odaklan"),
+                                 Scenario(name: "Akşam")]
+                try expect(ScenarioMatching.find("Toplantı modu", in: scenarios)?.name == "Toplantı modu",
+                           "An exact name was not found")
+                try expect(ScenarioMatching.find("toplanti modu", in: scenarios)?.name == "Toplantı modu",
+                           "A name without its accents was not found")
+                try expect(ScenarioMatching.find("toplantı", in: scenarios)?.name == "Toplantı modu",
+                           "Part of a name was not found")
+                try expect(ScenarioMatching.find("", in: scenarios) == nil, "An empty name matched something")
+                try expect(ScenarioMatching.find("yok böyle", in: scenarios) == nil, "A missing name matched")
+                let ambiguous = [Scenario(name: "Akşam modu"), Scenario(name: "Akşam yürüyüşü")]
+                try expect(ScenarioMatching.find("akşam", in: ambiguous) == nil,
+                           "An ambiguous name ran one of two scenarios")
+            }),
+            ("Scenario: a step is only runnable once it has been filled in", {
+                try expect(!ScenarioStep.openApplication(name: " ").isComplete, "An empty application name was runnable")
+                try expect(ScenarioStep.openApplication(name: "Safari").isComplete, "A filled-in step was not runnable")
+                try expect(ScenarioStep.volume(percent: 0).isComplete, "A volume of zero was treated as unset")
+                try expect(!Scenario(name: "x", steps: [.shortcut(name: "")]).isRunnable,
+                           "A scenario of empty steps claimed to be runnable")
+                try expect(Scenario(name: "x", steps: [.shortcut(name: ""), .timer(minutes: 5)]).isRunnable,
+                           "One good step was not enough")
+                try expect(Set(ScenarioStep.choices.map(\.kindTitle)).count == ScenarioStep.choices.count,
+                           "Two kinds of step share a name")
+                let encoded = try JSONEncoder().encode(Scenario(name: "Toplantı", steps: ScenarioStep.choices))
+                let decoded = try JSONDecoder().decode(Scenario.self, from: encoded)
+                try expect(decoded.steps == ScenarioStep.choices, "Steps did not survive the file")
+            }),
+            ("Scenario: the model is told the names and nothing else", {
+                let instructions = JarvisProtocol.scenarioInstructions(for: ["Toplantı modu", "Odaklan"])
+                try expect(instructions.contains("Toplantı modu") && instructions.contains("run_scenario"),
+                           "The names did not reach the model")
+                try expect(JarvisProtocol.scenarioInstructions(for: []).isEmpty,
+                           "An empty list still said something")
+                try expect(JarvisTool.runScenario.needsConfirmation(afterReadingOutsideContent: true),
+                           "A page could have MacB run a scenario")
+                try expect(!JarvisTool.runScenario.needsConfirmation(afterReadingOutsideContent: false),
+                           "The user's own scenario needed a second yes")
+            }),
             ("RadialAction: text and arrangement slices need Accessibility, voice does not", {
                 for action in [RadialAction.summarizeSelection, .fixSelection, .translateSelection, .applyArrangement] {
                     try expect(action.requiresAccessibility, "\(action) was offered without Accessibility")

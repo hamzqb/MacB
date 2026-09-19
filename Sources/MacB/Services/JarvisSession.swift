@@ -68,6 +68,7 @@ enum JarvisToolOutcome {
     private let voice: () -> JarvisVoice
     private let model: () -> String
     private let persona: () -> JarvisPersona
+    private let scenarioNames: () -> [String]
     private let cost: AICostMeter?
     private var socket: URLSessionWebSocketTask?
     private var receiver: Task<Void, Never>?
@@ -105,7 +106,9 @@ enum JarvisToolOutcome {
     init(keys: AIKeyStore, memory: JarvisMemoryStore, cost: AICostMeter? = nil,
          voice: @escaping () -> JarvisVoice,
          persona: @escaping () -> JarvisPersona = { .warm },
+         scenarioNames: @escaping () -> [String] = { [] },
          model: @escaping () -> String) {
+        self.scenarioNames = scenarioNames
         self.keys = keys
         self.memory = memory
         self.cost = cost
@@ -172,7 +175,8 @@ enum JarvisToolOutcome {
         socket.resume()
         send(JarvisProtocol.sessionUpdate(voice: voice(), now: Date(),
                                           userName: NSFullUserName().split(separator: " ").first.map(String.init),
-                                          memory: memory.facts, persona: persona()))
+                                          memory: memory.facts, persona: persona(),
+                                          scenarios: scenarioNames()))
         receiver = Task { [weak self] in await self?.receive(from: socket, generation: current) }
         Task { [weak self] in
             guard let self else { return }

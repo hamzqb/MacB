@@ -168,6 +168,7 @@ struct IslandAssistantView: View {
         switch tool {
         case .lookAtScreen: return "eye"
         case .readScreenText: return "text.viewfinder"
+        case .runScenario: return "wand.and.stars"
         case .addReminder: return "checklist"
         case .addCalendarEvent, .calendarEvents: return "calendar.badge.plus"
         case .openWebsite: return "safari"

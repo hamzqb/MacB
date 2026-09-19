@@ -9,6 +9,15 @@
 - Stay-awake timer with an island countdown; saved window arrangements restored by hand or when displays change.
 - Searchable, optionally persistent clipboard history; a charging-level automation trigger.
 - MacB voice assistant (pronounced "Mek bi"), inside the island: a live, interruptible assistant on OpenAI's Realtime API, with web research, a per-use screen look, calendar and reminders, apps, media, volume, timers, windows, Claude/Codex session status, weather and an editable long-term memory; outward actions after reading outside content need a yes.
+- Free AI providers: Groq, Google Gemini, OpenRouter and Hugging Face answer the panel, the ring's text slices and the selection tasks with no OpenAI bill. Each key lives in its own Keychain item and is only sent to the service it belongs to; the provider is chosen automatically, free before paid, and models are picked from a list.
+- Cost meter: an estimate of what OpenAI has cost today and this month, from the provider's own token counts. Only numbers are stored — never a question or an answer.
+- `read_screen_text`: the assistant can read what is on screen with Apple's own recognition on this Mac and send only the words, which is cheaper than a screenshot and shows far less. Still confirmed every time.
+- Morning briefing: one greeting a day in the island with the weather, what is on today and anything waiting, read aloud by macOS's own voice. Costs nothing and needs no key.
+- Voice scenarios: a name for several steps — windows, stay-awake, apps, volume, music, timers and your own Shortcuts — run from the menu, from Settings or by asking MacB. MacB can run one but cannot write one.
+- The assistant always answers in Turkish, has a character setting, a clearer voice list, and connects faster: the socket and the microphone now open at the same time.
+- The island's assistant keeps the newest words in a fixed window instead of cutting them off, the orb carries the state in its colour, and a closed island shows it as a small pulsing dot with no transcript.
+- MacB can appear in the Dock and the ⌘Tab switcher, for anyone who goes looking for it there.
+- Weather falls back to OpenWeatherMap when Open-Meteo does not answer and a key is stored.
 - Fixed: the window-layout hot key handler no longer swallows other MacB shortcuts.
 - Fixed: launching no longer blocks on a Keychain prompt while checking for a stored API key.
 

@@ -20,6 +20,7 @@ import ScreenCaptureKit
     private let systemMonitor: SystemMonitorService
     private let weather: WeatherService
     private let cost: AICostMeter?
+    private let scenarios: ScenarioStore
     private let aiActivity: AIActivityService
     private let memory: JarvisMemoryStore
     private let notify: (String, String) -> Void
@@ -29,8 +30,9 @@ import ScreenCaptureKit
          media: MediaService, timer: TimerService,
          windowLayout: WindowLayoutService, arrangements: WindowArrangementService, note: QuickNoteStore,
          selection: SelectedTextService, systemMonitor: SystemMonitorService, weather: WeatherService,
-         aiActivity: AIActivityService, memory: JarvisMemoryStore,
+         aiActivity: AIActivityService, memory: JarvisMemoryStore, scenarios: ScenarioStore,
          notify: @escaping (String, String) -> Void) {
+        self.scenarios = scenarios
         self.weather = weather
         self.cost = cost
         self.aiActivity = aiActivity
@@ -54,6 +56,8 @@ import ScreenCaptureKit
             return "MacB ekranının bir görüntüsünü OpenAI'ye göndermek istiyor."
         case .readScreenText:
             return "MacB ekrandaki yazıyı okumak istiyor. Görüntü Mac'ten çıkmaz; yalnız bulunan yazı gönderilir."
+        case .runScenario:
+            return "Okuduğu bir içerikten sonra \u{201C}\(arguments["name"] as? String ?? "")\u{201D} senaryosunu çalıştırmak istiyor."
         case .addReminder:
             let due = (JarvisDates.parse(arguments["due"] as? String)).map { " · " + Self.display($0) } ?? ""
             return "Hatırlatıcı eklensin mi: \u{201C}\(arguments["title"] as? String ?? "")\u{201D}\(due)"
@@ -94,6 +98,11 @@ import ScreenCaptureKit
             case .success(let jpeg): return .image(jpeg: jpeg, question: arguments["question"] as? String)
             case .failure(let error): return fail(error.localizedDescription)
             }
+        case .runScenario:
+            let name = (arguments["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { return fail("Senaryo adı boş.") }
+            let message = await scenarios.run(named: name)
+            return ok(["message": message, "available": scenarios.scenarios.map(\.name)])
         case .readScreenText:
             do {
                 let reading = try await ScreenTextReader.read()

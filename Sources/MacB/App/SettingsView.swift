@@ -67,6 +67,7 @@ struct SettingsView: View {
     @ObservedObject var aiKey: AIKeyStore
     @ObservedObject var aiCost: AICostMeter
     @ObservedObject var briefing: BriefingService
+    @ObservedObject var scenarios: ScenarioStore
     @ObservedObject var assistant: AIAssistantService
     @ObservedObject var arrangements: WindowArrangementService
     @ObservedObject var keepAwake: KeepAwakeService
@@ -75,6 +76,8 @@ struct SettingsView: View {
     var openPanel: () -> Void
     /// The name typed for the next saved window arrangement.
     @State private var arrangementName = ""
+    /// The name typed for the next scenario.
+    @State private var scenarioName = ""
     @AppStorage("settingsPage") private var selectedPage: SettingsPage = .general
     @State private var showRemovalConfirmation = false
     @State private var showCacheConfirmation = false
@@ -291,6 +294,28 @@ struct SettingsView: View {
                 }
                 if let error = aiKey.errorMessage { message(error, warning: true) }
                 message("Anahtarını bir yere yapıştırdıysan (sohbet, not, ekran görüntüsü) onu iptal et ve yenisini üret. Sızmış bir anahtar senin faturana çalışır.", warning: true)
+            }
+            section("Sesli senaryolar", "wand.and.stars") {
+                Text("Birkaç işi tek isme bağla: \u{201C}toplantı moduna geç\u{201D} dediğinde pencereler düzene girsin, Mac uyanık kalsın, müzik dursun. Adımları burada sen yazarsın; MacB yalnız var olan bir senaryoyu çalıştırabilir, yenisini yazamaz.")
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: MacBDesign.Space.regular) {
+                    TextField("Yeni senaryo adı", text: $scenarioName)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { addScenario() }
+                    Button("Ekle", action: addScenario)
+                        .disabled(scenarioName.trimmingCharacters(in: .whitespaces).isEmpty
+                                  || scenarios.scenarios.count >= ScenarioMatching.maximum)
+                }
+                if scenarios.scenarios.isEmpty {
+                    message("Henüz senaryo yok. \u{201C}Toplantı modu\u{201D} iyi bir başlangıç.")
+                } else {
+                    ForEach(scenarios.scenarios) { scenario in
+                        rowDivider
+                        scenarioRow(scenario)
+                    }
+                }
+                message("Kısayol adımı, Kısayollar uygulamasındaki kendi kısayolunu çalıştırır. MacB'nin kendi başına yapamadığı bir şeyi böyle ekleyebilirsin.")
             }
             section("Dock ve ⌘Tab", "dock.rectangle") {
                 settingToggle("Dock'ta ve ⌘Tab'da görün",
@@ -1457,6 +1482,108 @@ struct SettingsView: View {
             case .valid(let text): message(text)
             case .invalid(let text): message(text, warning: true)
             }
+        }
+    }
+
+    private func addScenario() {
+        if scenarios.add(name: scenarioName) != nil { scenarioName = "" }
+    }
+
+    /// One scenario: its name, what it does, and a way to try it.
+    @ViewBuilder
+    private func scenarioRow(_ scenario: Scenario) -> some View {
+        VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+            HStack(spacing: MacBDesign.Space.regular) {
+                Text(scenario.name)
+                    .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                Spacer(minLength: 8)
+                Button("Çalıştır") { Task { await scenarios.run(scenario) } }
+                    .disabled(!scenario.isRunnable)
+                Menu("Adım ekle") {
+                    ForEach(ScenarioStep.choices) { choice in
+                        Button(choice.kindTitle) { scenarios.addStep(choice, to: scenario.id) }
+                    }
+                }
+                .fixedSize()
+                Button("Sil", role: .destructive) { scenarios.remove(scenario.id) }
+            }
+            ForEach(Array(scenario.steps.enumerated()), id: \.offset) { index, step in
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Image(systemName: step.symbol)
+                        .font(.system(size: MacBDesign.TypeScale.caption))
+                        .foregroundStyle(step.isComplete ? MacBDesign.accent : MacBDesign.muted)
+                        .frame(width: 18)
+                    scenarioStepEditor(step, at: index, in: scenario)
+                    Spacer(minLength: 8)
+                    Button { scenarios.removeStep(at: index, in: scenario.id) } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.plain).foregroundStyle(MacBDesign.muted)
+                    .accessibilityLabel("Adımı sil: \(step.title)")
+                }
+            }
+            if scenario.steps.isEmpty {
+                message("Bu senaryoda henüz adım yok.")
+            }
+        }
+    }
+
+    /// The one control a step needs: a name, an address or a number.
+    @ViewBuilder
+    private func scenarioStepEditor(_ step: ScenarioStep, at index: Int, in scenario: Scenario) -> some View {
+        switch step {
+        case .arrangement(let name):
+            Picker("Düzen", selection: Binding(
+                get: { name },
+                set: { scenarios.replaceStep(at: index, in: scenario.id, with: .arrangement(name: $0)) })) {
+                Text("Seç…").tag("")
+                ForEach(arrangements.arrangements) { Text($0.name).tag($0.name) }
+            }
+            .labelsHidden().fixedSize()
+        case .openApplication(let name):
+            TextField("Uygulama adı", text: Binding(
+                get: { name },
+                set: { scenarios.replaceStep(at: index, in: scenario.id, with: .openApplication(name: $0)) }))
+                .textFieldStyle(.roundedBorder).frame(maxWidth: 220)
+        case .openWebsite(let url):
+            TextField("adres.com", text: Binding(
+                get: { url },
+                set: { scenarios.replaceStep(at: index, in: scenario.id, with: .openWebsite(url: $0)) }))
+                .textFieldStyle(.roundedBorder).frame(maxWidth: 260)
+        case .shortcut(let name):
+            TextField("Kısayol adı", text: Binding(
+                get: { name },
+                set: { scenarios.replaceStep(at: index, in: scenario.id, with: .shortcut(name: $0)) }))
+                .textFieldStyle(.roundedBorder).frame(maxWidth: 220)
+        case .media(let play):
+            Picker("Müzik", selection: Binding(
+                get: { play },
+                set: { scenarios.replaceStep(at: index, in: scenario.id, with: .media(play: $0)) })) {
+                Text("Duraklat").tag(false)
+                Text("Başlat").tag(true)
+            }
+            .labelsHidden().fixedSize()
+        case .keepAwake(let minutes):
+            Picker("Süre", selection: Binding(
+                get: { minutes },
+                set: { scenarios.replaceStep(at: index, in: scenario.id, with: .keepAwake(minutes: $0)) })) {
+                ForEach(KeepAwakeDuration.choices, id: \.self) { Text(KeepAwakeDuration.title(minutes: $0)).tag($0) }
+            }
+            .labelsHidden().fixedSize()
+        case .volume(let percent):
+            Picker("Ses", selection: Binding(
+                get: { percent },
+                set: { scenarios.replaceStep(at: index, in: scenario.id, with: .volume(percent: $0)) })) {
+                ForEach([0, 10, 20, 30, 50, 70, 100], id: \.self) { Text("%\($0)").tag($0) }
+            }
+            .labelsHidden().fixedSize()
+        case .timer(let minutes):
+            Picker("Dakika", selection: Binding(
+                get: { minutes },
+                set: { scenarios.replaceStep(at: index, in: scenario.id, with: .timer(minutes: $0)) })) {
+                ForEach([5, 10, 15, 25, 45, 60], id: \.self) { Text("\($0) dk").tag($0) }
+            }
+            .labelsHidden().fixedSize()
         }
     }
 
