@@ -77,6 +77,16 @@ public enum IslandGeometry {
     }
 
     /// Full expanded panel height: navigation, body, and padding, with empty bodies collapsing away.
+    /// The voice assistant: the orb and its line, plus room for what has
+    /// been said and for a question waiting to be allowed.
+    public static func assistantHeight(transcriptLines: Int, hasConfirmation: Bool) -> CGFloat {
+        let base: CGFloat = 132
+        let transcript = min(3, max(0, transcriptLines)) * 20
+        return base + CGFloat(transcript) + (hasConfirmation ? 96 : 0)
+    }
+
+    public static let assistantWidth: CGFloat = 560
+
     public static func expandedHeight(bodyHeight: CGFloat) -> CGFloat {
         guard bodyHeight > 0 else { return navigationHeight + topPadding + bottomPadding }
         return navigationHeight + gap + bodyHeight + topPadding + bottomPadding

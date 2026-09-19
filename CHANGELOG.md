@@ -8,7 +8,7 @@
 - Shelf conversions (JPEG copy, smaller copy, PDF merge) and AirDrop; screenshots can land on the shelf.
 - Stay-awake timer with an island countdown; saved window arrangements restored by hand or when displays change.
 - Searchable, optionally persistent clipboard history; a charging-level automation trigger.
-- Jarvis: a live, interruptible voice assistant on OpenAI's Realtime API, with web research, a per-use screen look, calendar and reminders, apps, media, volume, timers, windows, Claude/Codex session status, weather and an editable long-term memory; outward actions after reading outside content need a yes.
+- MacB voice assistant (pronounced "Mek bi"), inside the island: a live, interruptible assistant on OpenAI's Realtime API, with web research, a per-use screen look, calendar and reminders, apps, media, volume, timers, windows, Claude/Codex session status, weather and an editable long-term memory; outward actions after reading outside content need a yes.
 - Fixed: the window-layout hot key handler no longer swallows other MacB shortcuts.
 - Fixed: launching no longer blocks on a Keychain prompt while checking for a stored API key.
 

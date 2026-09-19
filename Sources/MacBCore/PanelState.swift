@@ -9,9 +9,15 @@ public enum NotchContent: String, Equatable, CaseIterable {
     case files
     case clipboard
     case timer
+    /// The voice assistant. Not a tab: it appears while a conversation is
+    /// running and the island goes back to where it was afterwards.
+    case assistant
 
     /// The section a drop or an explicit close returns to.
     public static let `default` = NotchContent.home
+
+    /// The sections the navigation row offers.
+    public static var tabs: [NotchContent] { allCases.filter { $0 != .assistant } }
 }
 
 /// Interaction policy is independent of rendering and of animation progress.

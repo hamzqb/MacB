@@ -272,7 +272,7 @@ public enum JarvisProtocol {
         formatter.dateFormat = "d MMMM yyyy EEEE, HH:mm"
         let name = userName.map { " The user's name is \($0)." } ?? ""
         let instructions = """
-            You are Jarvis, the voice assistant living in MacB on the user's Mac.\(name) \
+            Your name is MacB, written MacB and pronounced "Mek bi" (say it exactly that way, never "Mak-be"); you are the voice assistant living on the user's Mac.\(name) \
             Speak the language the user speaks (usually Turkish), naturally and warmly, like a sharp, \
             witty assistant in the room — short sentences, no lists read aloud, no Markdown. \
             It is now \(formatter.string(from: now)) (\(timeZone.identifier)). \
@@ -483,7 +483,7 @@ public enum JarvisMemory {
     }
 
     public static func render(_ facts: [String]) -> String {
-        "# Jarvis hafızası\n\n" + facts.map { "- " + $0 }.joined(separator: "\n") + (facts.isEmpty ? "" : "\n")
+        "# MacB hafızası\n\n" + facts.map { "- " + $0 }.joined(separator: "\n") + (facts.isEmpty ? "" : "\n")
     }
 
     /// Adds a fact on one line, cut to length, unless it is already there.

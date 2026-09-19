@@ -1503,6 +1503,7 @@ struct CoreTestRunner {
                 try expect(Set(tools.compactMap { $0["name"] as? String }) == Set(JarvisTool.allCases.map(\.rawValue)), "Tool list drifted")
                 let instructions = try require(session["instructions"] as? String, "No instructions")
                 try expect(instructions.contains("1970") && instructions.contains("Europe/Istanbul"), "The date did not reach the model")
+                try expect(instructions.contains("MacB") && instructions.contains("Mek bi"), "The assistant does not know its name")
                 try expect(try JSONSerialization.data(withJSONObject: update).count > 0, "The session is not valid JSON")
                 try expect(JarvisProtocol.url(model: "gpt-realtime-2.1")?.absoluteString == "wss://api.openai.com/v1/realtime?model=gpt-realtime-2.1",
                            "Wrong socket address")

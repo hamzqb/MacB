@@ -26,6 +26,8 @@ struct NotchView: View {
     @ObservedObject var weather: WeatherService
     @ObservedObject var note: QuickNoteStore
     @ObservedObject var faceUnlock: FaceUnlockService
+    @ObservedObject var assistant: JarvisSession
+    var closeAssistant: () -> Void
     /// One process-wide assertion, so there is one shared instance of it.
     @ObservedObject private var keepAwake = KeepAwakeService.shared
     var open: () -> Void
@@ -283,6 +285,8 @@ struct NotchView: View {
                 }
             case .timer:
                 IslandTimerView(timer: timer)
+            case .assistant:
+                IslandAssistantView(session: assistant, close: closeAssistant, openSettings: openSettings)
             }
         }
     }
@@ -385,6 +389,10 @@ struct NotchView: View {
             result.append(CollapsedIndicator(symbol: "timer", value: timer.remainingText,
                                              label: "Zamanlayıcı", tint: MacBDesign.IslandToken.accent))
         }
+        if assistant.isActive {
+            result.append(CollapsedIndicator(symbol: "waveform", value: assistantIndicator,
+                                             label: "MacB", tint: MacBDesign.IslandToken.accent))
+        }
         if keepAwake.isActive {
             result.append(CollapsedIndicator(symbol: "cup.and.heat.waves.fill", value: keepAwake.remainingText,
                                              label: "Uyanık", tint: MacBDesign.IslandToken.accent))
@@ -394,6 +402,17 @@ struct NotchView: View {
                                              label: "Rafta", tint: MacBDesign.IslandToken.secondaryText))
         }
         return result
+    }
+
+    /// What the closed island says while a conversation is running.
+    private var assistantIndicator: String {
+        switch assistant.state {
+        case .listening: return "dinliyor"
+        case .speaking: return "konuşuyor"
+        case .thinking: return "düşünüyor"
+        case .connecting: return "bağlanıyor"
+        default: return "açık"
+        }
     }
 
     private var peek: some View {

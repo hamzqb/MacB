@@ -300,7 +300,7 @@ enum JarvisToolOutcome {
             }
         }
         do {
-            try audio.start()
+            try audio.startBestAvailable()
         } catch {
             return fail("Mikrofon açılamadı: \(error.localizedDescription)")
         }

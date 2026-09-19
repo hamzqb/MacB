@@ -1,3 +1,4 @@
+import AVFoundation
 import AppKit
 import MacBCore
 
@@ -111,6 +112,46 @@ import MacBCore
                     }
                 } catch { print("error: \(error.localizedDescription)  status: \((socket.response as? HTTPURLResponse)?.statusCode ?? 0)") }
                 socket.cancel(with: .normalClosure, reason: nil)
+            }
+        }
+        // Opens the microphone locally for two seconds in each audio setup
+        // Jarvis can use and reports which ones start. Nothing is sent.
+        if arguments.contains("--audio-probe") {
+            return {
+                let engine = AVAudioEngine()
+                print("input format:", engine.inputNode.outputFormat(forBus: 0))
+                print("output format:", engine.outputNode.outputFormat(forBus: 0))
+                for echo in [true, false] {
+                    let audio = JarvisAudio()
+                    var chunks = 0
+                    let lock = NSLock()
+                    audio.onCapture = { _ in lock.withLock { chunks += 1 } }
+                    do {
+                        try audio.start(echoCancellation: echo)
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        // A quiet half-second tone through the same path the
+                        // voice uses, to prove playback and the heard-so-far
+                        // counter work.
+                        let tone = JarvisProtocol.pcm16(from: (0..<12_000).map {
+                            Float(sin(Double($0) * 2 * Double.pi * 440 / 24_000) * 0.12)
+                        })
+                        let began = Date()
+                        audio.play(tone, item: "probe")
+                        let immediately = audio.isSpeaking
+                        print("  after play: \(audio.diagnostic)")
+                        var finishedAfter: Double?
+                        for _ in 0..<40 {
+                            try? await Task.sleep(nanoseconds: 50_000_000)
+                            if !audio.isSpeaking { finishedAfter = Date().timeIntervalSince(began); break }
+                        }
+                        audio.stop()
+                        print("echoCancellation=\(echo): started, \(lock.withLock { chunks }) chunks, " +
+                              "queued=\(immediately), tone played in " +
+                              String(format: "%.2fs", finishedAfter ?? -1) + " (expected ~0.50s)")
+                    } catch {
+                        print("echoCancellation=\(echo): failed \((error as NSError).code) \(error.localizedDescription)")
+                    }
+                }
             }
         }
         if arguments.contains("--arrangement-probe") {

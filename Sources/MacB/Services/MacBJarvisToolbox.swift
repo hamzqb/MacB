@@ -48,7 +48,7 @@ import ScreenCaptureKit
         let arguments = call.argumentObject
         switch tool {
         case .lookAtScreen:
-            return "Jarvis ekranının bir görüntüsünü OpenAI'ye göndermek istiyor."
+            return "MacB ekranının bir görüntüsünü OpenAI'ye göndermek istiyor."
         case .addReminder:
             let due = (JarvisDates.parse(arguments["due"] as? String)).map { " · " + Self.display($0) } ?? ""
             return "Hatırlatıcı eklensin mi: \u{201C}\(arguments["title"] as? String ?? "")\u{201D}\(due)"

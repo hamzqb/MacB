@@ -308,11 +308,11 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 message("Anahtarını bir yere yapıştırdıysan (sohbet, not, ekran görüntüsü) onu iptal et ve yenisini üret. Sızmış bir anahtar senin faturana çalışır.", warning: true)
             }
-            section("Jarvis", "person.wave.2") {
-                Text("Canlı sesli asistan: konuşursun, konuşarak cevap verir, lafını bölebilirsin. İnternette araştırır, uygulama açar, müziği ve sesi yönetir, zamanlayıcı kurar, takvimine bakar, istersen ekranına bakıp okur.")
+            section("Sesli asistan", "person.wave.2") {
+                Text("MacB (okunuşu \u{201C}Mek bi\u{201D}) canlı sesli asistanın: konuşursun, konuşarak cevap verir, lafını bölebilirsin. İnternette araştırır, uygulama açar, müziği ve sesi yönetir, zamanlayıcı kurar, takvimine bakar, istersen ekranına bakıp okur.")
                     .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                settingToggle("\(JarvisHotKey.displayKeys) ile aç", detail: "Halkadaki Jarvis dilimi ve menüdeki \u{201C}Jarvis ile konuş\u{201D} her zaman çalışır.",
+                settingToggle("\(JarvisHotKey.displayKeys) ile aç", detail: "Halkadaki \u{201C}MacB ile konuş\u{201D} dilimi ve menüdeki aynı adlı komut her zaman çalışır.",
                               isOn: $preferences.jarvisHotKeyEnabled)
                 if jarvisHotKeyFailed {
                     message("\(JarvisHotKey.displayKeys) başka bir uygulama tarafından kullanılıyor.", warning: true)
@@ -329,12 +329,12 @@ struct SettingsView: View {
                     Text("Model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     TextField(JarvisProtocol.defaultModel, text: $preferences.jarvisModel)
                         .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Jarvis modeli")
+                        .accessibilityLabel("Sesli asistan modeli")
                     Button("Varsayılan") { preferences.jarvisModel = JarvisProtocol.defaultModel }
                 }
-                message("Jarvis açıkken mikrofon sesi canlı olarak OpenAI'ye gider (Sesle sor'dan farkı bu). Kaydedilmez; panel kapanınca ya da 90 saniye sessiz kalınca bağlantı kapanır. Ekran görüntüsü ve takvime ekleme her seferinde onayını ister.")
+                message("Sesli asistan açıkken mikrofon sesi canlı olarak OpenAI'ye gider (Sesle sor'dan farkı bu). Kaydedilmez; panel kapanınca ya da 90 saniye sessiz kalınca bağlantı kapanır. Ekran görüntüsü ve takvime ekleme her seferinde onayını ister.")
                 message("Canlı ses ücretlidir: yaklaşık dakikası birkaç sent, uzun konuşmada daha fazla.", warning: true)
-                message("Ekrandan, seçimden ya da internetten bir şey okuduktan sonra Jarvis bir şey açmak, panoya koymak ya da not almak isterse önce sana sorar. Böylece bir sayfadaki yazı onu yönlendiremez.")
+                message("Ekrandan, seçimden ya da internetten bir şey okuduktan sonra MacB bir şey açmak, panoya koymak ya da not almak isterse önce sana sorar. Böylece bir sayfadaki yazı onu yönlendiremez.")
                 rowDivider
                 HStack {
                     Text("Hafıza (\(jarvisMemory.facts.count))").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
@@ -347,7 +347,7 @@ struct SettingsView: View {
                         .disabled(jarvisMemory.facts.isEmpty)
                 }
                 if jarvisMemory.facts.isEmpty {
-                    message("Jarvis'e \u{201C}bunu aklında tut\u{201D} dediğin şeyler burada durur ve her konuşmada ona hatırlatılır.")
+                    message("MacB'ye \u{201C}bunu aklında tut\u{201D} dediğin şeyler burada durur ve her konuşmada ona hatırlatılır.")
                 } else {
                     ForEach(Array(jarvisMemory.facts.enumerated()), id: \.offset) { index, fact in
                         HStack(alignment: .top, spacing: MacBDesign.Space.regular) {

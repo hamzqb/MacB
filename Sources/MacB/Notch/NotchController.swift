@@ -61,7 +61,11 @@ struct IslandToast: Equatable {
     private let note: QuickNoteStore
     private let systemEvents: SystemEventService
     private let faceUnlock: FaceUnlockService
+    private let assistant: JarvisSession
     private let openSettings: () -> Void
+    /// True while a voice conversation is running. The island stays open and
+    /// ignores its own close timers for as long as it is.
+    private var assistantIsActive = false
     private let presentation = NotchPresentation()
     private var state = PanelState()
     private var panel: NotchPanel?
@@ -102,7 +106,9 @@ struct IslandToast: Equatable {
          background: IslandBackgroundStore, weather: WeatherService, note: QuickNoteStore,
          faceUnlock: FaceUnlockService,
          systemEvents: SystemEventService,
+         assistant: JarvisSession,
          openSettings: @escaping () -> Void) {
+        self.assistant = assistant
         self.media = media; self.shelf = shelf; self.preferences = preferences
         self.recentFiles = recentFiles; self.clipboard = clipboard
         self.fileActivity = fileActivity
@@ -130,7 +136,8 @@ struct IslandToast: Equatable {
             recentTargets: recentTargets, aiActivity: aiActivity, systemMonitor: systemMonitor,
             processes: processes, lid: lid,
             keyboardCleaning: keyboardCleaning, timer: timer, widgets: widgets, launcher: launcher, background: background, weather: weather, note: note,
-            faceUnlock: faceUnlock,
+            faceUnlock: faceUnlock, assistant: assistant,
+            closeAssistant: { [weak self] in self?.stopAssistant() },
             open: { [weak self] in self?.openPanel() }, close: { [weak self] in self?.closePanel() },
             select: { [weak self] content in self?.select(content) },
             openSettings: { [weak self] in self?.openSettings() },
@@ -439,6 +446,7 @@ struct IslandToast: Equatable {
         switch content {
         case .clipboard: return .clipboard
         case .files: return .shelf
+        case .assistant: return nil
         case .home, .apps, .timer: return nil
         }
     }
@@ -601,7 +609,34 @@ struct IslandToast: Equatable {
         }
         pointerInside = inside
     }
+    /// Opens the island on the assistant and keeps it there while it talks.
+    func startAssistant() {
+        assistantIsActive = true
+        enabled = true
+        start()
+        openPanel(showing: .assistant)
+        assistant.start()
+        render()
+    }
+
+    /// Ends the conversation and lets the island go back to normal.
+    func stopAssistant() {
+        assistant.stop()
+        assistantFinished()
+    }
+
+    /// Called when the conversation ends, by hand or by itself.
+    func assistantFinished() {
+        guard assistantIsActive else { return }
+        assistantIsActive = false
+        if state.content == .assistant { select(.default) }
+        closePanel()
+    }
+
+    var isAssistantVisible: Bool { assistantIsActive }
+
     private func scheduleDeadline() {
+        guard !assistantIsActive else { deadlineTask?.cancel(); return }
         deadlineTask?.cancel()
         let deadlines = [state.hoverDeadline, state.closeDeadline].compactMap { $0 }
         guard let deadline = deadlines.min() else { return }
@@ -667,6 +702,8 @@ struct IslandToast: Equatable {
             return IslandGeometry.clipboardWidth(itemCount: clipboard.items.count, screenWidth: screenWidth)
         case .timer:
             return IslandGeometry.sectionWidth(620, screenWidth: screenWidth)
+        case .assistant:
+            return IslandGeometry.sectionWidth(IslandGeometry.assistantWidth, screenWidth: screenWidth)
         }
     }
 
@@ -690,6 +727,9 @@ struct IslandToast: Equatable {
             return IslandGeometry.clipboardHeight(isEmpty: clipboard.items.isEmpty)
         case .timer:
             return IslandGeometry.timerHeight
+        case .assistant:
+            return IslandGeometry.assistantHeight(transcriptLines: assistant.lines.count,
+                                                  hasConfirmation: assistant.confirmation != nil)
         }
     }
 

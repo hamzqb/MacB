@@ -263,10 +263,6 @@ private final class Flag: @unchecked Sendable {
         selection: selectedText, systemMonitor: systemMonitor, weather: weather, aiActivity: aiActivity,
         memory: jarvisMemory,
         notify: { [weak self] symbol, message in self?.notch.notify(symbol: symbol, message: message) })
-    private lazy var jarvisPanel = JarvisPanelController(session: jarvis) { [weak self] in
-        UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
-        self?.showSettings()
-    }
     private lazy var aiPanel = AIPanelController(assistant: assistant, speech: speech,
                                                  selection: selectedText) { [weak self] in
         UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
@@ -286,6 +282,7 @@ private final class Flag: @unchecked Sendable {
                                             note: quickNote,
                                             faceUnlock: faceUnlock,
                                             systemEvents: systemEvents,
+                                            assistant: jarvis,
                                             openSettings: { [weak self] in self?.showSettings() })
     private lazy var switcher = SwitcherController(windowService: windows, previewService: previews,
                                                    preferences: preferences, favorites: favorites,
@@ -330,6 +327,9 @@ private final class Flag: @unchecked Sendable {
         }
         radialMenu.hasAccessibility = { [weak self] in self?.permissions.accessibility ?? false }
         jarvis.toolbox = jarvisTools
+        // A goodbye, a quiet spell or the hard limit ends the conversation on
+        // its own; the island has to follow it back to normal.
+        jarvis.onEnded = { [weak self] in self?.notch.assistantFinished() }
         jarvisHotKey.onPress = { [weak self] in self?.toggleJarvis() }
         switcher.onWillOpen = { [weak self] in
             self?.dock.dismiss()
@@ -415,6 +415,10 @@ private final class Flag: @unchecked Sendable {
             notch.showDevelopmentPreview(phase: .expanded, content: .clipboard)
         } else if CommandLine.arguments.contains("--preview-drop") {
             notch.showDevelopmentPreview(phase: .expanded, content: .files, dropping: true)
+        } else if CommandLine.arguments.contains("--preview-assistant") {
+            // The island's assistant section without a conversation behind it,
+            // so its layout can be looked at without opening a microphone.
+            notch.showDevelopmentPreview(phase: .expanded, content: .assistant)
         } else if CommandLine.arguments.contains("--preview-timer") {
             notch.showDevelopmentPreview(phase: .expanded, content: .timer)
         } else if CommandLine.arguments.contains("--preview-apps") {
@@ -499,7 +503,7 @@ private final class Flag: @unchecked Sendable {
         menu.setSubmenu(arrangementMenu, for: menu.addItem(withTitle: "Pencere düzenleri", action: nil, keyEquivalent: ""))
         let ask = menu.addItem(withTitle: "Yapay zekâya sor…", action: #selector(openAIPanel), keyEquivalent: "")
         ask.target = self
-        let talk = menu.addItem(withTitle: "Jarvis ile konuş (\(JarvisHotKey.displayKeys))", action: #selector(toggleJarvis), keyEquivalent: "")
+        let talk = menu.addItem(withTitle: "MacB ile konuş (\(JarvisHotKey.displayKeys))", action: #selector(toggleJarvis), keyEquivalent: "")
         talk.target = self
         let awakeMenu = NSMenu(title: "Uyanık tut")
         awakeMenu.delegate = self
@@ -730,8 +734,16 @@ private final class Flag: @unchecked Sendable {
         }
     }
 
+    /// Opens the island on MacB's voice assistant, or ends the conversation
+    /// if one is already running.
     @objc private func toggleJarvis() {
-        if jarvisPanel.isVisible { jarvisPanel.close() } else { aiPanel.close(); jarvisPanel.show() }
+        if notch.isAssistantVisible {
+            notch.stopAssistant()
+            return
+        }
+        aiPanel.close()
+        if !preferences.notchEnabled { preferences.notchEnabled = true }
+        notch.startAssistant()
     }
 
     private func openIsland(showing content: NotchContent) {
@@ -885,7 +897,7 @@ private final class Flag: @unchecked Sendable {
 
     private func suspendServices() {
         speech.cancel()
-        jarvisPanel.close()
+        notch.stopAssistant()
         switcher.dismiss()
         dock.stop()
         notch.stop()

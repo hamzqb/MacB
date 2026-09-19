@@ -9,6 +9,7 @@ extension NotchContent {
         case .files: return "tray.full.fill"
         case .clipboard: return "doc.on.clipboard.fill"
         case .timer: return "timer"
+        case .assistant: return "waveform"
         }
     }
 
@@ -19,6 +20,7 @@ extension NotchContent {
         case .files: return "Dosyalar"
         case .clipboard: return "Pano"
         case .timer: return "Zamanlayıcı"
+            case .assistant: return "MacB"
         }
     }
 }
@@ -38,7 +40,7 @@ struct IslandNavigation: View {
 
     var body: some View {
         HStack(spacing: MacBDesign.Space.close) {
-            ForEach(NotchContent.allCases, id: \.rawValue) { section in
+            ForEach(NotchContent.tabs, id: \.rawValue) { section in
                 circleButton(section.symbol, label: section.title,
                              isSelected: section == selected) { select(section) }
             }

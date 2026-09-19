@@ -39,7 +39,7 @@ public enum RadialAction: String, CaseIterable, Codable, Sendable {
         case .timer: return "Zamanlayıcı"
         case .quickNote: return "Hızlı not"
         case .askAI: return "Yapay zekâ"
-        case .jarvis: return "Jarvis"
+        case .jarvis: return "MacB ile konuş"
         case .voiceAsk: return "Sesle sor"
         case .summarizeSelection: return "Seçimi özetle"
         case .fixSelection: return "Seçimi düzelt"
