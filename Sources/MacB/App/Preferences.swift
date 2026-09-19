@@ -134,6 +134,14 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     }
     /// ⌃⌥Space opens and closes Jarvis.
     @Published var jarvisHotKeyEnabled: Bool { didSet { defaults.set(jarvisHotKeyEnabled, forKey: "jarvisHotKeyEnabled") } }
+    /// How MacB talks: manner only, never what it is allowed to do.
+    @Published var jarvisPersona: String { didSet { defaults.set(jarvisPersona, forKey: "jarvisPersona") } }
+    /// The morning briefing: one greeting a day with the weather and what is on.
+    @Published var briefingEnabled: Bool { didSet { defaults.set(briefingEnabled, forKey: "briefingEnabled") } }
+    /// The earliest hour it may be given.
+    @Published var briefingHour: Int { didSet { defaults.set(briefingHour, forKey: "briefingHour") } }
+    /// Whether it is read aloud, by macOS's own voice.
+    @Published var briefingSpeaks: Bool { didSet { defaults.set(briefingSpeaks, forKey: "briefingSpeaks") } }
     /// The language a selection is translated into (unless it is already in it).
     @Published var translationTarget: String { didSet { defaults.set(translationTarget, forKey: "translationTarget") } }
     /// How long "stay awake" lasts when started from the ring, in minutes; 0 for no end.
@@ -216,6 +224,39 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         }
     }
     static let defaultAIModel = "gpt-6-astra"
+    /// Which provider answers: a stored raw value, or empty for "whichever has
+    /// a key, free ones first".
+    @Published var aiProvider: String { didSet { defaults.set(aiProvider, forKey: "aiProvider") } }
+    /// The chosen provider, when it is one MacB knows.
+    var preferredProvider: AIProvider? { AIProvider(rawValue: aiProvider) }
+
+    /// The model for one provider. Each keeps its own: switching from Groq to
+    /// Gemini must not carry a model name that only one of them has.
+    func model(for provider: AIProvider) -> String {
+        if provider == .openAI { return aiModel }
+        let stored = defaults.string(forKey: "aiModel." + provider.account) ?? ""
+        let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? provider.defaultModel : trimmed
+    }
+
+    func setModel(_ name: String, for provider: AIProvider) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if provider == .openAI {
+            aiModel = trimmed.isEmpty ? Self.defaultAIModel : trimmed
+        } else {
+            defaults.set(trimmed.isEmpty ? provider.defaultModel : trimmed,
+                         forKey: "aiModel." + provider.account)
+            objectWillChange.send()
+        }
+    }
+
+    /// Whether MacB has a Dock icon and appears in the ⌘Tab switcher.
+    ///
+    /// Off by default, which is what a notch utility normally wants: it lives
+    /// in the island and the menu bar, and an extra Dock icon is clutter. On,
+    /// because somebody asked where MacB was in ⌘Tab and the honest answer is
+    /// that an accessory application is not there to be found.
+    @Published var showInDock: Bool { didSet { defaults.set(showInDock, forKey: "showInDock") } }
     /// Rings for particular applications, by bundle identifier. Anything not
     /// in here gets `radialMenuLayout`.
     @Published var radialMenuAppLayouts: [String: RadialMenuLayout] {
@@ -242,9 +283,11 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "recentFilesEnabled": false, "peekEnabled": true,
                                     "screenshotShelfEnabled": false,
                                     "translationTarget": "tr",
-                                    "jarvisVoice": JarvisVoice.cedar.rawValue,
+                                    "jarvisVoice": JarvisVoice.marin.rawValue,
                                     "jarvisModel": JarvisProtocol.defaultModel,
                                     "jarvisHotKeyEnabled": true,
+                                    "jarvisPersona": JarvisPersona.warm.rawValue,
+                                    "briefingEnabled": false, "briefingHour": 8, "briefingSpeaks": true,
                                     "keepAwakeMinutes": 60,
                                     "clipboardKeepsHistory": false, "clipboardHistoryLimit": 30,
                                     "groupedWindowsEnabled": true,
@@ -265,6 +308,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "radialMenuScale": 0.85,
                                     "radialMenuThreeFinger": false,
                                     "aiModel": Preferences.defaultAIModel,
+                                    "aiProvider": "",
+                                    "showInDock": false,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
         notchEnabled = defaults.bool(forKey: "notchEnabled")
@@ -277,9 +322,13 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         recentFilesEnabled = defaults.bool(forKey: "recentFilesEnabled")
         screenshotShelfEnabled = defaults.bool(forKey: "screenshotShelfEnabled")
         translationTarget = defaults.string(forKey: "translationTarget") ?? "tr"
-        jarvisVoice = defaults.string(forKey: "jarvisVoice") ?? JarvisVoice.cedar.rawValue
+        jarvisVoice = defaults.string(forKey: "jarvisVoice") ?? JarvisVoice.marin.rawValue
         jarvisModel = defaults.string(forKey: "jarvisModel") ?? JarvisProtocol.defaultModel
         jarvisHotKeyEnabled = defaults.bool(forKey: "jarvisHotKeyEnabled")
+        jarvisPersona = defaults.string(forKey: "jarvisPersona") ?? JarvisPersona.warm.rawValue
+        briefingEnabled = defaults.bool(forKey: "briefingEnabled")
+        briefingHour = defaults.integer(forKey: "briefingHour")
+        briefingSpeaks = defaults.bool(forKey: "briefingSpeaks")
         keepAwakeMinutes = defaults.integer(forKey: "keepAwakeMinutes")
         clipboardKeepsHistory = defaults.bool(forKey: "clipboardKeepsHistory")
         let storedLimit = defaults.integer(forKey: "clipboardHistoryLimit")
@@ -305,6 +354,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                               max(RadialMenuMetrics.minimumScale, defaults.double(forKey: "radialMenuScale")))
         radialMenuThreeFinger = defaults.bool(forKey: "radialMenuThreeFinger")
         aiModel = defaults.string(forKey: "aiModel") ?? Preferences.defaultAIModel
+        aiProvider = defaults.string(forKey: "aiProvider") ?? ""
+        showInDock = defaults.bool(forKey: "showInDock")
         // A ring that cannot be decoded is a ring with the default slices, not
         // an app that refuses to start.
         radialMenuAppLayouts = defaults.data(forKey: "radialMenuAppLayouts")

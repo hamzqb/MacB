@@ -84,7 +84,16 @@ struct WeatherSnapshot: Equatable {
                 return
             } catch {
                 guard !Task.isCancelled else { return }
-                errorMessage = "Hava durumu alınamadı."
+                // Open-Meteo did not answer. Ask the second source, if there is
+                // one, before telling the user there is no weather.
+                if let fallback = await WeatherFallback.current(place: place, session: session) {
+                    guard !Task.isCancelled else { return }
+                    snapshot = fallback
+                    errorMessage = nil
+                    lastFetch = Date()
+                } else {
+                    errorMessage = "Hava durumu alınamadı."
+                }
             }
             isLoading = false
         }

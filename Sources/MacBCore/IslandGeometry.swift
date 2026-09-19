@@ -81,11 +81,26 @@ public enum IslandGeometry {
     /// been said and for a question waiting to be allowed.
     public static func assistantHeight(transcriptLines: Int, hasConfirmation: Bool) -> CGFloat {
         let base: CGFloat = 132
-        let transcript = min(3, max(0, transcriptLines)) * 20
-        return base + CGFloat(transcript) + (hasConfirmation ? 96 : 0)
+        // A fixed window rather than a line count: a "line" of speech wraps to
+        // two or three on screen, so counting them reserved too little room and
+        // the text was cut through the middle.
+        let transcript: CGFloat = transcriptLines > 0 ? transcriptHeight : 0
+        return base + transcript + (hasConfirmation ? 96 : 0)
     }
 
+    /// How much of the conversation is on screen at once. What scrolls off is
+    /// still there; the newest is always the one showing.
+    public static let transcriptHeight: CGFloat = 84
+
     public static let assistantWidth: CGFloat = 560
+
+    /// The morning briefing: a line of greeting and one line per thing worth
+    /// saying, plus the row of buttons under it.
+    public static func briefingHeight(lines: Int) -> CGFloat {
+        88 + CGFloat(min(6, max(1, lines))) * 22
+    }
+
+    public static let briefingWidth: CGFloat = 460
 
     public static func expandedHeight(bodyHeight: CGFloat) -> CGFloat {
         guard bodyHeight > 0 else { return navigationHeight + topPadding + bottomPadding }

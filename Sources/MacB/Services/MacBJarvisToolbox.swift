@@ -19,17 +19,20 @@ import ScreenCaptureKit
     private let selection: SelectedTextService
     private let systemMonitor: SystemMonitorService
     private let weather: WeatherService
+    private let cost: AICostMeter?
     private let aiActivity: AIActivityService
     private let memory: JarvisMemoryStore
     private let notify: (String, String) -> Void
     private let events = EKEventStore()
 
-    init(keys: AIKeyStore, searchModel: @escaping () -> String, media: MediaService, timer: TimerService,
+    init(keys: AIKeyStore, searchModel: @escaping () -> String, cost: AICostMeter? = nil,
+         media: MediaService, timer: TimerService,
          windowLayout: WindowLayoutService, arrangements: WindowArrangementService, note: QuickNoteStore,
          selection: SelectedTextService, systemMonitor: SystemMonitorService, weather: WeatherService,
          aiActivity: AIActivityService, memory: JarvisMemoryStore,
          notify: @escaping (String, String) -> Void) {
         self.weather = weather
+        self.cost = cost
         self.aiActivity = aiActivity
         self.memory = memory
         self.keys = keys
@@ -49,6 +52,8 @@ import ScreenCaptureKit
         switch tool {
         case .lookAtScreen:
             return "MacB ekranının bir görüntüsünü OpenAI'ye göndermek istiyor."
+        case .readScreenText:
+            return "MacB ekrandaki yazıyı okumak istiyor. Görüntü Mac'ten çıkmaz; yalnız bulunan yazı gönderilir."
         case .addReminder:
             let due = (JarvisDates.parse(arguments["due"] as? String)).map { " · " + Self.display($0) } ?? ""
             return "Hatırlatıcı eklensin mi: \u{201C}\(arguments["title"] as? String ?? "")\u{201D}\(due)"
@@ -88,6 +93,15 @@ import ScreenCaptureKit
             switch await Self.screenshot() {
             case .success(let jpeg): return .image(jpeg: jpeg, question: arguments["question"] as? String)
             case .failure(let error): return fail(error.localizedDescription)
+            }
+        case .readScreenText:
+            do {
+                let reading = try await ScreenTextReader.read()
+                return ok(["text": reading.text, "lines": reading.lineCount,
+                           "truncated": reading.isTruncated,
+                           "note": "Recognised on the user's Mac; no image was sent."])
+            } catch {
+                return fail(error.localizedDescription)
             }
         case .readSelection:
             switch await selection.read() {
@@ -218,7 +232,7 @@ import ScreenCaptureKit
     private func webSearch(_ query: String) async -> String {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return JarvisProtocol.result(["ok": false, "error": "empty query"]) }
-        guard let key = keys.read() else { return JarvisProtocol.result(["ok": false, "error": "no key"]) }
+        guard let key = keys.read(.openAI) else { return JarvisProtocol.result(["ok": false, "error": "no key"]) }
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
@@ -240,6 +254,8 @@ import ScreenCaptureKit
                 let message = (object["error"] as? [String: Any])?["message"] as? String ?? "search failed"
                 return JarvisProtocol.result(["ok": false, "error": message])
             }
+            cost?.record(provider: .openAI, model: searchModel(),
+                         usage: AITokenUsage(responsesAPI: object["usage"]))
             let sources = AIResponseStream.citations(inResponse: object).prefix(4).map { $0.url.host ?? $0.displayTitle }
             return JarvisProtocol.result(["ok": true, "answer": AIResponseStream.outputText(inResponse: object),
                                           "sources": Array(sources)])

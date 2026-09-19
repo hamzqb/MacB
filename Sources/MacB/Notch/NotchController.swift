@@ -62,6 +62,8 @@ struct IslandToast: Equatable {
     private let systemEvents: SystemEventService
     private let faceUnlock: FaceUnlockService
     private let assistant: JarvisSession
+    private let briefing: BriefingService
+    private var briefingIsVisible = false
     private let openSettings: () -> Void
     /// True while a voice conversation is running. The island stays open and
     /// ignores its own close timers for as long as it is.
@@ -107,8 +109,10 @@ struct IslandToast: Equatable {
          faceUnlock: FaceUnlockService,
          systemEvents: SystemEventService,
          assistant: JarvisSession,
+         briefing: BriefingService,
          openSettings: @escaping () -> Void) {
         self.assistant = assistant
+        self.briefing = briefing
         self.media = media; self.shelf = shelf; self.preferences = preferences
         self.recentFiles = recentFiles; self.clipboard = clipboard
         self.fileActivity = fileActivity
@@ -136,8 +140,10 @@ struct IslandToast: Equatable {
             recentTargets: recentTargets, aiActivity: aiActivity, systemMonitor: systemMonitor,
             processes: processes, lid: lid,
             keyboardCleaning: keyboardCleaning, timer: timer, widgets: widgets, launcher: launcher, background: background, weather: weather, note: note,
-            faceUnlock: faceUnlock, assistant: assistant,
+            faceUnlock: faceUnlock, assistant: assistant, briefing: briefing,
             closeAssistant: { [weak self] in self?.stopAssistant() },
+            closeBriefing: { [weak self] in self?.dismissBriefing() },
+            startAssistant: { [weak self] in self?.startAssistant() },
             open: { [weak self] in self?.openPanel() }, close: { [weak self] in self?.closePanel() },
             select: { [weak self] content in self?.select(content) },
             openSettings: { [weak self] in self?.openSettings() },
@@ -446,7 +452,7 @@ struct IslandToast: Equatable {
         switch content {
         case .clipboard: return .clipboard
         case .files: return .shelf
-        case .assistant: return nil
+        case .assistant, .briefing: return nil
         case .home, .apps, .timer: return nil
         }
     }
@@ -635,8 +641,31 @@ struct IslandToast: Equatable {
 
     var isAssistantVisible: Bool { assistantIsActive }
 
+    /// Puts the morning briefing in the island. It stays until it is closed or
+    /// until something else takes the island over, and never while a
+    /// conversation is running — being greeted in the middle of a sentence is
+    /// worse than not being greeted.
+    func showBriefing() {
+        guard !assistantIsActive, briefing.isVisible else { return }
+        briefingIsVisible = true
+        enabled = true
+        start()
+        openPanel(showing: .briefing)
+        render()
+    }
+
+    func dismissBriefing() {
+        guard briefingIsVisible else { return }
+        briefingIsVisible = false
+        briefing.dismiss()
+        if state.content == .briefing { select(.default) }
+        closePanel()
+    }
+
+    var isBriefingVisible: Bool { briefingIsVisible }
+
     private func scheduleDeadline() {
-        guard !assistantIsActive else { deadlineTask?.cancel(); return }
+        guard !assistantIsActive, !briefingIsVisible else { deadlineTask?.cancel(); return }
         deadlineTask?.cancel()
         let deadlines = [state.hoverDeadline, state.closeDeadline].compactMap { $0 }
         guard let deadline = deadlines.min() else { return }
@@ -704,6 +733,8 @@ struct IslandToast: Equatable {
             return IslandGeometry.sectionWidth(620, screenWidth: screenWidth)
         case .assistant:
             return IslandGeometry.sectionWidth(IslandGeometry.assistantWidth, screenWidth: screenWidth)
+        case .briefing:
+            return IslandGeometry.sectionWidth(IslandGeometry.briefingWidth, screenWidth: screenWidth)
         }
     }
 
@@ -730,6 +761,8 @@ struct IslandToast: Equatable {
         case .assistant:
             return IslandGeometry.assistantHeight(transcriptLines: assistant.lines.count,
                                                   hasConfirmation: assistant.confirmation != nil)
+        case .briefing:
+            return IslandGeometry.briefingHeight(lines: briefing.lines.count)
         }
     }
 

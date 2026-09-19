@@ -35,8 +35,9 @@ public enum AIStreamEvent: Equatable, Sendable {
     /// The model has started a web search. Worth saying, because it is the one
     /// part of an answer that takes seconds rather than milliseconds.
     case searching
-    /// The answer is complete, with the sources it cited, deduplicated.
-    case finished([AICitation])
+    /// The answer is complete, with the sources it cited, deduplicated, and
+    /// what it cost in tokens when the provider said.
+    case finished([AICitation], AITokenUsage?)
     /// OpenAI said no. The message is theirs, meant for a person.
     case failed(String)
     /// Anything else in the stream.
@@ -61,7 +62,7 @@ public enum AIResponseStream {
             return .searching
         case "response.completed":
             let response = object["response"] as? [String: Any] ?? [:]
-            return .finished(citations(inResponse: response))
+            return .finished(citations(inResponse: response), AITokenUsage(responsesAPI: response["usage"]))
         case "response.failed", "error":
             return .failed(errorMessage(in: object) ?? "Yanıt alınamadı.")
         default:

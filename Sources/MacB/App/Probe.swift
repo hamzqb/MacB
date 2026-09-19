@@ -14,6 +14,90 @@ import MacBCore
             return Array(arguments[(index + 1)...].prefix { !$0.hasPrefix("--") })
         }
 
+        if let path = value(after: "--import-keys") {
+            // A one-off: reads `provider=key` lines from a file and puts each in
+            // the Keychain, so keys that arrived on paper or in a message do not
+            // have to be typed into a window one at a time. Nothing is echoed
+            // back but the provider names, and whoever runs this is expected to
+            // shred the file afterwards — MacB does not touch it.
+            return {
+                guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+                    return print("error: dosya okunamadı")
+                }
+                var keys: [AIProvider: String] = [:]
+                var weatherKey: String?
+                for line in text.split(whereSeparator: \.isNewline) {
+                    let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
+                    guard parts.count == 2 else { continue }
+                    let name = parts[0].trimmingCharacters(in: .whitespaces)
+                    let secret = parts[1].trimmingCharacters(in: .whitespaces)
+                    if name == WeatherFallback.account { weatherKey = secret; continue }
+                    guard let provider = AIProvider(rawValue: name) else { continue }
+                    keys[provider] = secret
+                }
+                if let weather = weatherKey {
+                    print("openweather: \(WeatherFallback.save(weather) ? "kaydedildi" : "reddedildi")")
+                }
+                guard !keys.isEmpty else { return print("error: tanınan AI satırı yok") }
+                let outcome = AIKeyStore().importKeys(keys)
+                for provider in AIProvider.allCases where outcome[provider] != nil {
+                    print("\(provider.rawValue): \(outcome[provider] == true ? "kaydedildi" : "reddedildi")")
+                }
+            }
+        }
+        if arguments.contains("--ocr-probe") {
+            // Checks the recogniser against a picture MacB draws itself. The
+            // user's own screen is never captured for a test.
+            return {
+                let expected = ["MacB ekran okuma testi", "Şu an saat 09:41", "Ücretsiz deneme"]
+                let size = NSSize(width: 900, height: 300)
+                let image = NSImage(size: size)
+                image.lockFocus()
+                NSColor.white.setFill()
+                NSRect(origin: .zero, size: size).fill()
+                for (index, line) in expected.enumerated() {
+                    let attributes: [NSAttributedString.Key: Any] = [
+                        .font: NSFont.systemFont(ofSize: 40),
+                        .foregroundColor: NSColor.black
+                    ]
+                    line.draw(at: NSPoint(x: 30, y: size.height - 70 - CGFloat(index) * 70),
+                              withAttributes: attributes)
+                }
+                image.unlockFocus()
+                guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+                    return print("error: görüntü hazırlanamadı")
+                }
+                do {
+                    let reading = try ScreenTextReader.read(image: cgImage)
+                    print("lines: \(reading.lineCount), chars: \(reading.text.count)")
+                    for line in reading.text.split(separator: "\n") { print("read: \(line)") }
+                    for line in expected {
+                        print("\(reading.text.contains(line) ? "ok" : "MISS"): \(line)")
+                    }
+                } catch { print("error: \(error.localizedDescription)") }
+            }
+        }
+        if arguments.contains("--verify-keys") {
+            // Asks each provider whether its stored key works. Runs inside the
+            // application, which owns the Keychain items, so nothing is
+            // prompted for and no key is printed.
+            return {
+                let store = AIKeyStore()
+                for provider in AIProvider.allCases where store.has(provider) {
+                    await store.verify(provider)
+                    switch store.status(of: provider) {
+                    case .valid(let text): print("\(provider.rawValue): \(text)")
+                    case .invalid(let text): print("\(provider.rawValue): \(text)")
+                    default: print("\(provider.rawValue): cevap yok")
+                    }
+                }
+                if WeatherFallback.hasKey() {
+                    let place = UserDefaults.standard.string(forKey: "weatherPlace") ?? "Istanbul"
+                    let snapshot = await WeatherFallback.current(place: place, session: .shared)
+                    print("openweather: " + (snapshot.map { "\($0.place) \($0.temperature)°" } ?? "cevap yok"))
+                }
+            }
+        }
         if let text = value(after: "--translate") {
             let target = value(after: "--to") ?? "tr"
             return {
@@ -104,7 +188,7 @@ import MacBCore
                             try await send(JarvisProtocol.text(question))
                             try await send(["type": "response.create", "response": ["output_modalities": ["text"]]])
                         }
-                        if case .responseDone(let calls) = event {
+                        if case .responseDone(let calls, _) = event {
                             print("calls: \(calls.map(\.name))")
                             break
                         }

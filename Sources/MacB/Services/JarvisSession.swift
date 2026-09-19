@@ -67,6 +67,8 @@ enum JarvisToolOutcome {
     private let memory: JarvisMemoryStore
     private let voice: () -> JarvisVoice
     private let model: () -> String
+    private let persona: () -> JarvisPersona
+    private let cost: AICostMeter?
     private var socket: URLSessionWebSocketTask?
     private var receiver: Task<Void, Never>?
     private var audio: JarvisAudio?
@@ -100,13 +102,23 @@ enum JarvisToolOutcome {
     private static let connectLimit: TimeInterval = 15
     private static let maxLines = 12
 
-    init(keys: AIKeyStore, memory: JarvisMemoryStore, voice: @escaping () -> JarvisVoice,
+    init(keys: AIKeyStore, memory: JarvisMemoryStore, cost: AICostMeter? = nil,
+         voice: @escaping () -> JarvisVoice,
+         persona: @escaping () -> JarvisPersona = { .warm },
          model: @escaping () -> String) {
         self.keys = keys
         self.memory = memory
+        self.cost = cost
         self.voice = voice
+        self.persona = persona
         self.model = model
     }
+
+    /// Audio captured before the session was ready, so the microphone can be
+    /// opened while the socket is still shaking hands instead of after.
+    private var pendingAudio: [Data] = []
+    private var isSessionReady = false
+    private var startedAt: Date?
 
     var isActive: Bool {
         switch state {
@@ -129,7 +141,10 @@ enum JarvisToolOutcome {
         responseActive = false
         startNewLine = true
         memory.reload()
-        guard let key = keys.read() else { return fail(AIAssistantService.missingKeyMessage) }
+        pendingAudio = []
+        isSessionReady = false
+        startedAt = Date()
+        guard let key = keys.read(.openAI) else { return fail(Self.missingVoiceKeyMessage) }
         guard let url = JarvisProtocol.url(model: model()) else { return fail("Model adı geçersiz.") }
         state = .connecting
         connectTimer = Timer.scheduledTimer(withTimeInterval: Self.connectLimit, repeats: false) { [weak self] _ in
@@ -144,26 +159,35 @@ enum JarvisToolOutcome {
                 self.end()
             }
         }
+        // The socket opens first and the microphone is asked for alongside it.
+        // Done one after the other — permission, then handshake, then audio
+        // engine — the wait before MacB can hear anything was the sum of all
+        // three; now it is the longest of them.
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 20
+        let socket = URLSession.shared.webSocketTask(with: request)
+        socket.maximumMessageSize = 16 * 1024 * 1024
+        self.socket = socket
+        socket.resume()
+        send(JarvisProtocol.sessionUpdate(voice: voice(), now: Date(),
+                                          userName: NSFullUserName().split(separator: " ").first.map(String.init),
+                                          memory: memory.facts, persona: persona()))
+        receiver = Task { [weak self] in await self?.receive(from: socket, generation: current) }
         Task { [weak self] in
             guard let self else { return }
             guard await Self.microphoneAllowed() else {
                 guard self.generation == current else { return }
                 return self.fail("Mikrofon izni yok. Sistem Ayarları › Gizlilik ve Güvenlik › Mikrofon'dan MacB'yi aç.")
             }
-            guard self.generation == current, self.state == .connecting else { return }
-            var request = URLRequest(url: url)
-            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-            request.timeoutInterval = 20
-            let socket = URLSession.shared.webSocketTask(with: request)
-            socket.maximumMessageSize = 16 * 1024 * 1024
-            self.socket = socket
-            socket.resume()
-            self.send(JarvisProtocol.sessionUpdate(voice: self.voice(), now: Date(),
-                                                   userName: NSFullUserName().split(separator: " ").first.map(String.init),
-                                                   memory: self.memory.facts))
-            self.receiver = Task { [weak self] in await self?.receive(from: socket, generation: current) }
+            guard self.generation == current, self.isActive else { return }
+            self.startAudio()
         }
     }
+
+    static let missingVoiceKeyMessage =
+        "Sesli asistan için OpenAI anahtarı gerekiyor. Ayarlar → Araçlar'dan gir."
+
 
     /// Ends the conversation. Everything said is forgotten when the panel goes.
     func stop() {
@@ -176,6 +200,8 @@ enum JarvisToolOutcome {
         receiver?.cancel(); receiver = nil
         socket?.cancel(with: .normalClosure, reason: nil); socket = nil
         stopAudio()
+        pendingAudio = []
+        isSessionReady = false
         inputLevel = 0; outputLevel = 0
         activity = nil
         toolsRunning = 0
@@ -239,9 +265,13 @@ enum JarvisToolOutcome {
     private func handle(_ event: JarvisEvent) {
         switch event {
         case .sessionReady:
-            guard state == .connecting else { return }
             connectTimer?.invalidate(); connectTimer = nil
-            startAudio()
+            isSessionReady = true
+            // Whatever the microphone heard while the handshake was finishing.
+            for chunk in pendingAudio { send(JarvisProtocol.appendAudio(chunk)) }
+            pendingAudio = []
+            if state == .connecting, audio != nil { state = .listening }
+            touch()
         case .responseStarted:
             responseActive = true
             startNewLine = true
@@ -263,8 +293,10 @@ enum JarvisToolOutcome {
             interruptPlayback()
             if toolsRunning == 0 { state = .listening }
             touch()
-        case .responseDone(let calls):
+        case .responseDone(let calls, let usage):
             responseActive = false
+            cost?.record(provider: .openAI, model: model(), usage: usage,
+                         voiceSeconds: startedAt.map { Date().timeIntervalSince($0) } ?? 0)
             if calls.isEmpty {
                 settleAfterSpeaking()
             } else {
@@ -287,7 +319,7 @@ enum JarvisToolOutcome {
     private func startAudio() {
         let audio = JarvisAudio()
         audio.onCapture = { [weak self] chunk in
-            Task { @MainActor in self?.send(JarvisProtocol.appendAudio(chunk)) }
+            Task { @MainActor in self?.sendAudio(chunk) }
         }
         audio.onInputLevel = { [weak self] level in
             Task { @MainActor in self?.inputLevel = level }
@@ -312,8 +344,26 @@ enum JarvisToolOutcome {
             forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.restartAudio() }
         }
-        if state == .connecting { state = .listening }
+        if state == .connecting, isSessionReady { state = .listening }
         touch()
+    }
+
+    /// Microphone audio, held back until the session exists.
+    ///
+    /// Capped: if the handshake never finishes, this must not grow into a
+    /// recording of the room. Two seconds is enough to keep the start of a
+    /// sentence and short enough to be nothing else.
+    private func sendAudio(_ chunk: Data) {
+        guard isSessionReady else {
+            pendingAudio.append(chunk)
+            var bytes = pendingAudio.reduce(0) { $0 + $1.count }
+            let limit = JarvisProtocol.sampleRate * 2 * 2
+            while bytes > limit, !pendingAudio.isEmpty {
+                bytes -= pendingAudio.removeFirst().count
+            }
+            return
+        }
+        send(JarvisProtocol.appendAudio(chunk))
     }
 
     private func restartAudio() {

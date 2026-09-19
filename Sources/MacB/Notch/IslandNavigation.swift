@@ -10,6 +10,7 @@ extension NotchContent {
         case .clipboard: return "doc.on.clipboard.fill"
         case .timer: return "timer"
         case .assistant: return "waveform"
+        case .briefing: return "sun.horizon.fill"
         }
     }
 
@@ -20,7 +21,8 @@ extension NotchContent {
         case .files: return "Dosyalar"
         case .clipboard: return "Pano"
         case .timer: return "Zamanlayıcı"
-            case .assistant: return "MacB"
+        case .assistant: return "MacB"
+        case .briefing: return "Brifing"
         }
     }
 }

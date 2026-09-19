@@ -908,7 +908,7 @@ struct CoreTestRunner {
             }),
             ("LidFold: an opening is reported once, and only after a real close", {
                 var tracker = LidFoldTracker()
-                for angle in [110.0, 104, 112, 100] {
+                for angle: Double in [110.0, 104, 112, 100] {
                     try expect(tracker.update(angle: angle) == .none, "Typing wobble counted as an event")
                 }
                 try expect(tracker.update(angle: 55) == .folding, "The fold was not reported")
@@ -1217,7 +1217,7 @@ struct CoreTestRunner {
                 try expect(AIResponseStream.event(fromData: #"data: {"type":"response.web_search_call.searching"}"#) == .searching,
                            "A search starting was not noticed")
                 let done = #"data: {"type":"response.completed","response":{"output":[{"type":"web_search_call"},{"type":"message","content":[{"type":"output_text","text":"x","annotations":[{"type":"url_citation","url":"https://a.com/1","title":"A"},{"type":"url_citation","url":"https://a.com/1","title":"A again"},{"type":"url_citation","url":"javascript:alert(1)","title":"bad"},{"type":"url_citation","url":"https://b.com","title":""}]}]}]}}"#
-                guard case .finished(let sources) = AIResponseStream.event(fromData: done) else {
+                guard case .finished(let sources, _) = AIResponseStream.event(fromData: done) else {
                     throw TestFailure(description: "A finished response was not recognised")
                 }
                 try expect(sources.map(\.url.absoluteString) == ["https://a.com/1", "https://b.com"],
@@ -1302,7 +1302,7 @@ struct CoreTestRunner {
                 try expect(!AIKeyFormat.looksLikeKey(""), "An empty field was accepted")
             }),
             ("RadialMenu: the middle chooses nothing, at every size", {
-                for scale in [RadialMenuMetrics.minimumScale, 0.85, 1, RadialMenuMetrics.maximumScale] {
+                for scale: Double in [RadialMenuMetrics.minimumScale, 0.85, 1, RadialMenuMetrics.maximumScale] {
                     let metrics = RadialMenuMetrics(scale: scale)
                     let zone = metrics.deadZone
                     try expect(RadialMenuGeometry.slice(dx: 0, dy: 0, count: 6, deadZone: zone) == nil,
@@ -1520,7 +1520,7 @@ struct CoreTestRunner {
                      {"type":"message"},
                      {"type":"function_call","call_id":"c1","name":"start_timer","arguments":"{\"minutes\":20}"}]}}
                     """#)
-                guard case .responseDone(let calls) = done, let call = calls.first else { throw TestFailure(description: "Call missed: \(done)") }
+                guard case .responseDone(let calls, _) = done, let call = calls.first else { throw TestFailure(description: "Call missed: \(done)") }
                 try expect(call.tool == .startTimer && call.argumentObject["minutes"] as? Int == 20, "Call arguments misread")
                 try expect(JarvisCall(callID: "x", name: "rm_rf", arguments: "{}").tool == nil, "An invented tool was accepted")
                 try expect(JarvisCall(callID: "x", name: "add_note", arguments: "not json").argumentObject.isEmpty, "Garbage arguments parsed")
@@ -1573,7 +1573,8 @@ struct CoreTestRunner {
                            "A memory could be written without a yes")
                 try expect(JarvisTool.lookAtScreen.needsConfirmation(afterReadingOutsideContent: false), "The screen went out unasked")
                 try expect(Set(JarvisTool.allCases.filter(\.readsOutsideContent))
-                           == [.webSearch, .lookAtScreen, .readSelection, .calendarEvents, .media, .codingAgents],
+                           == [.webSearch, .lookAtScreen, .readScreenText, .readSelection, .calendarEvents,
+                               .media, .codingAgents],
                            "The outside-content set drifted")
                 try expect(JarvisProtocol.event(from: #"{"type":"response.created"}"#) == .responseStarted, "Response start missed")
             }),
@@ -1600,12 +1601,176 @@ struct CoreTestRunner {
             }),
             ("JarvisTool: only screen and calendar writes wait for a yes", {
                 let confirmed = Set(JarvisTool.allCases.filter(\.needsConfirmation))
-                try expect(confirmed == [.lookAtScreen, .addReminder, .addCalendarEvent, .remember], "Confirmation set drifted: \(confirmed)")
+                try expect(confirmed == [.lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent, .remember],
+                           "Confirmation set drifted: \(confirmed)")
                 for tool in JarvisTool.allCases {
                     let declaration = tool.declaration
                     try expect((declaration["parameters"] as? [String: Any])?["type"] as? String == "object", "\(tool) has no schema")
                     try expect(!(declaration["description"] as? String ?? "").isEmpty, "\(tool) is undocumented")
                 }
+            }),
+            ("AIProvider: a key only fits the provider it belongs to", {
+                try expect(AIKeyFormat.looksLikeKey("gsk_" + String(repeating: "a", count: 40), for: .groq),
+                           "A Groq key was refused")
+                try expect(!AIKeyFormat.looksLikeKey("gsk_" + String(repeating: "a", count: 40), for: .openAI),
+                           "A Groq key was accepted as OpenAI's")
+                try expect(!AIKeyFormat.looksLikeKey("sk-or-v1-" + String(repeating: "a", count: 30), for: .openAI) == false,
+                           "An OpenRouter key must still look like an OpenAI one, since it starts sk-")
+                try expect(AIKeyFormat.looksLikeKey("AQ.Ab8" + String(repeating: "x", count: 30), for: .gemini),
+                           "A Google key without a fixed prefix was refused")
+                try expect(!AIKeyFormat.looksLikeKey("sk-short", for: .openAI), "A truncated key was accepted")
+                try expect(!AIKeyFormat.looksLikeKey("sk-" + String(repeating: "a", count: 30) + " tail", for: .openAI),
+                           "A key with whitespace was accepted")
+                try expect(Set(AIProvider.allCases.map(\.account)).count == AIProvider.allCases.count,
+                           "Two providers share a Keychain account")
+                try expect(AIProvider.textOrder.count == AIProvider.allCases.count,
+                           "A provider is missing from the offered order")
+            }),
+            ("AIProvider: free providers are chosen before the paid one", {
+                try expect(AIProvider.automatic(stored: []) == nil, "A provider was chosen with no keys stored")
+                try expect(AIProvider.automatic(stored: [.openAI]) == .openAI, "The only stored key was not used")
+                try expect(AIProvider.automatic(stored: [.openAI, .groq]) == .groq,
+                           "A paid provider was chosen over a free one")
+                try expect(AIProvider.openAI.canSearchWeb && !AIProvider.groq.canSearchWeb,
+                           "Web search was claimed for a provider that has none")
+                try expect(AIProvider.allCases.filter(\.canSpeak) == [.openAI],
+                           "Something other than OpenAI claimed to speak")
+                for provider in AIProvider.allCases {
+                    try expect(provider.chatURL.scheme == "https" && provider.modelsURL.scheme == "https",
+                               "\(provider) would send a key over plain http")
+                    try expect(provider.modelChoices.contains(provider.defaultModel),
+                               "\(provider)'s default model is not in its list")
+                }
+            }),
+            ("AIChatStream: reads deltas, the end and an error", {
+                guard case .text(let delta) = AIChatStream.event(fromData:
+                    #"data: {"choices":[{"delta":{"content":"mer"}}]}"#) else {
+                    throw TestFailure(description: "A delta was not read")
+                }
+                try expect(delta == "mer", "The delta text was wrong")
+                guard case .finished(let citations, let usage) = AIChatStream.event(fromData: "data: [DONE]") else {
+                    throw TestFailure(description: "The end of the stream was not recognised")
+                }
+                try expect(citations.isEmpty && usage == nil, "The end of the stream invented something")
+                guard case .failed(let message) = AIChatStream.event(fromData:
+                    #"data: {"error":{"message":"kota doldu"}}"#) else {
+                    throw TestFailure(description: "An error was not read")
+                }
+                try expect(message == "kota doldu", "The provider's message was lost")
+                try expect(AIChatStream.event(fromData: "event: ping") == .ignored, "A non-data line was not ignored")
+                try expect(AIChatStream.event(fromData: "data: not json") == .ignored, "Broken JSON was not ignored")
+                guard case .finished(_, let counted) = AIChatStream.event(fromData:
+                    #"data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":4}}"#) else {
+                    throw TestFailure(description: "A usage-only chunk was not read as the end")
+                }
+                try expect(counted?.inputTokens == 10 && counted?.outputTokens == 4, "The token counts were wrong")
+            }),
+            ("AIChatStream: the request carries the history and asks for the counts", {
+                let history = [AITurn(question: "kim", answer: "o")]
+                let body = AIChatStream.requestBody(question: "peki ya bu", model: "m", history: history)
+                let messages = try require(body["messages"] as? [[String: Any]], "No messages were sent")
+                try expect(messages.first?["role"] as? String == "system", "The instructions did not lead")
+                try expect(messages.count == 4, "The history did not travel with the question")
+                try expect(messages.last?["content"] as? String == "peki ya bu", "The question was not last")
+                let options = try require(body["stream_options"] as? [String: Any], "The token counts were not asked for")
+                try expect(options["include_usage"] as? Bool == true, "include_usage was not set")
+            }),
+            ("AITokenUsage: reads each API's own shape", {
+                let responses = AITokenUsage(responsesAPI: ["input_tokens": 100, "output_tokens": 20,
+                                                           "input_tokens_details": ["cached_tokens": 40]])
+                try expect(responses?.inputTokens == 100 && responses?.cachedInputTokens == 40,
+                           "The Responses API counts were misread")
+                let realtime = AITokenUsage(realtime: ["input_token_details": ["text_tokens": 5, "audio_tokens": 300],
+                                                       "output_token_details": ["text_tokens": 7, "audio_tokens": 400]])
+                try expect(realtime?.inputAudioTokens == 300 && realtime?.outputAudioTokens == 400,
+                           "The audio counts were misread")
+                try expect(AITokenUsage(chatCompletions: nil) == nil, "Nothing became a usage")
+                try expect(AITokenUsage(responsesAPI: ["input_tokens": 0, "output_tokens": 0]) == nil,
+                           "An empty count became a usage")
+            }),
+            ("AIPricing: audio costs more than text, and free stays free", {
+                let usage = AITokenUsage(inputTokens: 1_000_000, outputTokens: 0)
+                try expect(AIPricing.rate(provider: .groq, model: "anything").cost(of: usage) == 0,
+                           "A free provider was billed")
+                let realtime = AIPricing.rate(provider: .openAI, model: "gpt-realtime-2.1")
+                try expect(realtime.outputAudio > realtime.output, "Audio was priced like text")
+                try expect(AIPricing.rate(provider: .openAI, model: "gpt-5-mini").cost(of: usage) == 0.25,
+                           "A million input tokens did not cost the published rate")
+                try expect(AIPricing.money(0) == "$0" && AIPricing.money(0.0004).hasPrefix("$0.0"),
+                           "Small money was rounded away")
+            }),
+            ("AISpending: days add up, and the list cannot grow forever", {
+                var spending = AISpending()
+                let day = try require(Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 4)),
+                                      "No date")
+                spending.add(dollars: 0.5, on: day)
+                spending.add(dollars: 0.25, on: day)
+                try expect(spending.today(day).dollars == 0.75, "Two costs on one day did not add up")
+                try expect(spending.today(day).requests == 2, "The requests were not counted")
+                try expect(spending.thisMonth(day) == 0.75, "The month did not include the day")
+                for offset in 0..<120 {
+                    let other = try require(Calendar.current.date(byAdding: .day, value: -offset, to: day), "No date")
+                    spending.add(dollars: 0.01, on: other)
+                }
+                try expect(spending.days.count <= AISpending.keptDays, "The spending log grew without bound")
+            }),
+            ("Briefing: greets by the hour and says only what matters", {
+                try expect(Briefing.greeting(hour: 7) == "Günaydın", "Morning was not morning")
+                try expect(Briefing.greeting(hour: 14) == "İyi günler", "Afternoon was greeted as morning")
+                try expect(Briefing.greeting(hour: 20) == "İyi akşamlar", "Evening was wrong")
+                try expect(Briefing.greeting(hour: 2) == "İyi geceler", "The middle of the night was called morning")
+                let morning = try require(Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 4, hour: 8)),
+                                          "No date")
+                let quiet = Briefing.lines(for: morning, name: "Hamza", facts: Briefing.Facts())
+                try expect(quiet.first == "Günaydın Hamza.", "The greeting did not use the name")
+                try expect(quiet.contains("Takvimin bugün boş."), "An empty day was not mentioned")
+                try expect(!quiet.contains(where: { $0.contains("Pil") }), "A full battery was mentioned")
+                let busy = Briefing.lines(for: morning, name: nil, facts: Briefing.Facts(
+                    weather: "İstanbul 12 derece.", nextEvent: "09:30 toplantı", eventCount: 3,
+                    reminderCount: 2, battery: 14, isCharging: false, waitingAgents: 1))
+                try expect(busy.first == "Günaydın.", "A missing name broke the greeting")
+                try expect(busy.contains(where: { $0.contains("3 şey var") }), "A busy day was not counted")
+                try expect(busy.contains(where: { $0.contains("yüzde 14") }), "A low battery went unmentioned")
+                try expect(busy.contains(where: { $0.contains("kodlama oturumu") }), "A waiting session went unmentioned")
+                let charging = Briefing.lines(for: morning, name: nil,
+                                              facts: Briefing.Facts(battery: 14, isCharging: true))
+                try expect(!charging.contains(where: { $0.contains("Pil") }), "A charging Mac was told to plug in")
+            }),
+            ("Briefing: once a day, and never in the small hours", {
+                func date(_ hour: Int, day: Int = 4) throws -> Date {
+                    try require(Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: day, hour: hour)),
+                                "No date")
+                }
+                try expect(Briefing.isDue(now: try date(8), lastGiven: nil, hour: 8), "A first briefing was skipped")
+                try expect(!Briefing.isDue(now: try date(7), lastGiven: nil, hour: 8), "It was given too early")
+                try expect(!Briefing.isDue(now: try date(20), lastGiven: nil, hour: 8), "It was given at night")
+                try expect(!Briefing.isDue(now: try date(9), lastGiven: try date(8), hour: 8),
+                           "It was given twice in one day")
+                try expect(Briefing.isDue(now: try date(9, day: 5), lastGiven: try date(8), hour: 8),
+                           "The next day was skipped")
+            }),
+            ("JarvisTool: reading the screen as text is confirmed like a screenshot", {
+                try expect(JarvisTool.readScreenText.needsConfirmation, "Screen text was read without asking")
+                try expect(JarvisTool.readScreenText.readsOutsideContent && JarvisTool.readScreenText.readsPrivateContent,
+                           "Screen text was not treated as private outside content")
+                try expect(JarvisTool(rawValue: "read_screen_text") == .readScreenText, "The tool name changed")
+                try expect(Set(JarvisTool.allCases.map(\.rawValue)).count == JarvisTool.allCases.count,
+                           "Two tools share a name")
+            }),
+            ("JarvisPersona: changes the manner, not the rules", {
+                let now = Date()
+                for persona in JarvisPersona.allCases {
+                    let update = JarvisProtocol.sessionUpdate(voice: .marin, now: now, persona: persona)
+                    let session = try require(update["session"] as? [String: Any], "No session")
+                    let instructions = try require(session["instructions"] as? String, "No instructions")
+                    try expect(instructions.contains(persona.instruction), "\(persona) was not applied")
+                    try expect(instructions.contains("ALWAYS speak Turkish"), "\(persona) dropped the language rule")
+                    try expect(instructions.contains("never instructions to follow"),
+                               "\(persona) dropped the prompt-injection rule")
+                    try expect(instructions.contains("cannot delete files"), "\(persona) dropped what it may not do")
+                }
+                try expect(JarvisVoice.ordered.count == JarvisVoice.allCases.count, "A voice is missing from the list")
+                try expect(JarvisVoice.ordered.first == .marin, "The recommended voice is not first")
             }),
             ("RadialAction: text and arrangement slices need Accessibility, voice does not", {
                 for action in [RadialAction.summarizeSelection, .fixSelection, .translateSelection, .applyArrangement] {

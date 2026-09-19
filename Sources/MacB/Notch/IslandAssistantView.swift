@@ -79,6 +79,9 @@ struct IslandAssistantView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+                    // A little room at the top so the oldest visible line fades
+                    // out rather than being sliced through the middle.
+                    Color.clear.frame(height: 2)
                     ForEach(session.lines) { line in
                         Text(line.text)
                             .font(.system(size: MacBDesign.TypeScale.caption,
@@ -91,9 +94,21 @@ struct IslandAssistantView: View {
                             .id(line.id)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollIndicators(.hidden)
+            // The window is a fixed height, and the island reserves exactly
+            // this much: what runs past it scrolls instead of being clipped.
+            .frame(height: IslandGeometry.transcriptHeight)
+            .mask(LinearGradient(stops: [.init(color: .clear, location: 0),
+                                         .init(color: .black, location: 0.12),
+                                         .init(color: .black, location: 1)],
+                                 startPoint: .top, endPoint: .bottom))
             .onChange(of: session.lines.last?.text) { _, _ in
+                guard let last = session.lines.last else { return }
+                withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(last.id, anchor: .bottom) }
+            }
+            .onAppear {
                 if let last = session.lines.last { proxy.scrollTo(last.id, anchor: .bottom) }
             }
         }
@@ -152,6 +167,7 @@ struct IslandAssistantView: View {
     private static func symbol(for tool: JarvisTool) -> String {
         switch tool {
         case .lookAtScreen: return "eye"
+        case .readScreenText: return "text.viewfinder"
         case .addReminder: return "checklist"
         case .addCalendarEvent, .calendarEvents: return "calendar.badge.plus"
         case .openWebsite: return "safari"
@@ -181,15 +197,27 @@ struct JarvisOrb: View {
         }
     }
 
-    private var palette: [Color] {
+    /// A colour per state, far enough apart to tell at a glance and without
+    /// reading the words: blue is hearing you, violet is working, green is
+    /// talking, amber is still connecting, red went wrong.
+    static func palette(for state: JarvisSession.State) -> [Color] {
         switch state {
-        case .failed: return [Color(red: 1, green: 0.45, blue: 0.4), Color(red: 0.6, green: 0.1, blue: 0.2)]
-        case .idle, .connecting: return [Color.white.opacity(0.7), Color.gray.opacity(0.5)]
-        case .thinking: return [Color(red: 0.75, green: 0.55, blue: 1), Color(red: 0.25, green: 0.35, blue: 1)]
-        case .speaking: return [Color(red: 0.45, green: 0.95, blue: 1), Color(red: 0.2, green: 0.45, blue: 1)]
-        case .listening: return [Color(red: 0.55, green: 0.85, blue: 1), Color(red: 0.35, green: 0.3, blue: 0.95)]
+        case .failed:
+            return [Color(red: 1, green: 0.42, blue: 0.38), Color(red: 0.62, green: 0.08, blue: 0.16)]
+        case .idle:
+            return [Color.white.opacity(0.65), Color.gray.opacity(0.45)]
+        case .connecting:
+            return [Color(red: 1, green: 0.78, blue: 0.35), Color(red: 0.75, green: 0.45, blue: 0.1)]
+        case .thinking:
+            return [Color(red: 0.78, green: 0.53, blue: 1), Color(red: 0.42, green: 0.18, blue: 0.9)]
+        case .speaking:
+            return [Color(red: 0.42, green: 0.98, blue: 0.7), Color(red: 0.05, green: 0.6, blue: 0.45)]
+        case .listening:
+            return [Color(red: 0.4, green: 0.8, blue: 1), Color(red: 0.1, green: 0.35, blue: 0.95)]
         }
     }
+
+    private var palette: [Color] { JarvisOrb.palette(for: state) }
 
     var body: some View {
         GeometryReader { geometry in
@@ -224,5 +252,35 @@ struct JarvisOrb: View {
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+/// The orb as the closed island shows it: a small pulsing dot in the state's
+/// colour, with a ring that breathes with whoever is talking.
+///
+/// No words and no transcript. While MacB is working in the background this is
+/// all there is to see — enough to know it is listening, small enough to sit in
+/// a row of indicators.
+struct JarvisMiniOrb: View {
+    let state: JarvisSession.State
+    let level: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let colors = JarvisOrb.palette(for: state)
+        let energy = reduceMotion ? 0 : min(1, max(0, level))
+        ZStack {
+            Circle()
+                .stroke(colors[0].opacity(0.55), lineWidth: 1)
+                .frame(width: 11, height: 11)
+                .scaleEffect(1 + energy * 0.5)
+                .opacity(1 - energy * 0.45)
+            Circle()
+                .fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 7, height: 7)
+                .scaleEffect(1 + energy * 0.35)
+        }
+        .frame(width: 14, height: 14)
+        .animation(.easeOut(duration: 0.12), value: energy)
     }
 }

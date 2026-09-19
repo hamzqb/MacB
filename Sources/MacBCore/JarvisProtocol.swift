@@ -11,6 +11,7 @@ import Foundation
 public enum JarvisTool: String, CaseIterable, Sendable {
     case webSearch = "web_search"
     case lookAtScreen = "look_at_screen"
+    case readScreenText = "read_screen_text"
     case readSelection = "read_selected_text"
     case openApplication = "open_application"
     case openWebsite = "open_website"
@@ -38,7 +39,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// every later conversation: a fact slipped in once would steer them all.
     public var needsConfirmation: Bool {
         switch self {
-        case .lookAtScreen, .addReminder, .addCalendarEvent, .remember: return true
+        case .lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent, .remember: return true
         default: return false
         }
     }
@@ -48,7 +49,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// saying "Jarvis, open this site" is still just an ad.
     public var readsOutsideContent: Bool {
         switch self {
-        case .webSearch, .lookAtScreen, .readSelection, .calendarEvents, .media, .codingAgents: return true
+        case .webSearch, .lookAtScreen, .readScreenText, .readSelection, .calendarEvents, .media, .codingAgents:
+            return true
         default: return false
         }
     }
@@ -56,7 +58,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// Brings the user's own private material into the conversation.
     public var readsPrivateContent: Bool {
         switch self {
-        case .lookAtScreen, .readSelection, .calendarEvents: return true
+        case .lookAtScreen, .readScreenText, .readSelection, .calendarEvents: return true
         default: return false
         }
     }
@@ -87,6 +89,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         switch self {
         case .webSearch: return "İnternette arıyor"
         case .lookAtScreen: return "Ekrana bakıyor"
+        case .readScreenText: return "Ekrandaki yazıyı okuyor"
         case .readSelection: return "Seçili metni okuyor"
         case .openApplication: return "Uygulama açıyor"
         case .openWebsite: return "Sayfa açıyor"
@@ -116,6 +119,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
             return "Search the web for current or checkable information and get a short answer with sources. Use it for news, prices, facts, research."
         case .lookAtScreen:
             return "Look at what is on the user's screen right now (the user is asked to allow it each time). Use it when they say 'this', 'on my screen', or ask you to read, explain or check something they are looking at, including ads, pages, errors or documents."
+        case .readScreenText:
+            return "Read the text that is on the user's screen right now, recognised on the Mac itself (the user is asked to allow it each time). PREFER THIS over look_at_screen whenever the answer is in words — an advertisement, an article, an error message, a document, a page. Only use look_at_screen when what matters is a picture, a layout or a colour."
         case .readSelection:
             return "Read the text the user has selected in the app in front."
         case .openApplication:
@@ -167,6 +172,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         switch self {
         case .webSearch: return object(["query": string], required: ["query"])
         case .lookAtScreen: return object(["question": string])
+        case .readScreenText: return object([:])
         case .openApplication: return object(["name": string], required: ["name"])
         case .openWebsite: return object(["url": string], required: ["url"])
         case .media:
@@ -197,14 +203,73 @@ public enum JarvisTool: String, CaseIterable, Sendable {
 }
 
 /// Voices the Realtime API offers, with the two it recommends first.
-public enum JarvisVoice: String, CaseIterable, Sendable {
+public enum JarvisVoice: String, CaseIterable, Sendable, Identifiable {
     case marin, cedar, alloy, ash, ballad, coral, echo, sage, shimmer, verse
+
+    public var id: String { rawValue }
+
+    /// The name plus what it actually sounds like, because a list of ten
+    /// invented words tells nobody which one to pick.
+    public var title: String {
+        switch self {
+        case .marin: return "Marin — kadın, doğal (önerilen)"
+        case .cedar: return "Cedar — erkek, doğal (önerilen)"
+        case .coral: return "Coral — kadın, sıcak"
+        case .sage: return "Sage — kadın, sakin"
+        case .shimmer: return "Shimmer — kadın, parlak"
+        case .alloy: return "Alloy — nötr, düz"
+        case .ash: return "Ash — erkek, yumuşak"
+        case .ballad: return "Ballad — erkek, anlatıcı"
+        case .echo: return "Echo — erkek, net"
+        case .verse: return "Verse — erkek, canlı"
+        }
+    }
+
+    /// The two newest voices are noticeably more natural than the rest; they go
+    /// at the top of the list rather than wherever the alphabet puts them.
+    public static let ordered: [JarvisVoice] = [.marin, .cedar, .coral, .sage, .shimmer,
+                                                .alloy, .ash, .ballad, .echo, .verse]
+}
+
+/// How MacB talks. The words it says are the model's; this is the manner.
+public enum JarvisPersona: String, CaseIterable, Sendable, Identifiable {
+    case warm
+    case brief
+    case witty
+    case formal
+
+    public var id: String { rawValue }
 
     public var title: String {
         switch self {
-        case .marin: return "Marin (önerilen)"
-        case .cedar: return "Cedar (önerilen)"
-        default: return rawValue.capitalized
+        case .warm: return "Sıcak ve dost"
+        case .brief: return "Kısa ve net"
+        case .witty: return "Esprili"
+        case .formal: return "Resmî"
+        }
+    }
+
+    public var note: String {
+        switch self {
+        case .warm: return "Yanında biri varmış gibi konuşur, kısa cümleler kurar."
+        case .brief: return "Tek cümlede cevap verir, gevezelik etmez."
+        case .witty: return "Arada takılır ama işi geciktirmez."
+        case .formal: return "Ölçülü ve mesafeli konuşur, şakasızdır."
+        }
+    }
+
+    /// What is added to the instructions. Manner only: none of these may change
+    /// what MacB is allowed to do, only how it sounds doing it.
+    public var instruction: String {
+        switch self {
+        case .warm:
+            return "Warm and friendly, like a sharp assistant sitting next to the user. Short sentences."
+        case .brief:
+            return "Extremely brief. Answer in one sentence where one sentence will do, and do not pad."
+        case .witty:
+            return "Light and quick-witted; a small joke is welcome, but never at the cost of the answer."
+        case .formal:
+            return "Measured and professional. No jokes, no slang, no exclamations."
         }
     }
 }
@@ -245,14 +310,19 @@ public enum JarvisEvent: Equatable, Sendable {
     case heard(String)
     /// The user started talking: whatever is playing should stop.
     case userStartedSpeaking
-    /// A response finished; any function calls in it want running.
-    case responseDone(calls: [JarvisCall])
+    /// A response finished; any function calls in it want running, and what it
+    /// cost when the server said.
+    case responseDone(calls: [JarvisCall], usage: AITokenUsage? = nil)
     case failed(String)
     case ignored
 }
 
 public enum JarvisProtocol {
     public static let defaultModel = "gpt-realtime-2.1"
+    /// The speech-to-speech models, newest first. `mini` is markedly cheaper
+    /// and a little less sure of itself; both speak Turkish.
+    public static let models = ["gpt-realtime-2.1", "gpt-realtime", "gpt-realtime-mini",
+                                "gpt-4o-realtime-preview"]
     public static let sampleRate = 24_000
 
     public static func url(model: String) -> URL? {
@@ -265,7 +335,8 @@ public enum JarvisProtocol {
     /// so the user can interrupt, the closed tool list, and instructions that
     /// carry the date (the model has no clock of its own).
     public static func sessionUpdate(voice: JarvisVoice, now: Date, timeZone: TimeZone = .current,
-                                     userName: String? = nil, memory: [String] = []) -> [String: Any] {
+                                     userName: String? = nil, memory: [String] = [],
+                                     persona: JarvisPersona = .warm) -> [String: Any] {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "tr_TR")
         formatter.timeZone = timeZone
@@ -273,8 +344,10 @@ public enum JarvisProtocol {
         let name = userName.map { " The user's name is \($0)." } ?? ""
         let instructions = """
             Your name is MacB, written MacB and pronounced "Mek bi" (say it exactly that way, never "Mak-be"); you are the voice assistant living on the user's Mac.\(name) \
-            Speak the language the user speaks (usually Turkish), naturally and warmly, like a sharp, \
-            witty assistant in the room — short sentences, no lists read aloud, no Markdown. \
+            ALWAYS speak Turkish. Even if the user writes or speaks to you in another language, answer in \
+            Turkish, unless they explicitly ask you to use a different one. Read foreign names and technical \
+            terms as they are, inside Turkish sentences. \
+            \(persona.instruction) No lists read aloud, no Markdown. \
             It is now \(formatter.string(from: now)) (\(timeZone.identifier)). \
             Use your tools freely to act and to find things out; for anything current or checkable, \
             use web_search rather than guessing. When asked about something on screen, call look_at_screen. \
@@ -373,7 +446,7 @@ public enum JarvisProtocol {
                       let callID = item["call_id"] as? String, let name = item["name"] as? String else { return nil }
                 return JarvisCall(callID: callID, name: name, arguments: item["arguments"] as? String ?? "{}")
             }
-            return .responseDone(calls: calls)
+            return .responseDone(calls: calls, usage: AITokenUsage(realtime: response["usage"]))
         case "error":
             let error = object["error"] as? [String: Any]
             // Cancelling a response that already finished is harmless and

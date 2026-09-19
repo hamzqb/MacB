@@ -27,7 +27,10 @@ struct NotchView: View {
     @ObservedObject var note: QuickNoteStore
     @ObservedObject var faceUnlock: FaceUnlockService
     @ObservedObject var assistant: JarvisSession
+    @ObservedObject var briefing: BriefingService
     var closeAssistant: () -> Void
+    var closeBriefing: () -> Void
+    var startAssistant: () -> Void
     /// One process-wide assertion, so there is one shared instance of it.
     @ObservedObject private var keepAwake = KeepAwakeService.shared
     var open: () -> Void
@@ -287,6 +290,8 @@ struct NotchView: View {
                 IslandTimerView(timer: timer)
             case .assistant:
                 IslandAssistantView(session: assistant, close: closeAssistant, openSettings: openSettings)
+            case .briefing:
+                IslandBriefingView(briefing: briefing, close: closeBriefing, talk: startAssistant)
             }
         }
     }
@@ -305,7 +310,11 @@ struct NotchView: View {
                     Spacer(minLength: 0)
                     ForEach(collapsedIndicators, id: \.label) { indicator in
                         HStack(spacing: MacBDesign.Space.tight) {
-                            if indicator.isPlayingMedia {
+                            if indicator.isAssistant {
+                                JarvisMiniOrb(state: assistant.state,
+                                              level: assistant.state == .speaking ? assistant.outputLevel
+                                                                                  : assistant.inputLevel)
+                            } else if indicator.isPlayingMedia {
                                 EqualizerBars(tint: indicator.tint, isPlaying: media.isPlaying, height: 10)
                             } else {
                                 Image(systemName: indicator.symbol).font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
@@ -375,6 +384,9 @@ struct NotchView: View {
         let tint: Color
         /// Drawn as moving bars rather than a static glyph.
         var isPlayingMedia = false
+        /// Drawn as the assistant's own orb, which carries the state in its
+        /// colour so the closed island needs no words for it.
+        var isAssistant = false
     }
 
     private var collapsedIndicators: [CollapsedIndicator] {
@@ -391,7 +403,8 @@ struct NotchView: View {
         }
         if assistant.isActive {
             result.append(CollapsedIndicator(symbol: "waveform", value: assistantIndicator,
-                                             label: "MacB", tint: MacBDesign.IslandToken.accent))
+                                             label: "MacB", tint: MacBDesign.IslandToken.accent,
+                                             isAssistant: true))
         }
         if keepAwake.isActive {
             result.append(CollapsedIndicator(symbol: "cup.and.heat.waves.fill", value: keepAwake.remainingText,

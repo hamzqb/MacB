@@ -36,6 +36,9 @@ struct SettingsView: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     /// What is being typed into the key field. Cleared as soon as it is stored.
     @State private var aiKeyDraft = ""
+    /// What has been typed into each provider's field, by raw value. Cleared
+    /// the moment a key is stored, so no key sits in a view for the session.
+    @State private var keyDrafts: [String: String] = [:]
     /// Which ring the settings are editing: nil for the general one, or an
     /// application's bundle identifier.
     @State private var ringProfile: String?
@@ -62,6 +65,9 @@ struct SettingsView: View {
     @ObservedObject var automation: AutomationService
     @ObservedObject var loginItem: LoginItemService
     @ObservedObject var aiKey: AIKeyStore
+    @ObservedObject var aiCost: AICostMeter
+    @ObservedObject var briefing: BriefingService
+    @ObservedObject var assistant: AIAssistantService
     @ObservedObject var arrangements: WindowArrangementService
     @ObservedObject var keepAwake: KeepAwakeService
     var jarvisHotKeyFailed = false
@@ -258,55 +264,74 @@ struct SettingsView: View {
                     }
                 }
             }
-            section("Yapay zekâ anahtarı", "key.horizontal") {
-                Text("Halkadaki Yapay zekâ dilimi ve menüdeki \u{201C}Yapay zekâya sor\u{201D} bu anahtarla çalışır. Anahtar Keychain'e yazılır — plist'e, dosyaya ya da koda değil — ve bir daha ekranda gösterilmez. Sadece OpenAI'ye gider; giden tek şey yazdığın soru.")
+            section("Yapay zekâ anahtarları", "key.horizontal") {
+                Text("Halkadaki Yapay zekâ dilimi, menüdeki \u{201C}Yapay zekâya sor\u{201D} ve seçili metin işleri bu anahtarlarla çalışır. Her anahtar Keychain'e yazılır — plist'e, dosyaya ya da koda değil — ve bir daha ekranda gösterilmez. Bir anahtar yalnız ait olduğu servise gider; giden tek şey sorduğun soru.")
                     .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                if aiKey.hasKey {
-                    HStack(spacing: MacBDesign.Space.regular) {
-                        Image(systemName: "checkmark.seal.fill").foregroundStyle(MacBDesign.accent)
-                        Text("Anahtar kayıtlı.")
-                            .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
-                        Spacer(minLength: 8)
-                        Button("Doğrula") { Task { await aiKey.verify() } }
-                            .disabled(aiKey.status == .checking)
-                        Button("Sil", role: .destructive) { aiKey.remove() }
-                    }
-                }
                 HStack(spacing: MacBDesign.Space.regular) {
-                    SecureField(aiKey.hasKey ? "Yeni anahtarla değiştir" : "sk-…", text: $aiKeyDraft)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("OpenAI anahtarı")
-                    Button("Kaydet") {
-                        if aiKey.save(aiKeyDraft) {
-                            // Cleared the moment it is stored, so the typed key
-                            // does not sit in a view's state for the session.
-                            aiKeyDraft = ""
-                            Task { await aiKey.verify() }
+                    Text("Soruları cevaplayan")
+                        .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Sağlayıcı", selection: $preferences.aiProvider) {
+                        Text("Otomatik (ücretsiz olan)").tag("")
+                        ForEach(AIProvider.textOrder) { provider in
+                            Text(provider.title).tag(provider.rawValue)
                         }
                     }
-                    .disabled(!AIKeyFormat.looksLikeKey(aiKeyDraft))
+                    .labelsHidden().fixedSize()
                 }
-                switch aiKey.status {
-                case .idle: EmptyView()
-                case .checking: message("OpenAI'ye soruluyor…")
-                case .valid(let text): message(text)
-                case .invalid(let text): message(text, warning: true)
+                if let active = assistant.provider {
+                    message("Şu an \(active.title) cevaplıyor." + (active.canSearchWeb ? "" : " Bu sağlayıcıda web araması yok, cevaplar kaynaksız gelir."))
+                } else {
+                    message("Hiç anahtar yok. Aşağıdan birini gir — Groq ücretsiz ve hızlı.", warning: true)
+                }
+                ForEach(AIProvider.textOrder) { provider in
+                    rowDivider
+                    providerRow(provider)
                 }
                 if let error = aiKey.errorMessage { message(error, warning: true) }
-                rowDivider
-                HStack(spacing: MacBDesign.Space.regular) {
-                    Text("Model")
-                        .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
-                    TextField(Preferences.defaultAIModel, text: $preferences.aiModel)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("OpenAI modeli")
-                    Button("Varsayılan") { preferences.aiModel = Preferences.defaultAIModel }
-                }
-                Text("Cevaplar gerektiğinde internette aranır ve kaynaklarıyla gelir. Konuşma sadece bellekte tutulur, OpenAI tarafında saklanmaz.")
-                    .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
                 message("Anahtarını bir yere yapıştırdıysan (sohbet, not, ekran görüntüsü) onu iptal et ve yenisini üret. Sızmış bir anahtar senin faturana çalışır.", warning: true)
+            }
+            section("Dock ve ⌘Tab", "dock.rectangle") {
+                settingToggle("Dock'ta ve ⌘Tab'da görün",
+                              detail: "Kapalıyken MacB yalnız island'da ve menü çubuğunda durur; ⌘Tab listesinde çıkmaz.",
+                              isOn: $preferences.showInDock)
+            }
+            section("Günaydın brifingi", "sun.horizon") {
+                Text("Sabah Mac'i açtığında MacB seni selamlar ve günün özetini island'da gösterir: hava, bugünkü ilk iş, bekleyen hatırlatıcılar, pil. Hepsi bu Mac'ten okunur, hiçbir yere bir şey gitmez ve anahtar gerekmez.")
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                settingToggle("Brifingi göster", detail: "Günde bir kez, seçtiğin saatten sonra Mac uyandığında.",
+                              isOn: $preferences.briefingEnabled)
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Text("En erken saat").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Saat", selection: $preferences.briefingHour) {
+                        ForEach(Briefing.hourChoices, id: \.self) { Text(String(format: "%02d:00", $0)).tag($0) }
+                    }
+                    .labelsHidden().fixedSize()
+                    .disabled(!preferences.briefingEnabled)
+                }
+                settingToggle("Sesli oku", detail: "macOS'un kendi Türkçe sesiyle okunur; internete çıkmaz, ücretsizdir.",
+                              isOn: $preferences.briefingSpeaks)
+                    .disabled(!preferences.briefingEnabled)
+                HStack {
+                    Button("Şimdi dene") { briefing.give() }
+                    if briefing.isVisible { Button("Kapat") { briefing.dismiss() } }
+                    Spacer()
+                }
+                message("Takvim ve hatırlatıcılar yalnız izin verdiysen okunur; brifing kendi başına izin penceresi açmaz.")
+            }
+            section("Maliyet", "turkishlirasign.circle") {
+                Text("MacB yalnız OpenAI'ye ödenen tahmini tutarı sayar; ücretsiz sağlayıcılar sıfır yazar. Sadece sayılar tutulur — hangi soruyu sorduğun değil. Kesin rakam OpenAI'nin kendi panosundadır.")
+                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: MacBDesign.Space.comfortable) {
+                    costBox("Bugün", aiCost.todayText, "\(aiCost.today.requests) istek")
+                    costBox("Bu ay", aiCost.monthText, "\(aiCost.spending.days.count) gün")
+                    Spacer(minLength: 8)
+                    Button("Sayacı sıfırla", role: .destructive) { aiCost.reset() }
+                }
             }
             section("Sesli asistan", "person.wave.2") {
                 Text("MacB (okunuşu \u{201C}Mek bi\u{201D}) canlı sesli asistanın: konuşursun, konuşarak cevap verir, lafını bölebilirsin. İnternette araştırır, uygulama açar, müziği ve sesi yönetir, zamanlayıcı kurar, takvimine bakar, istersen ekranına bakıp okur.")
@@ -321,17 +346,31 @@ struct SettingsView: View {
                     Text("Ses").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     Spacer(minLength: 8)
                     Picker("Ses", selection: $preferences.jarvisVoice) {
-                        ForEach(JarvisVoice.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                        ForEach(JarvisVoice.ordered) { Text($0.title).tag($0.rawValue) }
                     }
                     .labelsHidden().fixedSize()
                 }
                 HStack(spacing: MacBDesign.Space.regular) {
-                    Text("Model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
-                    TextField(JarvisProtocol.defaultModel, text: $preferences.jarvisModel)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityLabel("Sesli asistan modeli")
-                    Button("Varsayılan") { preferences.jarvisModel = JarvisProtocol.defaultModel }
+                    Text("Karakter").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Karakter", selection: $preferences.jarvisPersona) {
+                        ForEach(JarvisPersona.allCases) { Text($0.title).tag($0.rawValue) }
+                    }
+                    .labelsHidden().fixedSize()
                 }
+                message((JarvisPersona(rawValue: preferences.jarvisPersona) ?? .warm).note)
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Text("Model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Model", selection: $preferences.jarvisModel) {
+                        ForEach(JarvisProtocol.models, id: \.self) { Text($0).tag($0) }
+                        if !JarvisProtocol.models.contains(preferences.jarvisModel) {
+                            Text(preferences.jarvisModel).tag(preferences.jarvisModel)
+                        }
+                    }
+                    .labelsHidden().fixedSize()
+                }
+                message("MacB her zaman Türkçe konuşur; ona başka dilde yazsan da Türkçe cevap verir.")
                 message("Sesli asistan açıkken mikrofon sesi canlı olarak OpenAI'ye gider (Sesle sor'dan farkı bu). Kaydedilmez; panel kapanınca ya da 90 saniye sessiz kalınca bağlantı kapanır. Ekran görüntüsü ve takvime ekleme her seferinde onayını ister.")
                 message("Canlı ses ücretlidir: yaklaşık dakikası birkaç sent, uzun konuşmada daha fazla.", warning: true)
                 message("Ekrandan, seçimden ya da internetten bir şey okuduktan sonra MacB bir şey açmak, panoya koymak ya da not almak isterse önce sana sorar. Böylece bir sayfadaki yazı onu yönlendiremez.")
@@ -1354,6 +1393,83 @@ struct SettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MacBDesign.Space.tight)
         }
+    }
+
+    /// One provider: whether it has a key, the field to put one in, and which
+    /// model it should use.
+    @ViewBuilder
+    private func providerRow(_ provider: AIProvider) -> some View {
+        let draft = Binding<String>(get: { keyDrafts[provider.rawValue] ?? "" },
+                                    set: { keyDrafts[provider.rawValue] = $0 })
+        VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+            HStack(spacing: MacBDesign.Space.regular) {
+                Image(systemName: aiKey.has(provider) ? "checkmark.seal.fill" : "circle.dashed")
+                    .foregroundStyle(aiKey.has(provider) ? MacBDesign.accent : MacBDesign.muted)
+                Text(provider.title)
+                    .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                if provider.isFree {
+                    Text("ücretsiz")
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .background(MacBDesign.accent.opacity(0.18), in: Capsule())
+                }
+                Spacer(minLength: 8)
+                if aiKey.has(provider) {
+                    Button("Doğrula") { Task { await aiKey.verify(provider) } }
+                        .disabled(aiKey.status(of: provider) == .checking)
+                    Button("Sil", role: .destructive) { aiKey.remove(provider) }
+                } else {
+                    Button("Anahtar al") { NSWorkspace.shared.open(provider.signUpURL) }
+                }
+            }
+            Text(provider.note)
+                .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: MacBDesign.Space.regular) {
+                SecureField(aiKey.has(provider) ? "Yeni anahtarla değiştir" : (provider.keyPrefix ?? "") + "…",
+                            text: draft)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("\(provider.title) anahtarı")
+                Button("Kaydet") {
+                    if aiKey.save(draft.wrappedValue, for: provider) {
+                        keyDrafts[provider.rawValue] = ""
+                        Task { await aiKey.verify(provider) }
+                    }
+                }
+                .disabled(!AIKeyFormat.looksLikeKey(draft.wrappedValue, for: provider))
+            }
+            HStack(spacing: MacBDesign.Space.regular) {
+                Text("Model").font(.system(size: MacBDesign.TypeScale.caption))
+                    .foregroundStyle(MacBDesign.muted)
+                Spacer(minLength: 8)
+                Picker("Model", selection: Binding(
+                    get: { preferences.model(for: provider) },
+                    set: { preferences.setModel($0, for: provider) })) {
+                    ForEach(provider.modelChoices, id: \.self) { Text($0).tag($0) }
+                    let current = preferences.model(for: provider)
+                    if !provider.modelChoices.contains(current) { Text(current).tag(current) }
+                }
+                .labelsHidden().fixedSize()
+            }
+            switch aiKey.status(of: provider) {
+            case .idle: EmptyView()
+            case .checking: message("\(provider.title)'ye soruluyor…")
+            case .valid(let text): message(text)
+            case .invalid(let text): message(text, warning: true)
+            }
+        }
+    }
+
+    private func costBox(_ title: String, _ amount: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.system(size: MacBDesign.TypeScale.caption))
+                .foregroundStyle(MacBDesign.muted)
+            Text(amount).font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+                .monospacedDigit()
+            Text(detail).font(.system(size: MacBDesign.TypeScale.micro))
+                .foregroundStyle(MacBDesign.muted)
+        }
+        .frame(minWidth: 96, alignment: .leading)
     }
 
     private var rowDivider: some View { Divider().opacity(0.45) }

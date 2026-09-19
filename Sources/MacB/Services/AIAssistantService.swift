@@ -52,13 +52,19 @@ import MacBCore
     }
 
     private let keys: AIKeyStore
-    private let model: () -> String
+    private let model: (AIProvider) -> String
+    private let preferredProvider: () -> AIProvider?
+    private let cost: AICostMeter?
     private var task: Task<Void, Never>?
     private var keyObserver: AnyCancellable?
 
-    init(keys: AIKeyStore, model: @escaping () -> String) {
+    init(keys: AIKeyStore, model: @escaping (AIProvider) -> String,
+         preferredProvider: @escaping () -> AIProvider? = { nil },
+         cost: AICostMeter? = nil) {
         self.keys = keys
         self.model = model
+        self.preferredProvider = preferredProvider
+        self.cost = cost
         // A key entered in Settings while the panel is open has to unlock the
         // question field at once, not the next time something else changes.
         keyObserver = keys.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
@@ -66,7 +72,14 @@ import MacBCore
 
     var hasKey: Bool { keys.hasKey }
 
-    static let missingKeyMessage = "Önce Ayarlar → Araçlar'dan OpenAI anahtarını gir."
+    /// Which provider a question goes to: the one chosen in Settings when it
+    /// has a key, otherwise the best free one that does.
+    var provider: AIProvider? {
+        if let chosen = preferredProvider(), keys.has(chosen) { return chosen }
+        return AIProvider.automatic(stored: keys.stored)
+    }
+
+    static let missingKeyMessage = "Önce Ayarlar → Araçlar'dan bir yapay zekâ anahtarı gir."
 
     func ask(_ raw: String) {
         let question = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -153,7 +166,7 @@ import MacBCore
     }
 
     private func send(_ turn: AITurn) {
-        guard let key = keys.read() else {
+        guard let provider, let key = keys.read(provider) else {
             errorMessage = Self.missingKeyMessage
             return
         }
@@ -163,9 +176,12 @@ import MacBCore
         isAnswering = true
         isSearching = false
 
-        let body = AIResponseStream.requestBody(question: turn.prompt, model: model(), history: history)
+        let name = model(provider)
+        let body = provider.canSearchWeb
+            ? AIResponseStream.requestBody(question: turn.prompt, model: name, history: history)
+            : AIChatStream.requestBody(question: turn.prompt, model: name, history: history)
         task = Task { [weak self] in
-            await self?.stream(body: body, key: key, turnID: turn.id)
+            await self?.stream(body: body, provider: provider, model: name, key: key, turnID: turn.id)
         }
     }
 
@@ -186,7 +202,8 @@ import MacBCore
         languageDownload = nil
     }
 
-    private func stream(body: [String: Any], key: String, turnID: UUID) async {
+    private func stream(body: [String: Any], provider: AIProvider, model: String,
+                        key: String, turnID: UUID) async {
         defer {
             // Only the question still on screen may say it has finished: a
             // stopped answer's stream winding down must not mark a newer one
@@ -196,11 +213,17 @@ import MacBCore
                 isSearching = false
             }
         }
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
+        var request = URLRequest(url: provider.chatURL)
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        if provider == .openRouter {
+            // OpenRouter asks callers to identify themselves; this is the app,
+            // not the user, and carries nothing about them.
+            request.setValue("https://github.com/hamzqb/MacB", forHTTPHeaderField: "HTTP-Referer")
+            request.setValue("MacB", forHTTPHeaderField: "X-Title")
+        }
         request.timeoutInterval = 120
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -211,19 +234,22 @@ import MacBCore
                 // OpenAI; read enough of it to say what went wrong.
                 var text = ""
                 for try await line in bytes.lines { text += line; if text.count > 4000 { break } }
-                errorMessage = Self.message(forStatus: code, body: text)
+                errorMessage = Self.message(forStatus: code, body: text, provider: provider)
                 return
             }
             for try await line in bytes.lines {
                 if Task.isCancelled { return }
-                switch AIResponseStream.event(fromData: line) {
+                let event = provider.canSearchWeb ? AIResponseStream.event(fromData: line)
+                                                  : AIChatStream.event(fromData: line)
+                switch event {
                 case .text(let delta):
                     isSearching = false
                     update(turnID) { $0.answer += delta }
                 case .searching:
                     isSearching = true
-                case .finished(let citations):
-                    update(turnID) { $0.citations = citations }
+                case .finished(let citations, let usage):
+                    cost?.record(provider: provider, model: model, usage: usage)
+                    if !citations.isEmpty { update(turnID) { $0.citations = citations } }
                     if selectionResult?.turnID == turnID {
                         selectionResult?.isComplete = true
                         copyResult()
@@ -239,7 +265,7 @@ import MacBCore
         } catch let error as URLError where error.code == .cancelled {
             return
         } catch {
-            errorMessage = "OpenAI'ye ulaşılamadı: \(error.localizedDescription)"
+            errorMessage = "\(provider.title)'ye ulaşılamadı: \(error.localizedDescription)"
         }
     }
 
@@ -248,13 +274,13 @@ import MacBCore
         change(&turns[index])
     }
 
-    private static func message(forStatus code: Int, body: String) -> String {
+    private static func message(forStatus code: Int, body: String, provider: AIProvider) -> String {
         if let data = body.data(using: .utf8),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let error = object["error"] as? [String: Any],
            let message = error["message"] as? String {
             switch code {
-            case 401: return "OpenAI anahtarı reddetti. Ayarlar'dan yenisini gir."
+            case 401, 403: return "\(provider.title) anahtarı reddetti. Ayarlar'dan yenisini gir."
             case 404: return "Model bulunamadı: \(message)"
             case 429: return "Kota ya da hız sınırı doldu: \(message)"
             default: return message

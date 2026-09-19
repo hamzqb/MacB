@@ -243,22 +243,29 @@ private final class Flag: @unchecked Sendable {
     private let updates = UpdateService()
     private let loginItem = LoginItemService()
     private let aiKey = AIKeyStore()
-    private lazy var assistant = AIAssistantService(keys: aiKey) { [weak self] in
-        self?.preferences.aiModel ?? Preferences.defaultAIModel
-    }
+    private let aiCost = AICostMeter()
+    private lazy var assistant = AIAssistantService(
+        keys: aiKey,
+        model: { [weak self] provider in self?.preferences.model(for: provider) ?? provider.defaultModel },
+        preferredProvider: { [weak self] in self?.preferences.preferredProvider },
+        cost: aiCost)
     private let speech = SpeechInputService()
     private let selectedText = SelectedTextService()
     private let translator = OfflineTranslator()
     private let keepAwake = KeepAwakeService.shared
     private let arrangements = WindowArrangementService()
     private let jarvisHotKey = JarvisHotKey()
+    private lazy var briefing = BriefingService(preferences: preferences, weather: weather,
+                                                monitor: systemMonitor, activity: aiActivity)
     private let jarvisMemory = JarvisMemoryStore()
     private lazy var jarvis = JarvisSession(
-        keys: aiKey, memory: jarvisMemory,
-        voice: { [weak self] in JarvisVoice(rawValue: self?.preferences.jarvisVoice ?? "") ?? .cedar },
+        keys: aiKey, memory: jarvisMemory, cost: aiCost,
+        voice: { [weak self] in JarvisVoice(rawValue: self?.preferences.jarvisVoice ?? "") ?? .marin },
+        persona: { [weak self] in JarvisPersona(rawValue: self?.preferences.jarvisPersona ?? "") ?? .warm },
         model: { [weak self] in self?.preferences.jarvisModel ?? JarvisProtocol.defaultModel })
     private lazy var jarvisTools = MacBJarvisToolbox(
         keys: aiKey, searchModel: { [weak self] in self?.preferences.aiModel ?? Preferences.defaultAIModel },
+        cost: aiCost,
         media: media, timer: islandTimer, windowLayout: windowLayout, arrangements: arrangements, note: quickNote,
         selection: selectedText, systemMonitor: systemMonitor, weather: weather, aiActivity: aiActivity,
         memory: jarvisMemory,
@@ -283,6 +290,7 @@ private final class Flag: @unchecked Sendable {
                                             faceUnlock: faceUnlock,
                                             systemEvents: systemEvents,
                                             assistant: jarvis,
+                                            briefing: briefing,
                                             openSettings: { [weak self] in self?.showSettings() })
     private lazy var switcher = SwitcherController(windowService: windows, previewService: previews,
                                                    preferences: preferences, favorites: favorites,
@@ -306,7 +314,8 @@ private final class Flag: @unchecked Sendable {
             NSApp.terminate(nil)
             return
         }
-        NSApp.setActivationPolicy(.accessory)
+        applyActivationPolicy()
+        observeBriefing()
         // An older MacB could leave the macOS indicator helper stopped. Undo it
         // once, before anything else, so nobody is left without indicators.
         SystemHUDRepair.resumeIndicatorHelper()
@@ -825,9 +834,36 @@ private final class Flag: @unchecked Sendable {
             processes: processes, lid: lid, keyboardCleaning: keyboardCleaning,
             updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher, automation: automation,
-            loginItem: loginItem, aiKey: aiKey, arrangements: arrangements, keepAwake: keepAwake,
+            loginItem: loginItem, aiKey: aiKey, aiCost: aiCost, briefing: briefing, assistant: assistant,
+            arrangements: arrangements, keepAwake: keepAwake,
             jarvisHotKeyFailed: jarvisHotKey.failed, jarvisMemory: jarvisMemory,
             openPanel: { [weak self] in self?.openNotch() }))
+    }
+
+    /// Whether MacB has a Dock icon and shows up in ⌘Tab.
+    ///
+    /// An accessory application has neither, which is right for something that
+    /// lives in the notch — and wrong the moment somebody goes looking for it
+    /// in the switcher and cannot find it. So it is a setting, and this is the
+    /// one place that applies it.
+    private func applyActivationPolicy() {
+        NSApp.setActivationPolicy(preferences.showInDock ? .regular : .accessory)
+    }
+
+    /// Puts the briefing in the island as soon as it has something to say.
+    private func observeBriefing() {
+        briefing.$lines
+            .receive(on: RunLoop.main)
+            .sink { [weak self] lines in
+                guard let self else { return }
+                if lines.isEmpty { self.notch.dismissBriefing() } else { self.notch.showBriefing() }
+            }
+            .store(in: &subscriptions)
+        preferences.$showInDock
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.applyActivationPolicy() }
+            .store(in: &subscriptions)
+        briefing.startObserving()
     }
 
     private func refreshUpdateMenu(for state: UpdateService.State) {
