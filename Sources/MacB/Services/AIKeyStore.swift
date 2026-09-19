@@ -40,6 +40,9 @@ import Security
     }
 
     private let service: String
+    /// Keys already read this run. Never written anywhere, never published,
+    /// and emptied whenever one changes.
+    private var cache: [AIProvider: String] = [:]
 
     init(service: String = "dev.hamzababal.MacB.ai") {
         self.service = service
@@ -72,6 +75,8 @@ import Security
             return false
         }
         guard write(key, for: provider) else { return false }
+        cache[provider] = key
+        models[provider] = nil
         errorMessage = nil
         status[provider] = .idle
         stored.insert(provider)
@@ -81,6 +86,8 @@ import Security
     /// Forgets a key. Nothing else in MacB keeps a copy.
     func remove(_ provider: AIProvider = .openAI) {
         SecItemDelete(baseQuery(provider) as CFDictionary)
+        cache[provider] = nil
+        models[provider] = nil
         stored.remove(provider)
         status[provider] = nil
         errorMessage = nil
@@ -90,7 +97,22 @@ import Security
     ///
     /// Internal rather than published on purpose: nothing should be holding one
     /// of these in a view, a log line or an observable object.
+    ///
+    /// Kept for the life of the process once read. macOS asks the user to let a
+    /// rebuilt application at its own Keychain items — the signature it was
+    /// trusted under is no longer the signature asking — and without this that
+    /// question arrived before every single question typed into the panel. The
+    /// key is in memory while a request is in flight regardless; this only
+    /// keeps it there between them, and a key that is replaced or removed drops
+    /// out of here at once.
     func read(_ provider: AIProvider = .openAI) -> String? {
+        if let cached = cache[provider] { return cached }
+        let key = load(provider)
+        if let key { cache[provider] = key }
+        return key
+    }
+
+    private func load(_ provider: AIProvider) -> String? {
         var query = baseQuery(provider)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -153,6 +175,57 @@ import Security
             outcome[provider] = save(key, for: provider)
         }
         return outcome
+    }
+
+    // MARK: - Models
+
+    /// What each provider says it offers, once it has been asked.
+    ///
+    /// These lists change under MacB — a model that worked last month answers
+    /// 404 today — so the settings window offers the built-in list until this
+    /// one arrives, and the live one after.
+    @Published private(set) var models: [AIProvider: [String]] = [:]
+    @Published private(set) var isLoadingModels: AIProvider?
+
+    func modelChoices(for provider: AIProvider) -> [String] {
+        models[provider] ?? provider.modelChoices
+    }
+
+    /// Asks the provider for its model list. Chat models only where that can be
+    /// told apart: a list with three hundred embedding and audio models in it
+    /// is not a list anybody picks from.
+    func loadModels(_ provider: AIProvider) async {
+        guard let key = read(provider) else { return }
+        isLoadingModels = provider
+        defer { isLoadingModels = nil }
+        var request = URLRequest(url: provider.modelsURL)
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 20
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let list = object["data"] as? [[String: Any]] else {
+            status[provider] = .invalid("Model listesi alınamadı.")
+            return
+        }
+        let names = list.compactMap { $0["id"] as? String }
+            .filter { Self.looksLikeChatModel($0) }
+            .sorted()
+        guard !names.isEmpty else {
+            status[provider] = .invalid("Bu anahtarla kullanılabilir sohbet modeli görünmüyor.")
+            return
+        }
+        models[provider] = names
+        status[provider] = .valid("\(names.count) model bulundu.")
+    }
+
+    /// Everything that is plainly not something to hold a conversation with.
+    private static func looksLikeChatModel(_ name: String) -> Bool {
+        let lowered = name.lowercased()
+        let unwanted = ["whisper", "tts", "embedding", "embed", "moderation", "guard", "rerank",
+                        "image", "dall-e", "transcribe", "realtime", "audio", "vision-encoder",
+                        "distil-whisper", "aqa"]
+        return !unwanted.contains { lowered.contains($0) }
     }
 
     // MARK: - Verification

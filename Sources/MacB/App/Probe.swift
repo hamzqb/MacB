@@ -1,6 +1,7 @@
 import AVFoundation
 import AppKit
 import MacBCore
+import Security
 
 /// Command-line probes for features that otherwise need a gesture to reach.
 @MainActor enum Probe {
@@ -75,6 +76,45 @@ import MacBCore
                         print("\(reading.text.contains(line) ? "ok" : "MISS"): \(line)")
                     }
                 } catch { print("error: \(error.localizedDescription)") }
+            }
+        }
+        if let question = value(after: "--ask") {
+            // One real question through whichever provider is chosen, to prove
+            // the whole path end to end: key, address, request and stream.
+            return {
+                let keys = AIKeyStore()
+                let preferences = Preferences()
+                let service = AIAssistantService(
+                    keys: keys,
+                    model: { preferences.model(for: $0) },
+                    preferredProvider: { preferences.preferredProvider })
+                guard let provider = service.provider else { return print("error: kayıtlı anahtar yok") }
+                print("provider: \(provider.title) · model: \(preferences.model(for: provider))")
+                service.ask(question)
+                for _ in 0..<300 where service.isAnswering {
+                    try? await Task.sleep(nanoseconds: 200_000_000)
+                }
+                if let error = service.errorMessage { return print("error: \(error)") }
+                let answer = service.turns.last?.answer ?? ""
+                print("answer (\(answer.count) chars): \(answer.prefix(300))")
+            }
+        }
+        if let name = value(after: "--list-models") {
+            // What a provider actually offers today. Their lists change under
+            // MacB, and a model name that no longer exists fails with a 404
+            // that says nothing useful.
+            return {
+                guard let provider = AIProvider(rawValue: name) else { return print("error: bilinmeyen sağlayıcı") }
+                guard let key = AIKeyStore().read(provider) else { return print("error: anahtar yok") }
+                var request = URLRequest(url: provider.modelsURL)
+                request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+                request.timeoutInterval = 20
+                guard let (data, _) = try? await URLSession.shared.data(for: request),
+                      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let models = object["data"] as? [[String: Any]] else {
+                    return print("error: liste alınamadı")
+                }
+                for model in models.compactMap({ $0["id"] as? String }).sorted() { print(model) }
             }
         }
         if arguments.contains("--verify-keys") {

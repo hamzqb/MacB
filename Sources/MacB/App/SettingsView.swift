@@ -1470,11 +1470,15 @@ struct SettingsView: View {
                 Picker("Model", selection: Binding(
                     get: { preferences.model(for: provider) },
                     set: { preferences.setModel($0, for: provider) })) {
-                    ForEach(provider.modelChoices, id: \.self) { Text($0).tag($0) }
+                    let choices = aiKey.modelChoices(for: provider)
+                    ForEach(choices, id: \.self) { Text($0).tag($0) }
                     let current = preferences.model(for: provider)
-                    if !provider.modelChoices.contains(current) { Text(current).tag(current) }
+                    if !choices.contains(current) { Text(current).tag(current) }
                 }
-                .labelsHidden().fixedSize()
+                .labelsHidden().frame(maxWidth: 260)
+                Button("Modelleri yenile") { Task { await aiKey.loadModels(provider) } }
+                    .controlSize(.small)
+                    .disabled(!aiKey.has(provider) || aiKey.isLoadingModels == provider)
             }
             switch aiKey.status(of: provider) {
             case .idle: EmptyView()

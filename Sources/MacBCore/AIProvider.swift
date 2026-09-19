@@ -58,7 +58,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var defaultModel: String {
         switch self {
         case .openAI: return "gpt-5-mini"
-        case .groq: return "llama-3.3-70b-versatile"
+        case .groq: return "llama-3.1-8b-instant"
         case .openRouter: return "meta-llama/llama-3.3-70b-instruct:free"
         case .gemini: return "gemini-2.5-flash"
         case .huggingFace: return "meta-llama/Llama-3.3-70B-Instruct"
@@ -135,8 +135,8 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .openAI:
             return ["gpt-6-astra", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-4.1-mini"]
         case .groq:
-            return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant",
-                    "openai/gpt-oss-120b", "qwen/qwen3-32b"]
+            return ["llama-3.1-8b-instant", "llama-3.3-70b-versatile",
+                    "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3-32b"]
         case .openRouter:
             return ["meta-llama/llama-3.3-70b-instruct:free", "deepseek/deepseek-chat-v3.1:free",
                     "google/gemma-3-27b-it:free", "qwen/qwen3-235b-a22b:free"]

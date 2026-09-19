@@ -281,7 +281,8 @@ import MacBCore
            let message = error["message"] as? String {
             switch code {
             case 401, 403: return "\(provider.title) anahtarı reddetti. Ayarlar'dan yenisini gir."
-            case 404: return "Model bulunamadı: \(message)"
+            case 404:
+                return "\(provider.title) bu modeli tanımıyor. Ayarlar → Araçlar'dan “Modelleri yenile”ye bas ve listeden seç. (\(message))"
             case 429: return "Kota ya da hız sınırı doldu: \(message)"
             default: return message
             }
