@@ -15,12 +15,17 @@ public enum NotchContent: String, Equatable, CaseIterable {
     /// The morning briefing. Also not a tab: it shows up once, is read, and
     /// goes away.
     case briefing
+    /// What a background job found while nobody was here. Also not a tab: it
+    /// arrives once, is answered, and goes.
+    case agent
 
     /// The section a drop or an explicit close returns to.
     public static let `default` = NotchContent.home
 
     /// The sections the navigation row offers.
-    public static var tabs: [NotchContent] { allCases.filter { $0 != .assistant && $0 != .briefing } }
+    public static var tabs: [NotchContent] {
+        allCases.filter { $0 != .assistant && $0 != .briefing && $0 != .agent }
+    }
 }
 
 /// Interaction policy is independent of rendering and of animation progress.

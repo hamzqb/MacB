@@ -566,7 +566,7 @@ enum JarvisToolOutcome {
                     speakFree(JarvisProtocol.plainSpoken(reply.text))
                     return
                 }
-                freeMessages.append(AIChatStream.assistantToolMessage(reply.calls, text: reply.text))
+                freeMessages.append(reply.historyMessage)
                 let ending = await runFreeTools(reply.calls, generation: current)
                 guard generation == current, isActive else { return }
                 if ending {

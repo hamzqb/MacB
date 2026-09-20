@@ -22,6 +22,9 @@ import ScreenCaptureKit
     private let cost: AICostMeter?
     private let scenarios: ScenarioStore
     private let mail: MailService?
+    private let jobs: AgentJobStore?
+    /// Starts a background job. Set by the app, which owns the runner.
+    var startJob: ((String) -> Bool)?
     private let aiActivity: AIActivityService
     private let memory: JarvisMemoryStore
     private let notify: (String, String) -> Void
@@ -32,9 +35,10 @@ import ScreenCaptureKit
          windowLayout: WindowLayoutService, arrangements: WindowArrangementService, note: QuickNoteStore,
          selection: SelectedTextService, systemMonitor: SystemMonitorService, weather: WeatherService,
          aiActivity: AIActivityService, memory: JarvisMemoryStore, scenarios: ScenarioStore,
-         mail: MailService? = nil,
+         mail: MailService? = nil, jobs: AgentJobStore? = nil,
          notify: @escaping (String, String) -> Void) {
         self.mail = mail
+        self.jobs = jobs
         self.scenarios = scenarios
         self.weather = weather
         self.cost = cost
@@ -93,6 +97,8 @@ import ScreenCaptureKit
             return "Okuduğu bir içerikten sonra takvimine bakmak istiyor."
         case .readMail:
             return "MacB okunmamış maillerine bakmak istiyor: kimden, konu, saat. Mailin içeriği okunmaz."
+        case .startBackgroundJob:
+            return "Okuduğu bir içerikten sonra arka planda şunu yapmak istiyor: \u{201C}\(arguments["task"] as? String ?? "")\u{201D}"
         case .openApplication:
             return "Okuduğu bir içerikten sonra \(arguments["name"] as? String ?? "bir uygulama") açmak istiyor."
         case .copyToClipboard:
@@ -223,6 +229,21 @@ import ScreenCaptureKit
         case .readMail:
             return await readMail(onlyImportant: arguments["only_important"] as? Bool ?? false,
                                   limit: max(1, min(20, (arguments["limit"] as? NSNumber)?.intValue ?? 8)))
+        case .startBackgroundJob:
+            let task = (arguments["task"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !task.isEmpty else { return fail("Ne yapılacağı yazılmamış.") }
+            guard startJob?(task) == true else { return fail("Arka plan işi başlatılamadı.") }
+            return ok(["started": true,
+                       "note": "Running now. It can read but not act; anything it wants to do waits"
+                           + " for the user. Tell them it will be ready when they are back, and stop."])
+        case .backgroundJobs:
+            guard let jobs else { return fail("Arka plan işleri kapalı.") }
+            let listed = jobs.jobs.prefix(6).map { job in
+                ["task": job.title, "state": job.state.title,
+                 "report": job.isFinished ? job.report : "",
+                 "waiting_for_you": job.proposals.filter(\.isPending).count] as [String: Any]
+            }
+            return ok(["running": jobs.running.count, "jobs": listed])
         case .addReminder:
             return await addReminder(title: arguments["title"] as? String ?? "",
                                      due: JarvisDates.parse(arguments["due"] as? String))

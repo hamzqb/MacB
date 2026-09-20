@@ -258,6 +258,14 @@ private final class Flag: @unchecked Sendable {
     private lazy var briefing = BriefingService(preferences: preferences, weather: weather,
                                                 monitor: systemMonitor, activity: aiActivity, mail: mail)
     private let jarvisMemory = JarvisMemoryStore()
+    private let agentJobs = AgentJobStore()
+    private lazy var agentRunner = AgentJobRunner(
+        store: agentJobs,
+        engine: FreeVoiceEngine(
+            keys: aiKey,
+            model: { [weak self] provider in self?.preferences.model(for: provider) ?? provider.defaultModel },
+            preferred: { [weak self] in AIProvider(rawValue: self?.preferences.aiProvider ?? "") }),
+        cost: aiCost)
     private lazy var mail: MailService = {
         let service = MailService()
         service.importantSenders = { [weak self] in self?.preferences.importantSenders ?? [] }
@@ -283,7 +291,7 @@ private final class Flag: @unchecked Sendable {
         cost: aiCost,
         media: media, timer: islandTimer, windowLayout: windowLayout, arrangements: arrangements, note: quickNote,
         selection: selectedText, systemMonitor: systemMonitor, weather: weather, aiActivity: aiActivity,
-        memory: jarvisMemory, scenarios: scenarios, mail: mail,
+        memory: jarvisMemory, scenarios: scenarios, mail: mail, jobs: agentJobs,
         notify: { [weak self] symbol, message in self?.notch.notify(symbol: symbol, message: message) })
     private lazy var aiPanel = AIPanelController(assistant: assistant, speech: speech,
                                                  selection: selectedText) { [weak self] in
@@ -306,6 +314,13 @@ private final class Flag: @unchecked Sendable {
                                             systemEvents: systemEvents,
                                             assistant: jarvis,
                                             briefing: briefing,
+                                            jobs: agentJobs,
+                                            approveProposal: { [weak self] proposal, job in
+                                                Task { await self?.agentRunner.approve(proposal, in: job) }
+                                            },
+                                            refuseProposal: { [weak self] proposal, job in
+                                                self?.agentRunner.refuse(proposal, in: job)
+                                            },
                                             openSettings: { [weak self] in self?.showSettings() })
     private lazy var switcher = SwitcherController(windowService: windows, previewService: previews,
                                                    preferences: preferences, favorites: favorites,
@@ -922,6 +937,39 @@ private final class Flag: @unchecked Sendable {
             .sink { [weak self] _ in self?.applyActivationPolicy() }
             .store(in: &subscriptions)
         briefing.startObserving()
+        observeAgentJobs()
+    }
+
+    /// Background jobs: run them, and put what they found in front of the user
+    /// when the user is actually there.
+    ///
+    /// "There" is the screen being unlocked or the session becoming active —
+    /// somebody sitting back down. A report that appears while the Mac is
+    /// locked is a report nobody sees, and one that appears mid-sentence
+    /// interrupts a conversation to talk about something else.
+    private func observeAgentJobs() {
+        agentRunner.toolbox = jarvisTools
+        jarvisTools.startJob = { [weak self] task in
+            guard let self, self.agentJobs.add(request: task) != nil else { return false }
+            self.agentRunner.pump()
+            return true
+        }
+        agentRunner.onFinished = { [weak self] job in
+            guard let self else { return }
+            self.notch.notify(symbol: job.state.symbol, message: job.title)
+            // Only if somebody is here. Otherwise it waits, which is the whole
+            // point of having asked for it before leaving.
+            if !self.isSleeping && !self.isSessionInactive { self.deliverAgentReports() }
+        }
+        agentJobs.$jobs
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.agentRunner.pump() }
+            .store(in: &subscriptions)
+    }
+
+    private func deliverAgentReports() {
+        guard !agentJobs.waiting.isEmpty else { return }
+        notch.showAgentReport()
     }
 
     private func refreshUpdateMenu(for state: UpdateService.State) {
@@ -1019,6 +1067,9 @@ private final class Flag: @unchecked Sendable {
         systemMonitor.start()
         processes.start()
         applyPreferences()
+        // Somebody has just sat back down. This is the moment a job that
+        // finished while they were gone is worth showing.
+        deliverAgentReports()
     }
 
     func applicationWillTerminate(_ notification: Notification) {

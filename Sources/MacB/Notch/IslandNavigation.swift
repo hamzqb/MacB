@@ -11,6 +11,7 @@ extension NotchContent {
         case .timer: return "timer"
         case .assistant: return "waveform"
         case .briefing: return "sun.horizon.fill"
+        case .agent: return "checklist"
         }
     }
 
@@ -23,6 +24,7 @@ extension NotchContent {
         case .timer: return "Zamanlayıcı"
         case .assistant: return "MacB"
         case .briefing: return "Brifing"
+        case .agent: return "Arka plan işi"
         }
     }
 }

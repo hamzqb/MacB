@@ -64,6 +64,10 @@ struct IslandToast: Equatable {
     private let assistant: JarvisSession
     private let briefing: BriefingService
     private var briefingIsVisible = false
+    private let jobs: AgentJobStore
+    private let approveProposal: (AgentProposal, UUID) -> Void
+    private let refuseProposal: (AgentProposal, UUID) -> Void
+    private var agentIsVisible = false
     private let openSettings: () -> Void
     /// True while a voice conversation is running. The island stays open and
     /// ignores its own close timers for as long as it is.
@@ -110,9 +114,15 @@ struct IslandToast: Equatable {
          systemEvents: SystemEventService,
          assistant: JarvisSession,
          briefing: BriefingService,
+         jobs: AgentJobStore,
+         approveProposal: @escaping (AgentProposal, UUID) -> Void = { _, _ in },
+         refuseProposal: @escaping (AgentProposal, UUID) -> Void = { _, _ in },
          openSettings: @escaping () -> Void) {
         self.assistant = assistant
         self.briefing = briefing
+        self.jobs = jobs
+        self.approveProposal = approveProposal
+        self.refuseProposal = refuseProposal
         self.media = media; self.shelf = shelf; self.preferences = preferences
         self.recentFiles = recentFiles; self.clipboard = clipboard
         self.fileActivity = fileActivity
@@ -140,9 +150,12 @@ struct IslandToast: Equatable {
             recentTargets: recentTargets, aiActivity: aiActivity, systemMonitor: systemMonitor,
             processes: processes, lid: lid,
             keyboardCleaning: keyboardCleaning, timer: timer, widgets: widgets, launcher: launcher, background: background, weather: weather, note: note,
-            faceUnlock: faceUnlock, assistant: assistant, briefing: briefing,
+            faceUnlock: faceUnlock, assistant: assistant, briefing: briefing, jobs: jobs,
             closeAssistant: { [weak self] in self?.stopAssistant() },
             closeBriefing: { [weak self] in self?.dismissBriefing() },
+            approveProposal: { [weak self] proposal, job in self?.approveProposal(proposal, job) },
+            refuseProposal: { [weak self] proposal, job in self?.refuseProposal(proposal, job) },
+            dismissAgent: { [weak self] _ in self?.dismissAgentReport() },
             startAssistant: { [weak self] in self?.startAssistant() },
             open: { [weak self] in self?.openPanel() }, close: { [weak self] in self?.closePanel() },
             select: { [weak self] content in self?.select(content) },
@@ -452,7 +465,7 @@ struct IslandToast: Equatable {
         switch content {
         case .clipboard: return .clipboard
         case .files: return .shelf
-        case .assistant, .briefing: return nil
+        case .assistant, .briefing, .agent: return nil
         case .home, .apps, .timer: return nil
         }
     }
@@ -664,8 +677,31 @@ struct IslandToast: Equatable {
 
     var isBriefingVisible: Bool { briefingIsVisible }
 
+    /// Puts what a background job found in the island.
+    ///
+    /// Never over a conversation or a briefing: somebody who is talking to
+    /// MacB, or being greeted by it, is already being spoken to.
+    func showAgentReport() {
+        guard !assistantIsActive, !briefingIsVisible, !jobs.waiting.isEmpty else { return }
+        agentIsVisible = true
+        enabled = true
+        start()
+        openPanel(showing: .agent)
+        render()
+    }
+
+    func dismissAgentReport() {
+        guard agentIsVisible else { return }
+        agentIsVisible = false
+        for job in jobs.waiting { jobs.markDelivered(job.id) }
+        if state.content == .agent { select(.default) }
+        closePanel()
+    }
+
+    var isAgentVisible: Bool { agentIsVisible }
+
     private func scheduleDeadline() {
-        guard !assistantIsActive, !briefingIsVisible else { deadlineTask?.cancel(); return }
+        guard !assistantIsActive, !briefingIsVisible, !agentIsVisible else { deadlineTask?.cancel(); return }
         deadlineTask?.cancel()
         let deadlines = [state.hoverDeadline, state.closeDeadline].compactMap { $0 }
         guard let deadline = deadlines.min() else { return }
@@ -735,6 +771,8 @@ struct IslandToast: Equatable {
             return IslandGeometry.sectionWidth(IslandGeometry.assistantWidth, screenWidth: screenWidth)
         case .briefing:
             return IslandGeometry.sectionWidth(IslandGeometry.briefingWidth, screenWidth: screenWidth)
+        case .agent:
+            return IslandGeometry.sectionWidth(IslandGeometry.agentWidth, screenWidth: screenWidth)
         }
     }
 
@@ -766,6 +804,11 @@ struct IslandToast: Equatable {
                 hasConfirmation: assistant.confirmation != nil)
         case .briefing:
             return IslandGeometry.briefingHeight(chipCount: briefing.chips.count)
+        case .agent:
+            let job = jobs.waiting.first ?? jobs.running.first
+            return IslandGeometry.agentHeight(
+                reportLines: max(1, (job?.report.count ?? 0) / 58 + 1),
+                proposals: job?.proposals.filter(\.isPending).count ?? 0)
         }
     }
 

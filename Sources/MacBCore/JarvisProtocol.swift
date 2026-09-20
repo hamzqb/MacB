@@ -29,6 +29,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     case applyWindowArrangement = "apply_window_arrangement"
     case calendarEvents = "calendar_events"
     case readMail = "read_mail"
+    case startBackgroundJob = "start_background_job"
+    case backgroundJobs = "background_jobs"
     case addReminder = "add_reminder"
     case addCalendarEvent = "add_calendar_event"
     case addNote = "add_note"
@@ -86,7 +88,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         guard tainted else { return false }
         switch self {
         case .openApplication, .openWebsite, .copyToClipboard, .addNote, .forget, .calendarEvents,
-             .runScenario, .playMusic, .setAppearance, .openSettings, .setWiFi:
+             .runScenario, .playMusic, .setAppearance, .openSettings, .setWiFi, .startBackgroundJob:
             return true
         case .webSearch:
             return privateContent
@@ -118,6 +120,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .applyWindowArrangement: return "Pencere düzeni"
         case .calendarEvents: return "Takvime bakıyor"
         case .readMail: return "Maillere bakıyor"
+        case .startBackgroundJob: return "İşi arkaya alıyor"
+        case .backgroundJobs: return "Bekleyen işlere bakıyor"
         case .addReminder: return "Hatırlatıcı ekliyor"
         case .addCalendarEvent: return "Etkinlik ekliyor"
         case .addNote: return "Not alıyor"
@@ -174,6 +178,14 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .readMail:
             return "List unread mail in Apple Mail: who it is from, the subject, when it arrived — never the body."
                 + " Set only_important to list just flagged mail and mail from senders the user named."
+        case .startBackgroundJob:
+            return "Do something while the user is away and have it ready when they return."
+                + " Use this when they say they are leaving, coming back later, or ask you to work on"
+                + " something meanwhile. The job can read (mail, calendar, the web) but cannot act:"
+                + " anything with an effect is prepared and waits for their yes. Say in `task` what to"
+                + " do, in their own words. Then tell them it will be ready and stop."
+        case .backgroundJobs:
+            return "What the background jobs found, and what is still running."
         case .addReminder:
             return "Add a reminder, optionally with a due time (ISO 8601 local time)."
         case .addCalendarEvent:
@@ -237,6 +249,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .readMail:
             return object(["only_important": ["type": "boolean"],
                            "limit": ["type": "integer", "minimum": 1, "maximum": 20]])
+        case .startBackgroundJob:
+            return object(["task": string], required: ["task"])
         case .addReminder: return object(["title": string, "due": string], required: ["title"])
         case .addCalendarEvent: return object(["title": string, "start": string, "end": string], required: ["title", "start"])
         case .addNote, .copyToClipboard: return object(["text": string], required: ["text"])

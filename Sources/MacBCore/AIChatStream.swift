@@ -119,6 +119,24 @@ public enum AIChatStream {
         }
     }
 
+    /// The assistant's message exactly as the provider sent it.
+    ///
+    /// Echoed back verbatim on the next turn rather than rebuilt from the
+    /// calls, because providers attach things to it that they then require to
+    /// come back. Google's Gemini 3 signs each function call with a
+    /// `thought_signature` inside `extra_content` and refuses the next turn
+    /// without it: "Function call is missing a thought_signature". Rebuilding
+    /// the message drops anything MacB does not know about, and MacB should
+    /// not have to know about it.
+    public static func assistantMessage(inResponse object: [String: Any]) -> [String: Any]? {
+        guard let choices = object["choices"] as? [[String: Any]],
+              var message = choices.first?["message"] as? [String: Any] else { return nil }
+        // A null content is legal in the wire format and unhelpful on the way
+        // back; an empty string is what every provider accepts.
+        if message["content"] is NSNull || message["content"] == nil { message["content"] = "" }
+        return message
+    }
+
     /// The message that carries the model's own tool calls back to it, so the
     /// next turn knows what it asked for.
     public static func assistantToolMessage(_ calls: [JarvisCall], text: String?) -> [String: Any] {
@@ -132,6 +150,27 @@ public enum AIChatStream {
 
     public static func toolResultMessage(callID: String, output: String) -> [String: Any] {
         ["role": "tool", "tool_call_id": callID, "content": output]
+    }
+
+    /// The message out of a failed request's body.
+    ///
+    /// Providers do not agree on the shape. OpenAI and Groq send an object
+    /// with `error.message`; Google sends an array with one of those inside
+    /// it, which read as an object returns nothing and left MacB saying
+    /// "Sağlayıcı 404 döndürdü" while the body explained exactly what was
+    /// wrong. Both are read here.
+    public static func errorMessage(inBody data: Data) -> String? {
+        guard let parsed = try? JSONSerialization.jsonObject(with: data) else { return nil }
+        let object: [String: Any]?
+        if let single = parsed as? [String: Any] {
+            object = single
+        } else if let list = parsed as? [[String: Any]] {
+            object = list.first
+        } else {
+            object = nil
+        }
+        guard let error = object?["error"] as? [String: Any] else { return nil }
+        return (error["message"] as? String).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     /// The text of a non-streamed answer, for the places that ask one question

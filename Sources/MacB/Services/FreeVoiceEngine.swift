@@ -16,6 +16,14 @@ import MacBCore
         var text: String
         var calls: [JarvisCall]
         var usage: AITokenUsage?
+        /// The provider's own assistant message, to be echoed back untouched
+        /// on the next turn. See `AIChatStream.assistantMessage`.
+        var rawMessage: [String: Any]?
+
+        /// What goes into the conversation for this turn.
+        var historyMessage: [String: Any] {
+            rawMessage ?? AIChatStream.assistantToolMessage(calls, text: text)
+        }
     }
 
     enum Failure: LocalizedError {
@@ -59,10 +67,13 @@ import MacBCore
 
     var isAvailable: Bool { provider != nil }
 
-    func answer(messages: [[String: Any]]) async throws -> Reply {
+    func answer(messages: [[String: Any]],
+                tools: [JarvisTool] = JarvisTool.freeEngineTools,
+                maximumTokens: Int = 500) async throws -> Reply {
         guard let provider, let key = keys.read(provider) else { throw Failure.noProvider }
-        let tools = JarvisTool.freeEngineTools.map(\.chatDeclaration)
-        let body = AIChatStream.toolRequestBody(messages: messages, model: model(provider), tools: tools)
+        let body = AIChatStream.toolRequestBody(messages: messages, model: model(provider),
+                                                tools: tools.map(\.chatDeclaration),
+                                                maximumTokens: maximumTokens)
 
         var request = URLRequest(url: provider.chatURL)
         request.httpMethod = "POST"
@@ -77,16 +88,16 @@ import MacBCore
 
         let (data, response) = try await session.data(for: request)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw code == 200 ? Failure.unreadable : Failure.http(code, "")
-        }
         guard code == 200 else {
-            let error = object["error"] as? [String: Any]
-            throw Failure.http(code, error?["message"] as? String ?? "")
+            throw Failure.http(code, AIChatStream.errorMessage(inBody: data) ?? "")
+        }
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw Failure.unreadable
         }
         return Reply(text: AIChatStream.outputText(inResponse: object) ?? "",
                      calls: AIChatStream.toolCalls(inResponse: object),
-                     usage: AITokenUsage(chatCompletions: object["usage"]))
+                     usage: AITokenUsage(chatCompletions: object["usage"]),
+                     rawMessage: AIChatStream.assistantMessage(inResponse: object))
     }
 
     /// The provider a conversation will say it is running on, for the island.

@@ -173,6 +173,96 @@ import Security
                 print("without chips: \(Int(IslandGeometry.briefingHeight(chipCount: 0)))")
             }
         }
+        if arguments.contains("--measure-agent") {
+            return {
+                let store = AgentJobStore(url: URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent("macb-probe-jobs.json"))
+                var job = AgentJob(request: "önemsiz maillere bak ve bana listele")
+                job.state = .done
+                job.report = "Otuz iki okunmamış mailin var, hiçbiri önemli görünmüyor. İkisi bülten, birini arşivlemeyi önerdim."
+                job.proposals = [
+                    AgentProposal(tool: "add_note", arguments: "{}", text: "Nota eklensin mi: bülten listesi"),
+                    AgentProposal(tool: "open_application", arguments: "{}", text: "Mail açılsın mı?")
+                ]
+                store.update(job.id) { _ in }
+                if store.add(request: job.request) != nil, let first = store.jobs.first {
+                    store.update(first.id) { existing in
+                        existing.state = job.state
+                        existing.report = job.report
+                        existing.proposals = job.proposals
+                    }
+                }
+                let view = IslandAgentView(jobs: store, approve: { _, _ in }, refuse: { _, _ in },
+                                           dismiss: { _ in })
+                let host = NSHostingView(rootView: view)
+                host.frame = NSRect(x: 0, y: 0, width: IslandGeometry.agentWidth, height: 500)
+                host.layoutSubtreeIfNeeded()
+                let fitting = host.fittingSize
+                let reserved = IslandGeometry.agentHeight(reportLines: 2, proposals: 2)
+                print("width: \(IslandGeometry.agentWidth) needs: \(Int(fitting.width.rounded()))")
+                print("fits: \(Int(fitting.height.rounded())) reserved: \(Int(reserved.rounded()))")
+                print(fitting.height <= reserved ? "ok: sığıyor" : "MISS: taşıyor")
+                store.clearDelivered()
+                try? FileManager.default.removeItem(at: URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent("macb-probe-jobs.json"))
+            }
+        }
+        if let index = arguments.firstIndex(of: "--job-probe"), arguments.count > index + 1 {
+            // Runs one real background job end to end: the free provider, the
+            // tool declarations, the policy and the report. No toolbox, so the
+            // reading tools answer "no toolbox" — what is being proved here is
+            // the loop and that nothing acts.
+            let task = arguments[index + 1]
+            return {
+                let keys = AIKeyStore()
+                let store = AgentJobStore(url: URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent("macb-probe-run.json"))
+                let engine = FreeVoiceEngine(keys: keys, model: { $0.defaultModel })
+                guard let provider = engine.provider else { return print("ücretsiz sağlayıcı anahtarı yok") }
+                print("provider: \(provider.title) \(provider.defaultModel)")
+                let runner = AgentJobRunner(store: store, engine: engine)
+                guard store.add(request: task) != nil else { return print("iş eklenemedi") }
+                runner.pump()
+                for _ in 0..<120 where !store.running.isEmpty {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                }
+                for job in store.jobs {
+                    print("state: \(job.state.title) rounds: \(job.rounds)")
+                    print("report: \(job.report)")
+                    for proposal in job.proposals { print("waiting: \(proposal.tool) — \(proposal.text)") }
+                }
+                try? FileManager.default.removeItem(at: URL(fileURLWithPath: NSTemporaryDirectory())
+                    .appendingPathComponent("macb-probe-run.json"))
+            }
+        }
+        if let index = arguments.firstIndex(of: "--chat-probe"), arguments.count > index + 2 {
+            // One small chat request, with the status and the first of the
+            // body, for working out why a provider says no. The key is read
+            // inside the application and never printed.
+            let providerName = arguments[index + 1]
+            let model = arguments[index + 2]
+            return {
+                guard let provider = AIProvider(rawValue: providerName) else { return print("bilinmeyen sağlayıcı") }
+                let store = AIKeyStore()
+                guard let key = store.read(provider) else { return print("anahtar yok") }
+                var request = URLRequest(url: provider.chatURL)
+                request.httpMethod = "POST"
+                request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                let body = AIChatStream.toolRequestBody(
+                    messages: [["role": "user", "content": "tek kelimeyle merhaba de"]],
+                    model: model, tools: [JarvisTool.weather.chatDeclaration], maximumTokens: 60)
+                request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                do {
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    print("model: \(model) status: \(code)")
+                    print(String(data: data.prefix(400), encoding: .utf8) ?? "-")
+                } catch {
+                    print("hata: \(error.localizedDescription)")
+                }
+            }
+        }
         if arguments.contains("--verify-keys") {
             // Asks each provider whether its stored key works. Runs inside the
             // application, which owns the Keychain items, so nothing is

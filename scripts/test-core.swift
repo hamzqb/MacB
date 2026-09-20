@@ -1815,6 +1815,35 @@ struct CoreTestRunner {
                 try expect(AIChatStream.toolCalls(inResponse: ["choices": [["message": ["content": "merhaba"]]]]).isEmpty,
                            "A plain answer produced a tool call")
             }),
+            ("AIChatStream: what the provider attached to its own message comes back", {
+                // Gemini 3 signs each function call and refuses the next turn
+                // without the signature. Rebuilding the message drops it, so
+                // the message is echoed back as it arrived.
+                let object: [String: Any] = ["choices": [["message": [
+                    "role": "assistant", "content": NSNull(),
+                    "extra_content": ["google": ["thought_signature": "abc"]],
+                    "tool_calls": [["id": "c1", "type": "function",
+                                    "function": ["name": "weather", "arguments": "{}"]]]
+                ]]]]
+                let message = try require(AIChatStream.assistantMessage(inResponse: object), "No message")
+                try expect(message["extra_content"] != nil, "The provider's own attachment was dropped")
+                try expect(message["content"] as? String == "",
+                           "A null content was sent back as null")
+                try expect(AIChatStream.assistantMessage(inResponse: ["choices": []]) == nil,
+                           "An empty answer produced a message")
+
+                // Google wraps its errors in an array; reading it as an object
+                // left MacB saying "404" while the body explained why.
+                let wrapped = try require(#"[{"error":{"code":404,"message":"model retired"}}]"#
+                    .data(using: .utf8), "No data")
+                try expect(AIChatStream.errorMessage(inBody: wrapped) == "model retired",
+                           "An array-wrapped error was not read")
+                let plain = try require(#"{"error":{"message":"nope"}}"#.data(using: .utf8), "No data")
+                try expect(AIChatStream.errorMessage(inBody: plain) == "nope",
+                           "An ordinary error was not read")
+                try expect(AIChatStream.errorMessage(inBody: Data("not json".utf8)) == nil,
+                           "Something that is not JSON produced a message")
+            }),
             ("JarvisProtocol: the synthesiser is not read the punctuation", {
                 let spoken = JarvisProtocol.plainSpoken("## Başlık\n- **bir** şey\n- `iki`")
                 try expect(!spoken.contains("#") && !spoken.contains("*") && !spoken.contains("`"),
@@ -1888,6 +1917,72 @@ struct CoreTestRunner {
                 try expect(MailParsing.headers("yarım satır").isEmpty, "A malformed row became a message")
                 try expect(MailParsing.clip(String(repeating: "a", count: 300)).count <= 161,
                            "A subject the length of a paragraph was not cut")
+            }),
+            ("AgentPolicy: a job left alone reads and proposes, and never acts", {
+                // The whole safety of unattended work is this partition: every
+                // tool is in exactly one of the three sets, and the acting ones
+                // are never in the first.
+                for tool in JarvisTool.allCases {
+                    let unattended = AgentPolicy.runsUnattended(tool)
+                    let forbidden = AgentPolicy.isForbidden(tool)
+                    let proposed = AgentPolicy.isProposed(tool)
+                    let count = [unattended, forbidden, proposed].filter { $0 }.count
+                    try expect(count == 1, "\(tool) is in \(count) of the three sets, not one")
+                }
+                for tool in [JarvisTool.readMail, .calendarEvents, .webSearch, .weather, .systemStatus] {
+                    try expect(AgentPolicy.runsUnattended(tool), "\(tool) could not read without the user")
+                }
+                // Anything that changes the Mac has to wait for somebody.
+                for tool in [JarvisTool.openWebsite, .openApplication, .copyToClipboard, .addNote,
+                             .addReminder, .remember, .runScenario, .setWiFi, .setAppearance, .playMusic] {
+                    try expect(AgentPolicy.isProposed(tool), "\(tool) would have run with nobody there")
+                    try expect(!AgentPolicy.runsUnattended(tool), "\(tool) acts unattended")
+                }
+                // And some things not even as a suggestion.
+                for tool in [JarvisTool.lookAtScreen, .readScreenText, .readSelection, .powerAction] {
+                    try expect(AgentPolicy.isForbidden(tool), "\(tool) was allowed into a background job")
+                    try expect(!AgentPolicy.availableTools.contains(tool),
+                               "\(tool) was still declared to the job")
+                }
+                try expect(!AgentPolicy.availableTools.contains(.startBackgroundJob),
+                           "A job could start another job")
+                try expect(AgentPolicy.availableTools.contains(.readMail),
+                           "The job lost the tools it is there to use")
+                try expect(AgentPolicy.maximumRounds > 0 && AgentPolicy.timeLimit > 0,
+                           "A job could run forever")
+            }),
+            ("AgentJob: a finished job waits to be seen, and says what it was asked", {
+                var job = AgentJob(request: "önemsiz maillere bak ve listele")
+                try expect(!job.isFinished && !job.isWaitingForUser, "A new job was already done")
+                job.state = .done
+                try expect(job.isWaitingForUser, "A finished job was not waiting for anybody")
+                job.isDelivered = true
+                try expect(!job.isWaitingForUser, "A delivered job came back")
+                try expect(job.title == "önemsiz maillere bak ve listele",
+                           "A short request was rewritten")
+                let long = AgentJob(request: String(repeating: "a", count: 200))
+                try expect(long.title.count <= 49, "A long request was not cut for the card")
+
+                let proposal = AgentProposal(tool: "open_website",
+                                             arguments: #"{"url":"ornek.com"}"#,
+                                             text: "ornek.com açılsın mı?")
+                try expect(proposal.isPending, "A fresh proposal was already answered")
+                try expect(proposal.call.tool == .openWebsite, "A proposal lost its tool")
+                try expect(proposal.call.argumentObject["url"] as? String == "ornek.com",
+                           "A proposal lost the arguments it was prepared with")
+                try expect(AgentProposal(tool: "no_such_tool", arguments: "{}", text: "").call.tool == nil,
+                           "A proposal for a tool that no longer exists resolved to something")
+            }),
+            ("IslandGeometry: the report card grows by the rows it actually shows", {
+                let bare = IslandGeometry.agentHeight(reportLines: 1, proposals: 0)
+                let one = IslandGeometry.agentHeight(reportLines: 1, proposals: 1)
+                try expect(one > bare, "A waiting action reserved no room")
+                try expect(IslandGeometry.agentHeight(reportLines: 1, proposals: 9)
+                           == IslandGeometry.agentHeight(reportLines: 1, proposals: 3),
+                           "Nine proposals grew the island by nine rows")
+                try expect(IslandGeometry.agentHeight(reportLines: 9, proposals: 0)
+                           == IslandGeometry.agentHeight(reportLines: 3, proposals: 0),
+                           "A long report grew the island without limit")
             }),
             ("AIBudget: the ceiling stops the spending before it happens", {
                 try expect(AIBudget.isOver(spent: 0.50, limit: 0.50), "Reaching the limit was not over it")

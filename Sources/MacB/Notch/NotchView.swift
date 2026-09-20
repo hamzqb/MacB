@@ -28,8 +28,12 @@ struct NotchView: View {
     @ObservedObject var faceUnlock: FaceUnlockService
     @ObservedObject var assistant: JarvisSession
     @ObservedObject var briefing: BriefingService
+    @ObservedObject var jobs: AgentJobStore
     var closeAssistant: () -> Void
     var closeBriefing: () -> Void
+    var approveProposal: (AgentProposal, UUID) -> Void
+    var refuseProposal: (AgentProposal, UUID) -> Void
+    var dismissAgent: (UUID) -> Void
     var startAssistant: () -> Void
     /// One process-wide assertion, so there is one shared instance of it.
     @ObservedObject private var keepAwake = KeepAwakeService.shared
@@ -293,6 +297,9 @@ struct NotchView: View {
                                     close: closeAssistant, openSettings: openSettings)
             case .briefing:
                 IslandBriefingView(briefing: briefing, close: closeBriefing, talk: startAssistant)
+            case .agent:
+                IslandAgentView(jobs: jobs, approve: approveProposal, refuse: refuseProposal,
+                                dismiss: dismissAgent)
             }
         }
     }

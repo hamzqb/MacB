@@ -58,9 +58,9 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var defaultModel: String {
         switch self {
         case .openAI: return "gpt-5-mini"
-        case .groq: return "llama-3.3-70b-versatile"
+        case .groq: return "openai/gpt-oss-120b"
         case .openRouter: return "meta-llama/llama-3.3-70b-instruct:free"
-        case .gemini: return "gemini-2.5-flash"
+        case .gemini: return "gemini-3.6-flash"
         case .huggingFace: return "meta-llama/Llama-3.3-70B-Instruct"
         }
     }
@@ -135,13 +135,19 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .openAI:
             return ["gpt-6-astra", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-4.1-mini"]
         case .groq:
-            return ["llama-3.3-70b-versatile", "openai/gpt-oss-120b",
-                    "qwen/qwen3-32b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"]
+            // Groq retires model names constantly — these are the ones that
+            // answered in 2026; "Modelleri yenile" in Settings asks the
+            // provider itself, which is always the real list.
+            return ["openai/gpt-oss-120b", "qwen/qwen3.8-27b", "groq/compound",
+                    "openai/gpt-oss-20b"]
         case .openRouter:
             return ["meta-llama/llama-3.3-70b-instruct:free", "deepseek/deepseek-chat-v3.1:free",
                     "google/gemma-3-27b-it:free", "qwen/qwen3-235b-a22b:free"]
         case .gemini:
-            return ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"]
+            // Google retires the older names for new keys: 2.5-flash now
+            // answers 404 with "no longer available to new users".
+            return ["gemini-3.6-flash", "gemini-flash-latest", "gemini-3.1-flash-lite",
+                    "gemini-pro-latest", "gemini-2.5-pro"]
         case .huggingFace:
             return ["meta-llama/Llama-3.3-70B-Instruct", "Qwen/Qwen2.5-72B-Instruct"]
         }

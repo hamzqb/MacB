@@ -117,6 +117,18 @@ public enum IslandGeometry {
     /// mostly gap.
     public static let briefingWidth: CGFloat = 380
 
+    /// The card a background job leaves behind: what it found, then a row per
+    /// thing waiting for a yes.
+    public static func agentHeight(reportLines: Int, proposals: Int) -> CGFloat {
+        let header: CGFloat = 30
+        let report: CGFloat = 8 + CGFloat(min(3, max(1, reportLines))) * 16
+        let rows: CGFloat = proposals > 0 ? CGFloat(min(3, proposals)) * 34 + 8 : 0
+        let actions: CGFloat = 8 + 28
+        return header + report + rows + actions
+    }
+
+    public static let agentWidth: CGFloat = 520
+
     public static func expandedHeight(bodyHeight: CGFloat) -> CGFloat {
         guard bodyHeight > 0 else { return navigationHeight + topPadding + bottomPadding }
         return navigationHeight + gap + bodyHeight + topPadding + bottomPadding
