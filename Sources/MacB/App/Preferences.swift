@@ -128,6 +128,21 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     /// The Realtime model behind Jarvis.
     /// Which voice engine a conversation uses: the good billed one, the free
     /// one, or whichever is available.
+    /// Which Turkish voice reads the briefing. Empty means the best one
+    /// installed, which is right until somebody prefers a different one.
+    /// Whether MacB may ask Apple Mail what is unread. Off until somebody
+    /// turns it on: the first read raises macOS's Automation prompt, and
+    /// nothing should raise that on its own.
+    @Published var mailEnabled: Bool { didSet { defaults.set(mailEnabled, forKey: "mailEnabled") } }
+    /// Senders the user calls important, one per line in Settings.
+    @Published var importantSenders: [String] {
+        didSet { defaults.set(importantSenders, forKey: "importantSenders") }
+    }
+
+    @Published var briefingVoice: String {
+        didSet { defaults.set(briefingVoice, forKey: "briefingVoice") }
+    }
+
     @Published var jarvisEngine: String {
         didSet { defaults.set(jarvisEngine, forKey: "jarvisEngine") }
     }
@@ -337,6 +352,9 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         jarvisVoice = defaults.string(forKey: "jarvisVoice") ?? JarvisVoice.marin.rawValue
         jarvisModel = defaults.string(forKey: "jarvisModel") ?? JarvisProtocol.defaultModel
         jarvisEngine = defaults.string(forKey: "jarvisEngine") ?? JarvisEngineChoice.automatic.rawValue
+        briefingVoice = defaults.string(forKey: "briefingVoice") ?? ""
+        mailEnabled = defaults.bool(forKey: "mailEnabled")
+        importantSenders = defaults.stringArray(forKey: "importantSenders") ?? []
         jarvisHotKeyEnabled = defaults.bool(forKey: "jarvisHotKeyEnabled")
         jarvisPersona = defaults.string(forKey: "jarvisPersona") ?? JarvisPersona.mirror.rawValue
         briefingEnabled = defaults.bool(forKey: "briefingEnabled")

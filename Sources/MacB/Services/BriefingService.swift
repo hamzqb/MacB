@@ -31,26 +31,26 @@ import MacBCore
     private let weather: WeatherService
     private let monitor: SystemMonitorService
     private let activity: AIActivityService
+    private let mail: MailService?
     private let events = EKEventStore()
-    private let speaker = AVSpeechSynthesizer()
+    private let speaker = TurkishSpeaker()
     private var observers: [NSObjectProtocol] = []
     private var timer: Timer?
-    private var speechDelegate: SpeechFinished?
 
     /// Where the date of the last briefing is remembered, so it survives a
     /// restart. A date and nothing else.
     private static let lastKey = "briefingLastGiven"
 
     init(preferences: Preferences, weather: WeatherService, monitor: SystemMonitorService,
-         activity: AIActivityService) {
+         activity: AIActivityService, mail: MailService? = nil) {
+        self.mail = mail
         self.preferences = preferences
         self.weather = weather
         self.monitor = monitor
         self.activity = activity
         givenAt = UserDefaults.standard.object(forKey: Self.lastKey) as? Date
-        let delegate = SpeechFinished { [weak self] in self?.isSpeaking = false }
-        speechDelegate = delegate
-        speaker.delegate = delegate
+        speaker.preferredVoiceIdentifier = { [weak preferences] in preferences?.briefingVoice ?? "" }
+        speaker.onFinish = { [weak self] in self?.isSpeaking = false }
     }
 
     var isVisible: Bool { !lines.isEmpty }
@@ -154,6 +154,14 @@ import MacBCore
         facts.eventCount = calendar.count
         facts.nextEvent = calendar.first
         facts.reminderCount = await readReminderCount()
+        // Only when the user turned it on: reading Mail raises macOS's own
+        // Automation prompt the first time, and the briefing never puts a
+        // permission window on screen by itself.
+        if preferences.mailEnabled, let mail {
+            await mail.refresh()
+            facts.mailChip = mail.chip()
+            facts.mailLine = mail.line()
+        }
         return facts
     }
 
@@ -200,43 +208,17 @@ import MacBCore
     func speak() {
         guard !lines.isEmpty else { return }
         stopSpeaking()
-        let utterance = AVSpeechUtterance(string: lines.joined(separator: " "))
-        utterance.voice = Self.turkishVoice()
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.96
         isSpeaking = true
-        speaker.speak(utterance)
+        // Line by line, with a breath between them: the greeting, then the
+        // weather, then what is on today. Joined into one string it came out
+        // as a single flat sentence, which is what made it sound like a
+        // machine reading rather than somebody saying good morning.
+        speaker.speak(lines: lines)
     }
 
     func stopSpeaking() {
-        if speaker.isSpeaking { speaker.stopSpeaking(at: .immediate) }
+        speaker.stop()
         isSpeaking = false
     }
 
-    /// The best Turkish voice installed, preferring the higher-quality ones the
-    /// user may have downloaded.
-    private static func turkishVoice() -> AVSpeechSynthesisVoice? {
-        let turkish = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("tr") }
-        return turkish.first { $0.quality == .premium }
-            ?? turkish.first { $0.quality == .enhanced }
-            ?? turkish.first
-            ?? AVSpeechSynthesisVoice(language: "tr-TR")
-    }
-
-    /// Tells the service when the voice has finished, so the island can stop
-    /// showing it as speaking.
-    private final class SpeechFinished: NSObject, AVSpeechSynthesizerDelegate {
-        private let finished: () -> Void
-
-        init(finished: @escaping () -> Void) {
-            self.finished = finished
-        }
-
-        func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-            Task { @MainActor in self.finished() }
-        }
-
-        func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-            Task { @MainActor in self.finished() }
-        }
-    }
 }

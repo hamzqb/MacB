@@ -66,6 +66,7 @@ struct SettingsView: View {
     @ObservedObject var loginItem: LoginItemService
     @ObservedObject var aiKey: AIKeyStore
     @ObservedObject var aiCost: AICostMeter
+    @ObservedObject var mail: MailService
     @ObservedObject var briefing: BriefingService
     @ObservedObject var scenarios: ScenarioStore
     @ObservedObject var assistant: AIAssistantService
@@ -332,12 +333,74 @@ struct SettingsView: View {
                 settingToggle("Sesli oku", detail: "macOS'un kendi Türkçe sesiyle. Ücretsiz, internetsiz.",
                               isOn: $preferences.briefingSpeaks)
                     .disabled(!preferences.briefingEnabled)
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Text("Ses").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Ses", selection: $preferences.briefingVoice) {
+                        Text("En iyisi (otomatik)").tag("")
+                        ForEach(TurkishSpeaker.installedTurkishVoices(), id: \.identifier) { voice in
+                            Text(TurkishSpeaker.title(for: voice)).tag(voice.identifier)
+                        }
+                    }
+                    .labelsHidden().fixedSize()
+                    .disabled(!preferences.briefingSpeaks)
+                }
+                HStack(spacing: MacBDesign.Space.close) {
+                    Button("Sesi dene") { briefing.speak() }
+                        .disabled(!briefing.isVisible)
+                    Button("Daha iyi ses indir") {
+                        SystemActions.openSettings(.spokenContent)
+                    }
+                    Spacer()
+                }
+                message(TurkishSpeaker.hasOnlyBasicVoices
+                        ? "Bu Mac'te yalnız basit Türkçe ses var; o yüzden robot gibi okuyor. Sistem Ayarları \u{203A} Erişilebilirlik \u{203A} Sözlü İçerik'ten Cem ya da Yelda'nın \u{201C}Gelişmiş\u{201D} sürümünü indir — ücretsiz ve tek seferlik."
+                        : "Daha doğal bir ton için Sözlü İçerik'ten \u{201C}Gelişmiş\u{201D} ya da \u{201C}Premium\u{201D} Türkçe sesi indirebilirsin; MacB en iyisini kendi seçer.",
+                        warning: TurkishSpeaker.hasOnlyBasicVoices)
                 HStack(spacing: MacBDesign.Space.close) {
                     Button("Şimdi dene") { briefing.give() }
                     if briefing.isVisible { Button("Kapat") { briefing.dismiss() } }
                     Spacer()
                 }
                 message("Her şey bu Mac'ten okunur, hiçbir yere gitmez, anahtar gerekmez. Takvim ve hatırlatıcılar yalnız izin verdiysen okunur.")
+            }
+            section("Mail", "envelope") {
+                settingToggle("Mail'e bakabilsin",
+                              detail: "Brifing ve MacB, Apple Mail'de okunmamış maillerin kimden ve ne konuda olduğunu görebilir.",
+                              isOn: $preferences.mailEnabled)
+                intro("Yalnız gönderen, konu, saat ve bayrak okunur — mailin içeriği asla. Hiçbir şey kaydedilmez, hiçbir yere gönderilmez; MacB Mail'e sorar, Mail zaten senin Mac'inde. İlk açtığında macOS \u{201C}MacB, Mail'i kontrol etsin mi?\u{201D} diye sorar, istediğinde Sistem Ayarları \u{203A} Gizlilik ve Güvenlik \u{203A} Otomasyon'dan geri alabilirsin.")
+                VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
+                    Text("Önemli gönderenler")
+                        .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                    Text("Her satıra bir isim ya da adres. Bunlardan gelen ve bayrakladığın mailler \u{201C}önemli\u{201D} sayılır; gerisi sayılmaz.")
+                        .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    TextEditor(text: Binding(
+                        get: { preferences.importantSenders.joined(separator: "\n") },
+                        set: { text in
+                            preferences.importantSenders = text
+                                .split(separator: "\n", omittingEmptySubsequences: true)
+                                .map { $0.trimmingCharacters(in: .whitespaces) }
+                                .filter { !$0.isEmpty }
+                        }))
+                        .font(.system(size: MacBDesign.TypeScale.body, design: .monospaced))
+                        .frame(height: 76)
+                        .padding(MacBDesign.Space.snug)
+                        .background(MacBDesign.controlBackground,
+                                    in: RoundedRectangle(cornerRadius: MacBDesign.Radius.control, style: .continuous))
+                        .disabled(!preferences.mailEnabled)
+                        .accessibilityLabel("Önemli gönderenler")
+                }
+                HStack(spacing: MacBDesign.Space.close) {
+                    Button("Şimdi bak") { Task { await mail.refresh(force: true) } }
+                        .disabled(!preferences.mailEnabled || mail.isReading)
+                    Spacer()
+                }
+                if mail.summary.isUnavailable, let note = mail.summary.note {
+                    message(note, warning: true)
+                } else if mail.summary.unread > 0 {
+                    message("\(mail.summary.unread) okunmamış mail · \(mail.important.count) önemli")
+                }
             }
             section("Maliyet", "turkishlirasign.circle") {
                 HStack(spacing: MacBDesign.Space.comfortable) {

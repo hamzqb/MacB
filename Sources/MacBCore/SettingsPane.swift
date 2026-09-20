@@ -17,6 +17,8 @@ public enum SettingsPane: String, CaseIterable, Sendable {
     case users, wallpaper, screenTime = "screen_time", printers, sharing
     case timeMachine = "time_machine", dateAndTime = "date_and_time"
     case siri, vpn, extensions
+    /// Where the better speech voices are downloaded.
+    case spokenContent = "spoken_content"
 
     /// The Turkish name of the page, for what MacB says afterwards.
     public var title: String {
@@ -48,6 +50,7 @@ public enum SettingsPane: String, CaseIterable, Sendable {
         case .siri: return "Siri"
         case .vpn: return "VPN"
         case .extensions: return "Genişletmeler"
+        case .spokenContent: return "Sözlü İçerik"
         }
     }
 
@@ -83,6 +86,9 @@ public enum SettingsPane: String, CaseIterable, Sendable {
         case .siri: return base + "Siri-Settings.extension"
         case .vpn: return base + "NetworkExtensionSettingsUI.NESettingsUIExtension"
         case .extensions: return base + "ExtensionsPreferences"
+        // Spoken Content is a page inside Accessibility rather than a pane of
+        // its own; this is the anchor macOS itself uses for it.
+        case .spokenContent: return base + "preference.universalaccess?SpeakableItems"
         }
     }
 }

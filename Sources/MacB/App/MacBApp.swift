@@ -256,8 +256,13 @@ private final class Flag: @unchecked Sendable {
     private let arrangements = WindowArrangementService()
     private let jarvisHotKey = JarvisHotKey()
     private lazy var briefing = BriefingService(preferences: preferences, weather: weather,
-                                                monitor: systemMonitor, activity: aiActivity)
+                                                monitor: systemMonitor, activity: aiActivity, mail: mail)
     private let jarvisMemory = JarvisMemoryStore()
+    private lazy var mail: MailService = {
+        let service = MailService()
+        service.importantSenders = { [weak self] in self?.preferences.importantSenders ?? [] }
+        return service
+    }()
     private lazy var scenarios = ScenarioStore(keepAwake: keepAwake, arrangements: arrangements,
                                                media: media, timer: islandTimer)
     private lazy var jarvis = JarvisSession(
@@ -278,7 +283,7 @@ private final class Flag: @unchecked Sendable {
         cost: aiCost,
         media: media, timer: islandTimer, windowLayout: windowLayout, arrangements: arrangements, note: quickNote,
         selection: selectedText, systemMonitor: systemMonitor, weather: weather, aiActivity: aiActivity,
-        memory: jarvisMemory, scenarios: scenarios,
+        memory: jarvisMemory, scenarios: scenarios, mail: mail,
         notify: { [weak self] symbol, message in self?.notch.notify(symbol: symbol, message: message) })
     private lazy var aiPanel = AIPanelController(assistant: assistant, speech: speech,
                                                  selection: selectedText) { [weak self] in
@@ -886,7 +891,7 @@ private final class Flag: @unchecked Sendable {
             processes: processes, lid: lid, keyboardCleaning: keyboardCleaning,
             updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher, automation: automation,
-            loginItem: loginItem, aiKey: aiKey, aiCost: aiCost, briefing: briefing, scenarios: scenarios,
+            loginItem: loginItem, aiKey: aiKey, aiCost: aiCost, mail: mail, briefing: briefing, scenarios: scenarios,
             assistant: assistant,
             arrangements: arrangements, keepAwake: keepAwake,
             jarvisHotKeyFailed: jarvisHotKey.failed, jarvisMemory: jarvisMemory,

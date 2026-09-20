@@ -28,6 +28,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     case arrangeWindow = "arrange_window"
     case applyWindowArrangement = "apply_window_arrangement"
     case calendarEvents = "calendar_events"
+    case readMail = "read_mail"
     case addReminder = "add_reminder"
     case addCalendarEvent = "add_calendar_event"
     case addNote = "add_note"
@@ -45,7 +46,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// every later conversation: a fact slipped in once would steer them all.
     public var needsConfirmation: Bool {
         switch self {
-        case .lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent, .remember, .powerAction:
+        case .lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent, .remember, .powerAction,
+             .readMail:
             return true
         default: return false
         }
@@ -56,7 +58,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// saying "Jarvis, open this site" is still just an ad.
     public var readsOutsideContent: Bool {
         switch self {
-        case .webSearch, .lookAtScreen, .readScreenText, .readSelection, .calendarEvents, .media, .codingAgents:
+        case .webSearch, .lookAtScreen, .readScreenText, .readSelection, .calendarEvents, .media,
+             .codingAgents, .readMail:
             return true
         default: return false
         }
@@ -65,7 +68,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// Brings the user's own private material into the conversation.
     public var readsPrivateContent: Bool {
         switch self {
-        case .lookAtScreen, .readScreenText, .readSelection, .calendarEvents: return true
+        case .lookAtScreen, .readScreenText, .readSelection, .calendarEvents, .readMail: return true
         default: return false
         }
     }
@@ -114,6 +117,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .arrangeWindow: return "Pencereyi yerleştiriyor"
         case .applyWindowArrangement: return "Pencere düzeni"
         case .calendarEvents: return "Takvime bakıyor"
+        case .readMail: return "Maillere bakıyor"
         case .addReminder: return "Hatırlatıcı ekliyor"
         case .addCalendarEvent: return "Etkinlik ekliyor"
         case .addNote: return "Not alıyor"
@@ -167,6 +171,9 @@ public enum JarvisTool: String, CaseIterable, Sendable {
             return "Put windows back into a saved arrangement, by name or the one for this display setup."
         case .calendarEvents:
             return "List the user's calendar events and open reminders for the next few days."
+        case .readMail:
+            return "List unread mail in Apple Mail: who it is from, the subject, when it arrived — never the body."
+                + " Set only_important to list just flagged mail and mail from senders the user named."
         case .addReminder:
             return "Add a reminder, optionally with a due time (ISO 8601 local time)."
         case .addCalendarEvent:
@@ -227,6 +234,9 @@ public enum JarvisTool: String, CaseIterable, Sendable {
                           required: ["position"])
         case .applyWindowArrangement: return object(["name": string])
         case .calendarEvents: return object(["days": ["type": "integer", "minimum": 1, "maximum": 14]])
+        case .readMail:
+            return object(["only_important": ["type": "boolean"],
+                           "limit": ["type": "integer", "minimum": 1, "maximum": 20]])
         case .addReminder: return object(["title": string, "due": string], required: ["title"])
         case .addCalendarEvent: return object(["title": string, "start": string, "end": string], required: ["title", "start"])
         case .addNote, .copyToClipboard: return object(["text": string], required: ["text"])

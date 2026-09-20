@@ -44,11 +44,16 @@ public enum Briefing {
         public var isCharging: Bool
         /// Assistants that are waiting for an answer right now.
         public var waitingAgents: Int
+        /// The inbox, already summarised. Built by the mail service rather
+        /// than here, because deciding what is important needs the user's own
+        /// list of senders and this file has no business holding one.
+        public var mailChip: Chip?
+        public var mailLine: String?
 
         public init(weather: String? = nil, weatherShort: String? = nil, weatherSymbol: String? = nil,
                     nextEvent: String? = nil, eventCount: Int = 0,
                     reminderCount: Int = 0, battery: Int? = nil, isCharging: Bool = false,
-                    waitingAgents: Int = 0) {
+                    waitingAgents: Int = 0, mailChip: Chip? = nil, mailLine: String? = nil) {
             self.weather = weather
             self.weatherShort = weatherShort
             self.weatherSymbol = weatherSymbol
@@ -58,6 +63,8 @@ public enum Briefing {
             self.battery = battery
             self.isCharging = isCharging
             self.waitingAgents = waitingAgents
+            self.mailChip = mailChip
+            self.mailLine = mailLine
         }
     }
 
@@ -96,6 +103,7 @@ public enum Briefing {
         if let short = facts.weatherShort, !short.isEmpty {
             chips.append(Chip(symbol: facts.weatherSymbol ?? "cloud.sun.fill", text: short))
         }
+        if let mail = facts.mailChip { chips.append(mail) }
         if let next = facts.nextEvent, !next.isEmpty {
             let more = facts.eventCount > 1 ? " +\(facts.eventCount - 1)" : ""
             chips.append(Chip(symbol: "calendar", text: next + more))
@@ -128,6 +136,7 @@ public enum Briefing {
                              calendar: Calendar = .current) -> [String] {
         var lines = [opening(for: date, name: name, calendar: calendar)]
         if let weather = facts.weather, !weather.isEmpty { lines.append(weather) }
+        if let mail = facts.mailLine, !mail.isEmpty { lines.append(mail) }
         if let next = facts.nextEvent, !next.isEmpty {
             if facts.eventCount > 1 {
                 lines.append("Bugün \(facts.eventCount) şey var, ilki: \(next)")

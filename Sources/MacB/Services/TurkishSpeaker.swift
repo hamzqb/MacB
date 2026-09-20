@@ -29,16 +29,43 @@ import Foundation
         synthesizer.delegate = self
     }
 
+    /// The voice the user picked, by identifier. Empty means "the best one
+    /// installed", which is what somebody who has never opened the picker
+    /// means.
+    var preferredVoiceIdentifier: () -> String = { "" }
+
     func speak(_ text: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { onFinish?(); return }
+        speak(lines: [text])
+    }
+
+    /// Several lines, with a breath between them.
+    ///
+    /// The briefing used to be joined with spaces and handed over as one
+    /// string, and a synthesiser given one string reads it as one sentence —
+    /// no pause between the greeting and the weather, no pause before the
+    /// battery, everything at one pitch. That flat run-on is most of what makes
+    /// a built-in voice sound like a machine. One utterance per line, with a
+    /// short delay before each, costs nothing and is most of the fix.
+    func speak(lines: [String]) {
+        let cleaned = lines
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { onFinish?(); return }
         stop(notify: false)
-        let utterance = AVSpeechUtterance(string: trimmed)
-        utterance.voice = Self.turkishVoice()
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.96
+        let voice = Self.voice(identifier: preferredVoiceIdentifier())
         isSpeaking = true
         startLevels()
-        synthesizer.speak(utterance)
+        for (index, line) in cleaned.enumerated() {
+            let utterance = AVSpeechUtterance(string: line)
+            utterance.voice = voice
+            // Slightly under the default: the Turkish voices run fast enough
+            // that the ends of words run together at full rate.
+            utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.94
+            utterance.pitchMultiplier = 1.02
+            utterance.preUtteranceDelay = index == 0 ? 0 : 0.28
+            utterance.postUtteranceDelay = 0.08
+            synthesizer.speak(utterance)
+        }
     }
 
     func stop() { stop(notify: true) }
@@ -56,11 +83,57 @@ import Foundation
     /// The best Turkish voice installed, preferring the higher-quality ones the
     /// user may have downloaded.
     static func turkishVoice() -> AVSpeechSynthesisVoice? {
-        let turkish = AVSpeechSynthesisVoice.speechVoices().filter { $0.language.hasPrefix("tr") }
+        let turkish = installedTurkishVoices()
         return turkish.first { $0.quality == .premium }
             ?? turkish.first { $0.quality == .enhanced }
             ?? turkish.first
             ?? AVSpeechSynthesisVoice(language: "tr-TR")
+    }
+
+    /// A particular voice by identifier, falling back to the best one when the
+    /// chosen one has been removed — a voice can be deleted in System Settings
+    /// long after it was picked here.
+    static func voice(identifier: String) -> AVSpeechSynthesisVoice? {
+        guard !identifier.isEmpty,
+              let chosen = installedTurkishVoices().first(where: { $0.identifier == identifier })
+        else { return turkishVoice() }
+        return chosen
+    }
+
+    /// Every Turkish voice on this Mac, best first, so a picker reads as a
+    /// ranking rather than an alphabet.
+    static func installedTurkishVoices() -> [AVSpeechSynthesisVoice] {
+        AVSpeechSynthesisVoice.speechVoices()
+            .filter { $0.language.hasPrefix("tr") }
+            .sorted { rank($0) > rank($1) }
+    }
+
+    private static func rank(_ voice: AVSpeechSynthesisVoice) -> Int {
+        switch voice.quality {
+        case .premium: return 3
+        case .enhanced: return 2
+        default: return 1
+        }
+    }
+
+    /// A name somebody recognises, with the quality spelled out: "Cem —
+    /// gelişmiş" says more about how it will sound than "Cem (Enhanced)".
+    static func title(for voice: AVSpeechSynthesisVoice) -> String {
+        let name = voice.name
+            .replacingOccurrences(of: " (Enhanced)", with: "")
+            .replacingOccurrences(of: " (Premium)", with: "")
+        switch voice.quality {
+        case .premium: return name + " — en iyi"
+        case .enhanced: return name + " — gelişmiş"
+        default: return name + " — basit"
+        }
+    }
+
+    /// Whether this Mac has only the compact voices, which are the ones that
+    /// sound like a machine. There is a better one to download and it is free.
+    static var hasOnlyBasicVoices: Bool {
+        let turkish = installedTurkishVoices()
+        return !turkish.isEmpty && !turkish.contains { $0.quality != .default }
     }
 
     /// Whether this Mac can speak Turkish at all. Without a voice the free
