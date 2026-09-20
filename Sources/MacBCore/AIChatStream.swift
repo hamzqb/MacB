@@ -71,6 +71,69 @@ public enum AIChatStream {
         Markdown only.
         """
 
+    /// A whole conversation, not streamed, with tools the model may call.
+    ///
+    /// The free voice engine does not stream: it has nothing to do with half a
+    /// sentence, because the sentence is spoken by macOS's synthesiser once it
+    /// is complete. Asking for it whole makes the tool calls arrive whole too,
+    /// which is the difference between parsing JSON and reassembling it from
+    /// deltas.
+    public static func toolRequestBody(messages: [[String: Any]], model: String,
+                                       tools: [[String: Any]],
+                                       maximumTokens: Int = 500) -> [String: Any] {
+        var body: [String: Any] = ["model": model, "messages": messages,
+                                   "max_tokens": maximumTokens, "temperature": 0.6]
+        if !tools.isEmpty {
+            body["tools"] = tools
+            body["tool_choice"] = "auto"
+        }
+        return body
+    }
+
+    /// The tool calls in a finished answer.
+    ///
+    /// Providers disagree about whether a call's arguments are a JSON string or
+    /// an object already, and about whether an id is sent at all, so both are
+    /// normalised here: the rest of MacB gets a `JarvisCall` with a string, the
+    /// same shape the live engine produces, and a call with no id gets one made
+    /// up rather than being dropped.
+    public static func toolCalls(inResponse object: [String: Any]) -> [JarvisCall] {
+        guard let choices = object["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any],
+              let raw = message["tool_calls"] as? [[String: Any]] else { return [] }
+        return raw.enumerated().compactMap { index, entry in
+            guard let function = entry["function"] as? [String: Any],
+                  let name = function["name"] as? String, !name.isEmpty else { return nil }
+            let arguments: String
+            if let text = function["arguments"] as? String {
+                arguments = text
+            } else if let dictionary = function["arguments"] as? [String: Any],
+                      let data = try? JSONSerialization.data(withJSONObject: dictionary),
+                      let text = String(data: data, encoding: .utf8) {
+                arguments = text
+            } else {
+                arguments = "{}"
+            }
+            let id = (entry["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "call_\(index)"
+            return JarvisCall(callID: id, name: name, arguments: arguments)
+        }
+    }
+
+    /// The message that carries the model's own tool calls back to it, so the
+    /// next turn knows what it asked for.
+    public static func assistantToolMessage(_ calls: [JarvisCall], text: String?) -> [String: Any] {
+        var message: [String: Any] = ["role": "assistant", "content": text ?? ""]
+        message["tool_calls"] = calls.map { call in
+            ["id": call.callID, "type": "function",
+             "function": ["name": call.name, "arguments": call.arguments]] as [String: Any]
+        }
+        return message
+    }
+
+    public static func toolResultMessage(callID: String, output: String) -> [String: Any] {
+        ["role": "tool", "tool_call_id": callID, "content": output]
+    }
+
     /// The text of a non-streamed answer, for the places that ask one question
     /// and want one string back.
     public static func outputText(inResponse object: [String: Any]) -> String? {

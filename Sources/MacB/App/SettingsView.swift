@@ -388,7 +388,16 @@ struct SettingsView: View {
                 }
                 message((JarvisPersona(rawValue: preferences.jarvisPersona) ?? .mirror).note)
                 HStack(spacing: MacBDesign.Space.regular) {
-                    Text("Model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Text("Motor").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Motor", selection: $preferences.jarvisEngine) {
+                        ForEach(JarvisEngineChoice.allCases) { Text($0.title).tag($0.rawValue) }
+                    }
+                    .labelsHidden().fixedSize()
+                }
+                message((JarvisEngineChoice(rawValue: preferences.jarvisEngine) ?? .automatic).note)
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Text("Canlı model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     Spacer(minLength: 8)
                     Picker("Model", selection: $preferences.jarvisModel) {
                         ForEach(JarvisProtocol.models, id: \.self) {

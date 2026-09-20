@@ -67,10 +67,20 @@ struct IslandAssistantView: View {
             JarvisWaveform(state: session.state,
                            level: session.state == .speaking ? session.outputLevel : session.inputLevel)
                 .frame(width: 26, height: 14)
+            if session.isFreeEngine {
+                // Free is a mode, not a fault: it gets a mark of its own rather
+                // than an apology in the status line.
+                Image(systemName: "leaf.fill")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(MacBDesign.IslandToken.Ink.faint)
+                    .help("Ücretsiz mod: konuşma bu Mac'te çözülür, cevabı ücretsiz sağlayıcı yazar.")
+            }
             Text(statusText)
                 .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
                 .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
                 .lineLimit(1)
+                .truncationMode(.tail)
+                .help(statusText)
                 .id(statusText)
                 .transition(.opacity)
             Spacer(minLength: 2)

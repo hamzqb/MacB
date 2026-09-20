@@ -126,6 +126,12 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     /// The voice Jarvis speaks with.
     @Published var jarvisVoice: String { didSet { defaults.set(jarvisVoice, forKey: "jarvisVoice") } }
     /// The Realtime model behind Jarvis.
+    /// Which voice engine a conversation uses: the good billed one, the free
+    /// one, or whichever is available.
+    @Published var jarvisEngine: String {
+        didSet { defaults.set(jarvisEngine, forKey: "jarvisEngine") }
+    }
+
     @Published var jarvisModel: String {
         didSet {
             let trimmed = jarvisModel.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -289,6 +295,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "translationTarget": "tr",
                                     "jarvisVoice": JarvisVoice.marin.rawValue,
                                     "jarvisModel": JarvisProtocol.defaultModel,
+                                    "jarvisEngine": JarvisEngineChoice.automatic.rawValue,
                                     "jarvisHotKeyEnabled": true,
                                     "jarvisPersona": JarvisPersona.mirror.rawValue,
                                     "briefingEnabled": false, "briefingHour": 8, "briefingSpeaks": true,
@@ -329,6 +336,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         translationTarget = defaults.string(forKey: "translationTarget") ?? "tr"
         jarvisVoice = defaults.string(forKey: "jarvisVoice") ?? JarvisVoice.marin.rawValue
         jarvisModel = defaults.string(forKey: "jarvisModel") ?? JarvisProtocol.defaultModel
+        jarvisEngine = defaults.string(forKey: "jarvisEngine") ?? JarvisEngineChoice.automatic.rawValue
         jarvisHotKeyEnabled = defaults.bool(forKey: "jarvisHotKeyEnabled")
         jarvisPersona = defaults.string(forKey: "jarvisPersona") ?? JarvisPersona.mirror.rawValue
         briefingEnabled = defaults.bool(forKey: "briefingEnabled")

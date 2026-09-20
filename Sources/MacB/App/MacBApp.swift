@@ -265,6 +265,13 @@ private final class Flag: @unchecked Sendable {
         voice: { [weak self] in JarvisVoice(rawValue: self?.preferences.jarvisVoice ?? "") ?? .marin },
         persona: { [weak self] in JarvisPersona(rawValue: self?.preferences.jarvisPersona ?? "") ?? .mirror },
         scenarioNames: { [weak self] in self?.scenarios.scenarios.map(\.name) ?? [] },
+        engineChoice: { [weak self] in
+            JarvisEngineChoice(rawValue: self?.preferences.jarvisEngine ?? "") ?? .automatic
+        },
+        freeEngine: FreeVoiceEngine(
+            keys: aiKey,
+            model: { [weak self] provider in self?.preferences.model(for: provider) ?? provider.defaultModel },
+            preferred: { [weak self] in AIProvider(rawValue: self?.preferences.aiProvider ?? "") }),
         model: { [weak self] in self?.preferences.jarvisModel ?? JarvisProtocol.defaultModel })
     private lazy var jarvisTools = MacBJarvisToolbox(
         keys: aiKey, searchModel: { [weak self] in self?.preferences.aiModel ?? Preferences.defaultAIModel },

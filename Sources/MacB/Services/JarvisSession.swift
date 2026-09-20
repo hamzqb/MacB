@@ -58,6 +58,9 @@ enum JarvisToolOutcome {
     @Published private(set) var confirmation: Confirmation?
     @Published private(set) var inputLevel: Double = 0
     @Published private(set) var outputLevel: Double = 0
+    /// Which engine this conversation is actually running on, and why. The
+    /// island shows the free one differently: it is free, not broken.
+    @Published private(set) var isFreeEngine = false
 
     weak var toolbox: JarvisToolbox?
     /// Called when the conversation ends by itself (goodbye, quiet, limit).
@@ -70,6 +73,18 @@ enum JarvisToolOutcome {
     private let persona: () -> JarvisPersona
     private let scenarioNames: () -> [String]
     private let cost: AICostMeter?
+    private let engineChoice: () -> JarvisEngineChoice
+    /// The free half: the Mac's own ear, a free provider's answer, and the
+    /// Mac's own voice. Nil only in the probes that never speak.
+    private let freeEngine: FreeVoiceEngine?
+    private let listener = SpeechInputService()
+    private let speaker = TurkishSpeaker()
+    /// The free conversation so far, in the provider's own message shape. Kept
+    /// in memory for the length of one conversation and never written down.
+    private var freeMessages: [[String: Any]] = []
+    private var freeObservers: Set<AnyCancellable> = []
+    /// The free conversation said goodbye; end it once the voice has finished.
+    private var freeIsEnding = false
     private var socket: URLSessionWebSocketTask?
     private var receiver: Task<Void, Never>?
     private var audio: JarvisAudio?
@@ -117,6 +132,8 @@ enum JarvisToolOutcome {
          voice: @escaping () -> JarvisVoice,
          persona: @escaping () -> JarvisPersona = { .mirror },
          scenarioNames: @escaping () -> [String] = { [] },
+         engineChoice: @escaping () -> JarvisEngineChoice = { .automatic },
+         freeEngine: FreeVoiceEngine? = nil,
          model: @escaping () -> String) {
         self.scenarioNames = scenarioNames
         self.keys = keys
@@ -125,6 +142,10 @@ enum JarvisToolOutcome {
         self.voice = voice
         self.persona = persona
         self.model = model
+        self.engineChoice = engineChoice
+        self.freeEngine = freeEngine
+        listener.onFinish = { [weak self] heard in self?.heardFree(heard) }
+        speaker.onFinish = { [weak self] in self?.finishedSpeakingFree() }
     }
 
     /// Whether the island is showing the line to type into. Off until the user
@@ -162,10 +183,18 @@ enum JarvisToolOutcome {
         memory.reload()
         pendingAudio = []
         isSessionReady = false
+        freeIsEnding = false
         startedAt = Date()
-        if let cost, cost.isOverDailyLimit {
-            return fail("Bugünlük harcama sınırına ulaşıldı (\(cost.limitText)). Ayarlar \u{203A} Maliyet'ten değiştirebilirsin.")
-        }
+        // Which voice this conversation gets. A conversation never fails to
+        // start because of money: when the good engine is not available the
+        // free one takes over and says so.
+        let resolved = JarvisEngineChoice.resolve(choice: engineChoice(),
+                                                  hasPaidKey: keys.has(.openAI),
+                                                  isOverBudget: cost?.isOverDailyLimit ?? false,
+                                                  hasFreeKey: freeEngine?.isAvailable ?? false)
+        isFreeEngine = resolved.isFree
+        if resolved.isBlocked { return fail(resolved.note ?? Self.missingVoiceKeyMessage) }
+        if resolved.isFree { return startFree(generation: current, note: resolved.note) }
         guard let key = keys.read(.openAI) else { return fail(Self.missingVoiceKeyMessage) }
         guard let url = JarvisProtocol.url(model: model()) else { return fail("Model adı geçersiz.") }
         state = .connecting
@@ -222,6 +251,11 @@ enum JarvisToolOutcome {
         idleTimer = nil; limitTimer = nil; connectTimer = nil
         receiver?.cancel(); receiver = nil
         socket?.cancel(with: .normalClosure, reason: nil); socket = nil
+        listener.cancel()
+        speaker.stop()
+        freeMessages = []
+        freeObservers.removeAll()
+        freeIsEnding = false
         stopAudio()
         pendingAudio = []
         isSessionReady = false
@@ -235,7 +269,15 @@ enum JarvisToolOutcome {
     /// Something typed instead of said.
     func say(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, socket != nil, isActive else { return }
+        guard !trimmed.isEmpty, isActive else { return }
+        if isFreeEngine {
+            listener.cancel()
+            speaker.stop()
+            append(.user, trimmed)
+            askFree(trimmed, generation: generation)
+            return
+        }
+        guard socket != nil else { return }
         interruptPlayback()
         cancelActiveResponse()
         append(.user, trimmed)
@@ -423,6 +465,202 @@ enum JarvisToolOutcome {
         responseActive = false
     }
 
+    // MARK: - The free engine
+
+    /// A conversation held entirely without a bill.
+    ///
+    /// macOS hears, a free provider answers, macOS speaks. It takes turns
+    /// rather than sharing one — there is no interrupting a synthesiser
+    /// mid-word — and everything that is not the provider's answer happens on
+    /// this Mac. The microphone never leaves it: `SpeechInputService` forces
+    /// on-device recognition, so what goes out is the sentence, not the sound.
+    private func startFree(generation current: Int, note: String?) {
+        guard freeEngine?.isAvailable == true else {
+            return fail("Ücretsiz mod için ücretsiz bir sağlayıcı anahtarı gerekiyor. Ayarlar \u{203A} Araçlar.")
+        }
+        state = .connecting
+        observeFreeLevels()
+        freeMessages = [[
+            "role": "system",
+            "content": JarvisProtocol.instructions(
+                now: Date(),
+                userName: NSFullUserName().split(separator: " ").first.map(String.init),
+                memory: memory.facts, persona: persona(), scenarios: scenarioNames())
+                + Self.freeEngineNote
+        ]]
+        if let note { append(.jarvis, note) }
+        limitTimer = Timer.scheduledTimer(withTimeInterval: Self.hardLimit, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.generation == current else { return }
+                self.end()
+            }
+        }
+        listenFree()
+    }
+
+    /// What the free engine is told that the live one is not: it is answering
+    /// by text and being read aloud, so anything that only works on a screen is
+    /// worse than useless here.
+    private static let freeEngineNote = """
+
+
+        You are running in the free mode: what you write is read aloud by the         Mac's own synthesiser. Write one or two spoken sentences, never         Markdown, never a list, never an address or a path. You cannot see the         screen in this mode — say so if asked. You cannot be interrupted, so do         not ask a question and keep talking.
+        """
+
+    /// How many times round the tool loop before giving up. A small model that
+    /// has called four tools and still not answered is not about to.
+    private static let freeToolRounds = 4
+    /// The free engine listens on this Mac and costs nothing to leave open, so
+    /// it waits longer for somebody to say something than the billed one does.
+    private static let freeQuietLimit: TimeInterval = 75
+
+    private func observeFreeLevels() {
+        freeObservers.removeAll()
+        listener.$level.sink { [weak self] level in
+            guard let self, self.isFreeEngine, self.state == .listening else { return }
+            self.inputLevel = level
+        }.store(in: &freeObservers)
+        speaker.$level.sink { [weak self] level in
+            guard let self, self.isFreeEngine else { return }
+            self.outputLevel = level
+        }.store(in: &freeObservers)
+        listener.$state.sink { [weak self] state in
+            guard let self, self.isFreeEngine, self.isActive else { return }
+            if case .failed(let message) = state { self.fail(message) }
+        }.store(in: &freeObservers)
+    }
+
+    private func listenFree() {
+        guard isActive, isFreeEngine else { return }
+        state = .listening
+        inputLevel = 0
+        listener.start(localeIdentifier: "tr-TR")
+        touch()
+    }
+
+    private func heardFree(_ text: String) {
+        guard isActive, isFreeEngine else { return }
+        append(.user, text)
+        askFree(text, generation: generation)
+    }
+
+    private func askFree(_ text: String, generation current: Int) {
+        freeMessages.append(["role": "user", "content": text])
+        state = .thinking
+        inputLevel = 0
+        Task { [weak self] in await self?.answerFree(generation: current) }
+    }
+
+    private func answerFree(generation current: Int) async {
+        guard let engine = freeEngine else { return }
+        for _ in 0..<Self.freeToolRounds {
+            guard generation == current, isActive else { return }
+            do {
+                let reply = try await engine.answer(messages: freeMessages)
+                guard generation == current, isActive else { return }
+                if let provider = engine.provider {
+                    cost?.record(provider: provider, model: "", usage: reply.usage)
+                }
+                if reply.calls.isEmpty {
+                    freeMessages.append(["role": "assistant", "content": reply.text])
+                    speakFree(JarvisProtocol.plainSpoken(reply.text))
+                    return
+                }
+                freeMessages.append(AIChatStream.assistantToolMessage(reply.calls, text: reply.text))
+                let ending = await runFreeTools(reply.calls, generation: current)
+                guard generation == current, isActive else { return }
+                if ending {
+                    speakFree(JarvisProtocol.plainSpoken(reply.text.isEmpty ? "Görüşürüz." : reply.text))
+                    freeIsEnding = true
+                    return
+                }
+                // Trim the tail so a long tool conversation cannot grow without
+                // bound; the system message always stays.
+                if freeMessages.count > 24 {
+                    freeMessages = [freeMessages[0]] + freeMessages.suffix(20)
+                }
+            } catch {
+                guard generation == current, isActive else { return }
+                return fail(error.localizedDescription)
+            }
+        }
+        guard generation == current, isActive else { return }
+        speakFree("Bunu beceremedim.")
+    }
+
+    private func runFreeTools(_ calls: [JarvisCall], generation current: Int) async -> Bool {
+        var ending = false
+        toolsRunning += 1
+        defer {
+            if generation == current {
+                toolsRunning = max(0, toolsRunning - 1)
+                activity = nil
+            }
+        }
+        for call in calls {
+            guard generation == current, isActive else { return false }
+            guard let tool = call.tool, let toolbox else {
+                freeMessages.append(AIChatStream.toolResultMessage(
+                    callID: call.callID,
+                    output: JarvisProtocol.result(["ok": false, "error": "unknown tool"])))
+                continue
+            }
+            // The same gate as the live engine, and for the same reason: a free
+            // model is not a more trusted one.
+            if tool.needsConfirmation(afterReadingOutsideContent: hasReadOutsideContent,
+                                      privateContent: hasReadPrivateContent) {
+                let allowed = await ask(tool, text: toolbox.confirmationText(for: tool, call: call))
+                guard generation == current else { return false }
+                guard allowed else {
+                    freeMessages.append(AIChatStream.toolResultMessage(
+                        callID: call.callID,
+                        output: JarvisProtocol.result(["ok": false, "declined": true,
+                                                       "note": "The user declined. Do not retry unless they ask."])))
+                    continue
+                }
+            }
+            activity = tool.activity
+            if tool.readsOutsideContent { hasReadOutsideContent = true }
+            if tool.readsPrivateContent { hasReadPrivateContent = true }
+            let outcome = await toolbox.run(tool, call: call)
+            guard generation == current else { return false }
+            switch outcome {
+            case .result(let output):
+                freeMessages.append(AIChatStream.toolResultMessage(callID: call.callID, output: output))
+            case .image:
+                // The free engine is not offered the tools that produce a
+                // picture, and could not read one if it were.
+                freeMessages.append(AIChatStream.toolResultMessage(
+                    callID: call.callID,
+                    output: JarvisProtocol.result(["ok": false, "note": "Ücretsiz modda ekrana bakılamaz."])))
+            case .end:
+                freeMessages.append(AIChatStream.toolResultMessage(
+                    callID: call.callID, output: JarvisProtocol.result(["ok": true])))
+                ending = true
+            }
+        }
+        return ending
+    }
+
+    private func speakFree(_ text: String) {
+        guard isActive, isFreeEngine else { return }
+        append(.jarvis, text)
+        guard TurkishSpeaker.hasTurkishVoice else {
+            // No Turkish voice installed: the answer is on screen rather than
+            // in the air, and the conversation carries on by ear anyway.
+            return listenFree()
+        }
+        state = .speaking
+        speaker.speak(text)
+    }
+
+    private func finishedSpeakingFree() {
+        guard isActive, isFreeEngine else { return }
+        outputLevel = 0
+        if freeIsEnding { return end() }
+        listenFree()
+    }
+
     // MARK: - Tools
 
     private func run(_ calls: [JarvisCall], generation current: Int) async {
@@ -522,7 +760,8 @@ enum JarvisToolOutcome {
     private func touch() {
         idleTimer?.invalidate()
         let current = generation
-        idleTimer = Timer.scheduledTimer(withTimeInterval: Self.quietLimit, repeats: false) { [weak self] _ in
+        let quiet = isFreeEngine ? Self.freeQuietLimit : Self.quietLimit
+        idleTimer = Timer.scheduledTimer(withTimeInterval: quiet, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.generation == current, self.isActive else { return }
                 if self.state == .listening, self.confirmation == nil { self.end() } else { self.touch() }

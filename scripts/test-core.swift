@@ -1763,6 +1763,77 @@ struct CoreTestRunner {
                            "Chips on one row grew the panel per chip")
                 try expect(withChips < 140, "The briefing still reserves more than it draws")
             }),
+            ("JarvisEngineChoice: a conversation never fails to start over money", {
+                typealias Choice = JarvisEngineChoice
+                try expect(Choice.resolve(choice: .automatic, hasPaidKey: true, isOverBudget: false,
+                                          hasFreeKey: true) == .live,
+                           "The good engine was skipped while it was available")
+                try expect(Choice.resolve(choice: .automatic, hasPaidKey: true, isOverBudget: true,
+                                          hasFreeKey: true) == .freeBecauseBudget,
+                           "A spent budget refused instead of falling back")
+                try expect(Choice.resolve(choice: .automatic, hasPaidKey: false, isOverBudget: false,
+                                          hasFreeKey: true) == .freeBecauseNoKey,
+                           "A missing paid key refused instead of falling back")
+                try expect(Choice.resolve(choice: .live, hasPaidKey: true, isOverBudget: true,
+                                          hasFreeKey: true).isFree,
+                           "Asking for the live engine over budget left nothing running")
+                try expect(Choice.resolve(choice: .free, hasPaidKey: true, isOverBudget: false,
+                                          hasFreeKey: true) == .free,
+                           "Asking for free quietly used the paid engine")
+                try expect(Choice.resolve(choice: .free, hasPaidKey: true, isOverBudget: false,
+                                          hasFreeKey: false).isBlocked,
+                           "Free mode ran with no free key")
+                try expect(Choice.resolve(choice: .automatic, hasPaidKey: false, isOverBudget: false,
+                                          hasFreeKey: false).note != nil,
+                           "A blocked conversation said nothing about why")
+                try expect(Choice.Resolved.live.note == nil, "The ordinary case announced itself")
+            }),
+            ("AIChatStream: a tool call survives the shapes providers send it in", {
+                let asString = """
+                    {"choices":[{"message":{"content":null,"tool_calls":[
+                    {"id":"call_1","type":"function","function":{"name":"open_application","arguments":"{\\"name\\":\\"Safari\\"}"}}]}}]}
+                    """
+                let data = try require(asString.data(using: .utf8), "No data")
+                let object = try require(try JSONSerialization.jsonObject(with: data) as? [String: Any], "No object")
+                let calls = AIChatStream.toolCalls(inResponse: object)
+                try expect(calls.count == 1, "The call was lost")
+                try expect(calls[0].tool == .openApplication, "The tool was not recognised")
+                try expect(calls[0].argumentObject["name"] as? String == "Safari", "The arguments did not survive")
+
+                // Some providers send the arguments already parsed, and some
+                // send no id at all; neither may drop the call.
+                let asObject: [String: Any] = ["choices": [["message": ["tool_calls": [
+                    ["function": ["name": "open_website", "arguments": ["url": "example.com"]]]
+                ]]]]]
+                let loose = AIChatStream.toolCalls(inResponse: asObject)
+                try expect(loose.count == 1, "A call without an id was dropped")
+                try expect(!loose[0].callID.isEmpty, "A call without an id got no id")
+                try expect(loose[0].argumentObject["url"] as? String == "example.com",
+                           "Object arguments were not turned back into JSON")
+                try expect(AIChatStream.toolCalls(inResponse: ["choices": [["message": ["content": "merhaba"]]]]).isEmpty,
+                           "A plain answer produced a tool call")
+            }),
+            ("JarvisProtocol: the synthesiser is not read the punctuation", {
+                let spoken = JarvisProtocol.plainSpoken("## Başlık\n- **bir** şey\n- `iki`")
+                try expect(!spoken.contains("#") && !spoken.contains("*") && !spoken.contains("`"),
+                           "A mark meant for the eye was left in for the voice")
+                try expect(spoken.contains("Başlık") && spoken.contains("bir") && spoken.contains("iki"),
+                           "The words were lost with the marks")
+                try expect(!spoken.contains("  "), "The gaps where the marks were are still being read")
+                try expect(JarvisProtocol.plainSpoken("düz cümle") == "düz cümle", "Plain text was rewritten")
+            }),
+            ("JarvisTool: the free engine is not handed the tools it cannot use", {
+                try expect(!JarvisTool.freeEngineTools.contains(.lookAtScreen),
+                           "A text-only engine was offered the camera of the screen")
+                try expect(!JarvisTool.freeEngineTools.contains(.readScreenText),
+                           "A text-only engine was offered screen reading")
+                try expect(JarvisTool.freeEngineTools.contains(.openApplication),
+                           "The free engine lost the tools it can use")
+                let declaration = JarvisTool.openApplication.chatDeclaration
+                let function = try require(declaration["function"] as? [String: Any], "No function")
+                try expect(function["name"] as? String == "open_application",
+                           "The chat dialect lost the tool's name")
+            }),
             ("AIBudget: the ceiling stops the spending before it happens", {
                 try expect(AIBudget.isOver(spent: 0.50, limit: 0.50), "Reaching the limit was not over it")
                 try expect(!AIBudget.isOver(spent: 0.49, limit: 0.50), "Under the limit was refused")
