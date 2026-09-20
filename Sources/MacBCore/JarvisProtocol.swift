@@ -16,6 +16,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     case playMusic = "play_music"
     case powerAction = "power_action"
     case setAppearance = "set_appearance"
+    case openSettings = "open_system_settings"
+    case setWiFi = "set_wifi"
     case readSelection = "read_selected_text"
     case openApplication = "open_application"
     case openWebsite = "open_website"
@@ -81,7 +83,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         guard tainted else { return false }
         switch self {
         case .openApplication, .openWebsite, .copyToClipboard, .addNote, .forget, .calendarEvents,
-             .runScenario, .playMusic, .setAppearance:
+             .runScenario, .playMusic, .setAppearance, .openSettings, .setWiFi:
             return true
         case .webSearch:
             return privateContent
@@ -100,6 +102,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .playMusic: return "Şarkıyı arıyor"
         case .powerAction: return "Mac'i uyutuyor"
         case .setAppearance: return "Görünümü değiştiriyor"
+        case .openSettings: return "Sistem Ayarları'nı açıyor"
+        case .setWiFi: return "Wi-Fi'ı değiştiriyor"
         case .readSelection: return "Seçili metni okuyor"
         case .openApplication: return "Uygulama açıyor"
         case .openWebsite: return "Sayfa açıyor"
@@ -145,6 +149,10 @@ public enum JarvisTool: String, CaseIterable, Sendable {
             return "Put the Mac to sleep, put only the display to sleep, or lock the screen. The user is asked to allow it each time. You cannot shut down or restart."
         case .setAppearance:
             return "Switch macOS between dark and light appearance, or back to automatic."
+        case .openSettings:
+            return "Open a particular page of System Settings — sound, display, network, bluetooth, notifications, focus, keyboard, trackpad, battery, privacy, accessibility, appearance, general, storage, software update, users, wallpaper, screen time, printers, sharing, time machine, date and time, siri, wifi, vpn, extensions. Use it for anything you cannot change yourself: you open the right page, the user changes it. Say which page you opened."
+        case .setWiFi:
+            return "Turn Wi-Fi on or off."
         case .media:
             return "Control music that is playing: play, pause, toggle, next, previous."
         case .setVolume:
@@ -203,6 +211,11 @@ public enum JarvisTool: String, CaseIterable, Sendable {
                           required: ["action"])
         case .setAppearance:
             return object(["mode": ["type": "string", "enum": ["dark", "light", "auto"]]], required: ["mode"])
+        case .openSettings:
+            return object(["pane": ["type": "string", "enum": SettingsPane.allCases.map(\.rawValue)]],
+                          required: ["pane"])
+        case .setWiFi:
+            return object(["enabled": ["type": "boolean"]], required: ["enabled"])
         case .media:
             return object(["action": ["type": "string", "enum": ["play", "pause", "toggle", "next", "previous"]]],
                           required: ["action"])
@@ -261,6 +274,8 @@ public enum JarvisVoice: String, CaseIterable, Sendable, Identifiable {
 
 /// How MacB talks. The words it says are the model's; this is the manner.
 public enum JarvisPersona: String, CaseIterable, Sendable, Identifiable {
+    /// No voice of its own: it takes the user's.
+    case mirror
     case warm
     case brief
     case witty
@@ -270,6 +285,7 @@ public enum JarvisPersona: String, CaseIterable, Sendable, Identifiable {
 
     public var title: String {
         switch self {
+        case .mirror: return "Senin gibi"
         case .warm: return "Sıcak ve dost"
         case .brief: return "Kısa ve net"
         case .witty: return "Esprili"
@@ -279,6 +295,9 @@ public enum JarvisPersona: String, CaseIterable, Sendable, Identifiable {
 
     public var note: String {
         switch self {
+        case .mirror:
+            return "Sen nasıl konuşuyorsan öyle karşılık verir: kısa konuşursan kısa, "
+                + "\u{201C}kanka\u{201D} dersen \u{201C}kanka\u{201D}, resmî olursan resmî."
         case .warm: return "Yanında biri varmış gibi konuşur, kısa cümleler kurar."
         case .brief: return "Tek cümlede cevap verir, gevezelik etmez."
         case .witty: return "Arada takılır ama işi geciktirmez."
@@ -290,6 +309,23 @@ public enum JarvisPersona: String, CaseIterable, Sendable, Identifiable {
     /// what MacB is allowed to do, only how it sounds doing it.
     public var instruction: String {
         switch self {
+        case .mirror:
+            return """
+                TONE. You have no voice of your own. You talk the way the person in front of you talks, and \
+                you work it out from how they speak to you, turn by turn.
+                - Length above all. Four words to you is four words back. A long, rambling question can have \
+                a longer answer. Never answer at more length than you were asked at.
+                - Register. Slang for slang, plain for plain, formal for formal. If they say "kanka", "abi", \
+                "reis", say it back. If they drop to "siz", drop to "siz" with them. If they swear lightly, \
+                you may swear lightly; if they do not, you never do.
+                - Their words for things. Whatever they call something — "ada", "top", "şarkı" — is what you \
+                call it too, even if you would have said it differently.
+                - Energy and pace. Tired and slow gets calm and slow. Rapid-fire gets rapid-fire.
+                - It changes when they change. Follow the turn you are in, not the one before it.
+                - Never mimic an accent, a stutter, a speech difficulty or anything a person did not choose. \
+                Never repeat a slur back, whoever said it first. Never correct how they talk, and never point \
+                out that you are matching them. If they are upset, stay steady rather than matching the upset.
+                """
         case .warm:
             return "TONE. Like a friend who happens to know this Mac inside out. Everyday spoken Turkish, "
                 + "relaxed, short sentences. You can say \"tamam\", \"buldum\", \"bir saniye\". Warm, not gushing."
@@ -368,7 +404,7 @@ public enum JarvisProtocol {
     /// carry the date (the model has no clock of its own).
     public static func sessionUpdate(voice: JarvisVoice, now: Date, timeZone: TimeZone = .current,
                                      userName: String? = nil, memory: [String] = [],
-                                     persona: JarvisPersona = .warm,
+                                     persona: JarvisPersona = .mirror,
                                      scenarios: [String] = []) -> [String: Any] {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "tr_TR")
@@ -386,7 +422,8 @@ public enum JarvisProtocol {
             HOW YOU TALK. You are talking, not writing. Somebody is listening to you, in a room, probably \
             doing something else.
             - Answer first. No preamble, no repeating the question back, no announcing what you are about to do.
-            - One or two sentences. If it genuinely takes more, it takes more — but never pad.
+            - One or two sentences, unless the tone below tells you to follow the user's own length. \
+            If it genuinely takes more, it takes more — but never pad.
             - Never open with "Tabii", "Elbette", "Hemen", "Memnuniyetle", "Anladım", "Tabii ki", \
             "Sizin için", "Nasıl yardımcı olabilirim". Just answer.
             - Never close with "Başka bir şey ister misin?", "Yardımcı olabileceğim başka bir konu var mı?" \

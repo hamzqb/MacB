@@ -289,7 +289,8 @@ struct NotchView: View {
             case .timer:
                 IslandTimerView(timer: timer)
             case .assistant:
-                IslandAssistantView(session: assistant, close: closeAssistant, openSettings: openSettings)
+                IslandAssistantView(session: assistant, captions: $preferences.assistantCaptions,
+                                    close: closeAssistant, openSettings: openSettings)
             case .briefing:
                 IslandBriefingView(briefing: briefing, close: closeBriefing, talk: startAssistant)
             }

@@ -69,6 +69,48 @@ enum SystemActions {
         return error == nil
     }
 
+    /// Opens a page of System Settings. The address comes from the closed list
+    /// in `SettingsPane`, never from anything a model wrote.
+    @discardableResult
+    static func openSettings(_ pane: SettingsPane) -> Bool {
+        guard let url = URL(string: pane.address) else { return false }
+        return NSWorkspace.shared.open(url)
+    }
+
+    /// Wi-Fi on or off, on whichever interface is the Wi-Fi one.
+    ///
+    /// One of the few system switches macOS still lets an ordinary application
+    /// throw. Everything else — Bluetooth, brightness, Night Shift — needs an
+    /// administrator or a private interface, so MacB opens the page instead of
+    /// pretending.
+    @discardableResult
+    static func setWiFi(_ enabled: Bool) -> Bool {
+        guard let device = wifiDevice() else { return false }
+        return run("/usr/sbin/networksetup", ["-setairportpower", device, enabled ? "on" : "off"])
+    }
+
+    /// The Wi-Fi interface's BSD name, read from the hardware list rather than
+    /// assumed to be en0 — it is not, on every Mac.
+    private static func wifiDevice() -> String? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/networksetup")
+        process.arguments = ["-listallhardwareports"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        guard (try? process.run()) != nil else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        for (index, line) in lines.enumerated() where line.contains("Wi-Fi") || line.contains("AirPort") {
+            guard lines.indices.contains(index + 1),
+                  let name = lines[index + 1].split(separator: ":").last?.trimmingCharacters(in: .whitespaces),
+                  !name.isEmpty else { continue }
+            return name
+        }
+        return nil
+    }
+
     /// Runs a tool with its arguments as arguments — never through a shell, so
     /// nothing in a name or a query can become a command.
     @discardableResult

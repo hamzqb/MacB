@@ -64,6 +64,11 @@ import ScreenCaptureKit
             return "Okuduğu bir içerikten sonra \u{201C}\(arguments["query"] as? String ?? "")\u{201D} çalmak istiyor."
         case .setAppearance:
             return "Okuduğu bir içerikten sonra görünümü değiştirmek istiyor."
+        case .openSettings:
+            let pane = SettingsPane(rawValue: arguments["pane"] as? String ?? "")?.title ?? "bir"
+            return "Okuduğu bir içerikten sonra Sistem Ayarları'nda \(pane) sayfasını açmak istiyor."
+        case .setWiFi:
+            return "Okuduğu bir içerikten sonra Wi-Fi'ı \((arguments["enabled"] as? Bool ?? true) ? "açmak" : "kapatmak") istiyor."
         case .readScreenText:
             return "MacB ekrandaki yazıyı okumak istiyor. Görüntü Mac'ten çıkmaz; yalnız bulunan yazı gönderilir."
         case .runScenario:
@@ -123,6 +128,17 @@ import ScreenCaptureKit
             let message = SystemActions.message(for: action)
             guard SystemActions.power(action) else { return fail("Yapılamadı.") }
             return ok(["message": message])
+        case .openSettings:
+            guard let pane = SettingsPane(rawValue: arguments["pane"] as? String ?? "") else {
+                return fail("Böyle bir ayar sayfası yok.")
+            }
+            guard SystemActions.openSettings(pane) else { return fail("Sayfa açılamadı.") }
+            return ok(["opened": pane.title,
+                       "note": "Opened the page; the user makes the change themselves."])
+        case .setWiFi:
+            let enabled = arguments["enabled"] as? Bool ?? true
+            guard SystemActions.setWiFi(enabled) else { return fail("Wi-Fi değiştirilemedi.") }
+            return ok(["wifi": enabled ? "açık" : "kapalı"])
         case .setAppearance:
             guard let mode = SystemActions.Appearance(rawValue: arguments["mode"] as? String ?? "") else {
                 return fail("Bilinmeyen görünüm.")

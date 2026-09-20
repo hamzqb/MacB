@@ -383,7 +383,7 @@ struct SettingsView: View {
                     }
                     .labelsHidden().fixedSize()
                 }
-                message((JarvisPersona(rawValue: preferences.jarvisPersona) ?? .warm).note)
+                message((JarvisPersona(rawValue: preferences.jarvisPersona) ?? .mirror).note)
                 HStack(spacing: MacBDesign.Space.regular) {
                     Text("Model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     Spacer(minLength: 8)

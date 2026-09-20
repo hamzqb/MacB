@@ -132,17 +132,20 @@ import Security
             return {
                 let session = JarvisSession(keys: AIKeyStore(), memory: JarvisMemoryStore(),
                                             voice: { .marin }, model: { JarvisProtocol.defaultModel })
-                let view = IslandAssistantView(session: session, close: {}, openSettings: {})
+                let view = IslandAssistantView(session: session, captions: .constant(false),
+                                               close: {}, openSettings: {})
                 let host = NSHostingView(rootView: view)
                 host.frame = NSRect(x: 0, y: 0, width: IslandGeometry.assistantWidth, height: 400)
                 host.layoutSubtreeIfNeeded()
                 let fitting = host.fittingSize
-                let reserved = IslandGeometry.assistantHeight(hasLine: false, hasConfirmation: false)
+                let reserved = IslandGeometry.assistantHeight(showsInput: false, showsCaptions: false,
+                                                              hasConfirmation: false)
                 print("width: \(IslandGeometry.assistantWidth)")
                 print("fits: \(Int(fitting.height.rounded())) reserved: \(Int(reserved.rounded()))")
                 print(fitting.height <= reserved ? "ok: sığıyor" : "MISS: taşıyor")
-                print("with line: \(Int(IslandGeometry.assistantHeight(hasLine: true, hasConfirmation: false)))")
-                print("with confirmation: \(Int(IslandGeometry.assistantHeight(hasLine: true, hasConfirmation: true)))")
+                print("with input: \(Int(IslandGeometry.assistantHeight(showsInput: true, showsCaptions: false, hasConfirmation: false)))")
+                print("with captions: \(Int(IslandGeometry.assistantHeight(showsInput: false, showsCaptions: true, hasConfirmation: false)))")
+                print("with confirmation: \(Int(IslandGeometry.assistantHeight(showsInput: true, showsCaptions: true, hasConfirmation: true)))")
             }
         }
         if arguments.contains("--verify-keys") {

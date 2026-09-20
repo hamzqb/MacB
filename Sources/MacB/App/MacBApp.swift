@@ -263,7 +263,7 @@ private final class Flag: @unchecked Sendable {
     private lazy var jarvis = JarvisSession(
         keys: aiKey, memory: jarvisMemory, cost: aiCost,
         voice: { [weak self] in JarvisVoice(rawValue: self?.preferences.jarvisVoice ?? "") ?? .marin },
-        persona: { [weak self] in JarvisPersona(rawValue: self?.preferences.jarvisPersona ?? "") ?? .warm },
+        persona: { [weak self] in JarvisPersona(rawValue: self?.preferences.jarvisPersona ?? "") ?? .mirror },
         scenarioNames: { [weak self] in self?.scenarios.scenarios.map(\.name) ?? [] },
         model: { [weak self] in self?.preferences.jarvisModel ?? JarvisProtocol.defaultModel })
     private lazy var jarvisTools = MacBJarvisToolbox(

@@ -105,7 +105,7 @@ enum JarvisToolOutcome {
 
     init(keys: AIKeyStore, memory: JarvisMemoryStore, cost: AICostMeter? = nil,
          voice: @escaping () -> JarvisVoice,
-         persona: @escaping () -> JarvisPersona = { .warm },
+         persona: @escaping () -> JarvisPersona = { .mirror },
          scenarioNames: @escaping () -> [String] = { [] },
          model: @escaping () -> String) {
         self.scenarioNames = scenarioNames
@@ -116,6 +116,11 @@ enum JarvisToolOutcome {
         self.persona = persona
         self.model = model
     }
+
+    /// Whether the island is showing the line to type into. Off until the user
+    /// taps the badge: this is a conversation, and a keyboard sitting there
+    /// says otherwise.
+    @Published var showsInput = false
 
     /// Audio captured before the session was ready, so the microphone can be
     /// opened while the socket is still shaking hands instead of after.
@@ -138,6 +143,7 @@ enum JarvisToolOutcome {
         let current = generation
         lines = []
         activity = nil
+        showsInput = false
         hasReadOutsideContent = false
         hasReadPrivateContent = false
         cutItems = []

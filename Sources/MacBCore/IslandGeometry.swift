@@ -79,16 +79,25 @@ public enum IslandGeometry {
     /// Full expanded panel height: navigation, body, and padding, with empty bodies collapsing away.
     /// The voice assistant: the orb and its line, plus room for what has
     /// been said and for a question waiting to be allowed.
-    public static func assistantHeight(hasLine: Bool, hasConfirmation: Bool) -> CGFloat {
-        // The orb, its line of status, and the thin row to type in.
-        let base: CGFloat = 78
-        // One thing said, at up to two lines on screen.
-        let line: CGFloat = hasLine ? 32 : 0
-        return base + line + (hasConfirmation ? 44 : 0)
+    /// The assistant is a badge until it is asked to be more.
+    ///
+    /// On its own it is an orb and a word — no keyboard, no subtitles, no
+    /// transcript. Each of those appears because the user asked for it, and the
+    /// island grows by exactly that much.
+    public static func assistantHeight(showsInput: Bool, showsCaptions: Bool,
+                                       hasConfirmation: Bool) -> CGFloat {
+        let base: CGFloat = 44
+        return base
+            + (showsInput ? 30 : 0)
+            + (showsCaptions ? captionHeight : 0)
+            + (hasConfirmation ? 44 : 0)
     }
 
-    /// Narrow: it holds an orb, a few words and a question, not a document.
-    public static let assistantWidth: CGFloat = 380
+    /// Two lines of subtitles, for anyone who wants to read along.
+    public static let captionHeight: CGFloat = 34
+
+    /// Narrow: it holds an orb and a couple of words, not a document.
+    public static let assistantWidth: CGFloat = 300
 
     /// The morning briefing: a line of greeting and one line per thing worth
     /// saying, plus the row of buttons under it.

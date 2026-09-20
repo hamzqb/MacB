@@ -1773,6 +1773,13 @@ struct CoreTestRunner {
                                "\(persona) dropped the prompt-injection rule")
                     try expect(instructions.contains("cannot delete files"), "\(persona) dropped what it may not do")
                 }
+                try expect(JarvisPersona.allCases.first == .mirror, "Matching the user is no longer the default")
+                let mirror = JarvisProtocol.sessionUpdate(voice: .marin, now: now, persona: .mirror)
+                let mirrored = ((mirror["session"] as? [String: Any])?["instructions"] as? String) ?? ""
+                try expect(mirrored.contains("Length above all"), "The mirror lost the length rule")
+                try expect(mirrored.contains("kanka"), "The mirror lost the register rule")
+                try expect(mirrored.contains("Never repeat a slur back"), "The mirror lost its limits")
+                try expect(mirrored.contains("Never mimic an accent"), "The mirror could mock somebody")
                 try expect(JarvisVoice.ordered.count == JarvisVoice.allCases.count, "A voice is missing from the list")
                 try expect(JarvisVoice.ordered.first == .marin, "The recommended voice is not first")
             }),
@@ -1843,13 +1850,34 @@ struct CoreTestRunner {
                 try expect(JarvisTool.allCases.allSatisfy { !$0.rawValue.contains("shutdown") },
                            "Something claims to shut the Mac down")
             }),
-            ("IslandGeometry: the assistant is small, and grows only for what it has to show", {
-                let bare = IslandGeometry.assistantHeight(hasLine: false, hasConfirmation: false)
-                let spoken = IslandGeometry.assistantHeight(hasLine: true, hasConfirmation: false)
-                let asked = IslandGeometry.assistantHeight(hasLine: true, hasConfirmation: true)
-                try expect(bare < spoken && spoken < asked, "The assistant did not grow with its contents")
-                try expect(bare <= 90, "The assistant is no longer small: \(bare)")
-                try expect(IslandGeometry.assistantWidth <= 420, "The assistant is too wide")
+            ("IslandGeometry: the assistant is a badge until it is asked to be more", {
+                let badge = IslandGeometry.assistantHeight(showsInput: false, showsCaptions: false,
+                                                          hasConfirmation: false)
+                let typing = IslandGeometry.assistantHeight(showsInput: true, showsCaptions: false,
+                                                            hasConfirmation: false)
+                let reading = IslandGeometry.assistantHeight(showsInput: false, showsCaptions: true,
+                                                             hasConfirmation: false)
+                let everything = IslandGeometry.assistantHeight(showsInput: true, showsCaptions: true,
+                                                                hasConfirmation: true)
+                try expect(badge < typing && badge < reading && everything > typing,
+                           "The assistant did not grow with what was asked for")
+                try expect(badge <= 48, "The badge is no longer a badge: \(badge)")
+                try expect(IslandGeometry.assistantWidth <= 320, "The assistant is too wide")
+            }),
+            ("SettingsPane: every page has its own address, and they are all Apple's", {
+                try expect(Set(SettingsPane.allCases.map(\.address)).count == SettingsPane.allCases.count,
+                           "Two pages share an address")
+                try expect(Set(SettingsPane.allCases.map(\.rawValue)).count == SettingsPane.allCases.count,
+                           "Two pages share a name")
+                for pane in SettingsPane.allCases {
+                    try expect(pane.address.hasPrefix("x-apple.systempreferences:com.apple."),
+                               "\(pane) would open something that is not System Settings")
+                    try expect(!pane.title.isEmpty, "\(pane) has nothing to be called")
+                }
+                try expect(SettingsPane(rawValue: "uydurma") == nil, "An invented page was accepted")
+                try expect(JarvisTool.openSettings.needsConfirmation(afterReadingOutsideContent: true),
+                           "A page could send MacB into System Settings")
+                try expect(!JarvisTool.openSettings.needsConfirmation, "Opening a settings page needed a yes")
             }),
             ("RadialAction: text and arrangement slices need Accessibility, voice does not", {
                 for action in [RadialAction.summarizeSelection, .fixSelection, .translateSelection, .applyArrangement] {

@@ -142,6 +142,9 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var briefingHour: Int { didSet { defaults.set(briefingHour, forKey: "briefingHour") } }
     /// Whether it is read aloud, by macOS's own voice.
     @Published var briefingSpeaks: Bool { didSet { defaults.set(briefingSpeaks, forKey: "briefingSpeaks") } }
+    /// Whether the island shows what is being said. Off: a spoken conversation
+    /// does not need subtitles unless the user wants them.
+    @Published var assistantCaptions: Bool { didSet { defaults.set(assistantCaptions, forKey: "assistantCaptions") } }
     /// The language a selection is translated into (unless it is already in it).
     @Published var translationTarget: String { didSet { defaults.set(translationTarget, forKey: "translationTarget") } }
     /// How long "stay awake" lasts when started from the ring, in minutes; 0 for no end.
@@ -286,8 +289,9 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "jarvisVoice": JarvisVoice.marin.rawValue,
                                     "jarvisModel": JarvisProtocol.defaultModel,
                                     "jarvisHotKeyEnabled": true,
-                                    "jarvisPersona": JarvisPersona.warm.rawValue,
+                                    "jarvisPersona": JarvisPersona.mirror.rawValue,
                                     "briefingEnabled": false, "briefingHour": 8, "briefingSpeaks": true,
+                                    "assistantCaptions": false,
                                     "keepAwakeMinutes": 60,
                                     "clipboardKeepsHistory": false, "clipboardHistoryLimit": 30,
                                     "groupedWindowsEnabled": true,
@@ -325,10 +329,11 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         jarvisVoice = defaults.string(forKey: "jarvisVoice") ?? JarvisVoice.marin.rawValue
         jarvisModel = defaults.string(forKey: "jarvisModel") ?? JarvisProtocol.defaultModel
         jarvisHotKeyEnabled = defaults.bool(forKey: "jarvisHotKeyEnabled")
-        jarvisPersona = defaults.string(forKey: "jarvisPersona") ?? JarvisPersona.warm.rawValue
+        jarvisPersona = defaults.string(forKey: "jarvisPersona") ?? JarvisPersona.mirror.rawValue
         briefingEnabled = defaults.bool(forKey: "briefingEnabled")
         briefingHour = defaults.integer(forKey: "briefingHour")
         briefingSpeaks = defaults.bool(forKey: "briefingSpeaks")
+        assistantCaptions = defaults.bool(forKey: "assistantCaptions")
         keepAwakeMinutes = defaults.integer(forKey: "keepAwakeMinutes")
         clipboardKeepsHistory = defaults.bool(forKey: "clipboardKeepsHistory")
         let storedLimit = defaults.integer(forKey: "clipboardHistoryLimit")

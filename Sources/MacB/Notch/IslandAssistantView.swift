@@ -11,81 +11,101 @@ import SwiftUI
 /// question waiting to be allowed, and that gets its own card.
 struct IslandAssistantView: View {
     @ObservedObject var session: JarvisSession
+    /// Whether the island shows what is being said. The user's choice, kept
+    /// between conversations.
+    @Binding var captions: Bool
     var close: () -> Void
     var openSettings: () -> Void
     @State private var typed = ""
     @FocusState private var typing: Bool
+    @State private var hovering = false
 
     var body: some View {
         VStack(spacing: MacBDesign.Space.snug) {
-            header
+            badge
+            if captions, let line = latestLine {
+                Text(line)
+                    .font(.system(size: MacBDesign.TypeScale.micro))
+                    .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                    .id(line)
+                    .transition(.opacity)
+            }
             if let confirmation = session.confirmation {
                 confirmationCard(confirmation)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
-            inputRow
+            if session.showsInput {
+                inputRow
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
         }
         .foregroundStyle(MacBDesign.IslandToken.Ink.primary)
+        .animation(.spring(response: 0.32, dampingFraction: 0.85), value: session.showsInput)
+        .animation(.spring(response: 0.32, dampingFraction: 0.85), value: captions)
         .animation(.spring(response: 0.34, dampingFraction: 0.86), value: session.confirmation?.text)
-        .animation(.easeInOut(duration: 0.22), value: statusText)
-        .animation(.easeInOut(duration: 0.22), value: latestLine)
+        .animation(.easeInOut(duration: 0.2), value: statusText)
+        .animation(.easeInOut(duration: 0.2), value: latestLine)
         .onAppear { typed = "" }
+        .onChange(of: session.showsInput) { _, shown in typing = shown }
     }
 
-    // MARK: - Header
+    // MARK: - The badge
 
-    private var header: some View {
-        HStack(spacing: MacBDesign.Space.regular) {
+    /// What is there when nothing has been asked for: the orb and a word.
+    ///
+    /// Tapping it opens the line to type into, and closes it again. The two
+    /// small controls only appear under the pointer, so at rest this is a dot
+    /// and a word and nothing else.
+    private var badge: some View {
+        HStack(spacing: MacBDesign.Space.snug) {
             JarvisOrb(state: session.state, input: session.inputLevel, output: session.outputLevel)
-                .frame(width: 38, height: 38)
-                .accessibilityLabel(statusText)
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 5) {
-                    Text("MacB")
-                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
-                    if session.isActive {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 4, height: 4)
-                            .accessibilityLabel("canlı, mikrofon açık")
-                    }
-                    Text(statusText)
-                        .font(.system(size: MacBDesign.TypeScale.micro))
-                        .foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
-                        .id(statusText)
-                        .transition(.opacity)
+                .frame(width: 26, height: 26)
+            Text(statusText)
+                .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+                .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+                .lineLimit(1)
+                .id(statusText)
+                .transition(.opacity)
+            Spacer(minLength: 2)
+            if hovering || session.showsInput {
+                smallButton(captions ? "captions.bubble.fill" : "captions.bubble",
+                            label: captions ? "Altyazıyı kapat" : "Altyazıyı aç") {
+                    captions.toggle()
                 }
-                if let line = latestLine {
-                    Text(line)
-                        .font(.system(size: MacBDesign.TypeScale.caption))
-                        .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .textSelection(.enabled)
-                        .id(line)
-                        .transition(.opacity)
-                }
+                .transition(.opacity)
             }
-            Spacer(minLength: 4)
             if case .failed = session.state {
-                Button("Yeniden") { session.start() }
-                    .controlSize(.small)
+                smallButton("arrow.clockwise", label: "Yeniden bağlan") { session.start() }
             }
-            Button(action: close) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .frame(width: 18, height: 18)
-                    .background(MacBDesign.IslandToken.Fill.base, in: Circle())
-            }
-            .buttonStyle(.plain)
-            .help("Konuşmayı bitir")
-            .accessibilityLabel("Konuşmayı bitir")
+            smallButton("xmark", label: "Konuşmayı bitir", action: close)
         }
+        .padding(.vertical, 1)
+        .contentShape(Rectangle())
+        .onTapGesture { session.showsInput.toggle() }
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.14), value: hovering)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("MacB, \(statusText)")
+        .accessibilityHint("Yazmak için tıkla")
     }
 
-    /// The newest thing said, whoever said it. One line: this is a conversation
-    /// being had out loud, not a chat log.
+    private func smallButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 8, weight: .bold))
+                .frame(width: 16, height: 16)
+                .background(MacBDesign.IslandToken.Fill.base, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    /// The newest thing said, whoever said it.
     private var latestLine: String? {
         guard let last = session.lines.last else { return nil }
         let text = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -107,14 +127,15 @@ struct IslandAssistantView: View {
     // MARK: - Confirmation
 
     private func confirmationCard(_ confirmation: JarvisSession.Confirmation) -> some View {
-        HStack(spacing: MacBDesign.Space.regular) {
+        HStack(spacing: MacBDesign.Space.snug) {
             Image(systemName: Self.symbol(for: confirmation.tool))
-                .font(.system(size: 13))
+                .font(.system(size: 11))
                 .foregroundStyle(MacBDesign.IslandToken.accent)
             Text(confirmation.text)
                 .font(.system(size: MacBDesign.TypeScale.micro))
+                .lineLimit(3)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 6)
+            Spacer(minLength: 4)
             // No Return shortcut on purpose: a Return meant for the text field
             // must never become a yes to sending the screen.
             Button("Hayır") { session.answerConfirmation(false) }
@@ -122,10 +143,10 @@ struct IslandAssistantView: View {
                 .buttonStyle(.borderedProminent)
         }
         .controlSize(.small)
-        .padding(.horizontal, MacBDesign.Space.regular)
-        .padding(.vertical, MacBDesign.Space.snug)
+        .padding(.horizontal, MacBDesign.Space.snug)
+        .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
-        .background(MacBDesign.IslandToken.Fill.base, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .background(MacBDesign.IslandToken.Fill.base, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     // MARK: - Typing
@@ -133,10 +154,7 @@ struct IslandAssistantView: View {
     /// A thin line to type into, for when saying it out loud is not an option.
     private var inputRow: some View {
         HStack(spacing: MacBDesign.Space.snug) {
-            Image(systemName: "keyboard")
-                .font(.system(size: 9))
-                .foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
-            TextField("yaz ya da konuş", text: $typed)
+            TextField("yaz", text: $typed)
                 .textFieldStyle(.plain)
                 .font(.system(size: MacBDesign.TypeScale.micro))
                 .focused($typing)
@@ -148,7 +166,7 @@ struct IslandAssistantView: View {
             }
             if !typed.trimmingCharacters(in: .whitespaces).isEmpty {
                 Button(action: send) {
-                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 13))
+                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(MacBDesign.IslandToken.accent)
@@ -157,7 +175,7 @@ struct IslandAssistantView: View {
             }
         }
         .padding(.horizontal, MacBDesign.Space.regular)
-        .frame(height: 24)
+        .frame(height: 22)
         .background(MacBDesign.IslandToken.Fill.hairline, in: Capsule())
         .animation(.easeOut(duration: 0.15), value: typed.isEmpty)
     }
@@ -175,6 +193,8 @@ struct IslandAssistantView: View {
         case .playMusic: return "play.circle.fill"
         case .powerAction: return "moon.zzz.fill"
         case .setAppearance: return "circle.lefthalf.filled"
+        case .openSettings: return "gearshape"
+        case .setWiFi: return "wifi"
         case .addReminder: return "checklist"
         case .addCalendarEvent, .calendarEvents: return "calendar.badge.plus"
         case .openWebsite: return "safari"
