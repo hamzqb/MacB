@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import SwiftUI
 import MacBCore
 import Security
 
@@ -115,6 +116,33 @@ import Security
                     return print("error: liste alınamadı")
                 }
                 for model in models.compactMap({ $0["id"] as? String }).sorted() { print(model) }
+            }
+        }
+        if let query = value(after: "--youtube-probe") {
+            // Only prints the identifier; nothing is opened and nothing from
+            // the page is shown.
+            return {
+                let identifier = await MusicSearch.firstYouTubeVideo(matching: query)
+                print("videoId: \(identifier ?? "bulunamadı")")
+            }
+        }
+        if arguments.contains("--measure-assistant") {
+            // The island reserves a height for the assistant; this checks the
+            // view actually fits in it, rather than trusting the number.
+            return {
+                let session = JarvisSession(keys: AIKeyStore(), memory: JarvisMemoryStore(),
+                                            voice: { .marin }, model: { JarvisProtocol.defaultModel })
+                let view = IslandAssistantView(session: session, close: {}, openSettings: {})
+                let host = NSHostingView(rootView: view)
+                host.frame = NSRect(x: 0, y: 0, width: IslandGeometry.assistantWidth, height: 400)
+                host.layoutSubtreeIfNeeded()
+                let fitting = host.fittingSize
+                let reserved = IslandGeometry.assistantHeight(hasLine: false, hasConfirmation: false)
+                print("width: \(IslandGeometry.assistantWidth)")
+                print("fits: \(Int(fitting.height.rounded())) reserved: \(Int(reserved.rounded()))")
+                print(fitting.height <= reserved ? "ok: sığıyor" : "MISS: taşıyor")
+                print("with line: \(Int(IslandGeometry.assistantHeight(hasLine: true, hasConfirmation: false)))")
+                print("with confirmation: \(Int(IslandGeometry.assistantHeight(hasLine: true, hasConfirmation: true)))")
             }
         }
         if arguments.contains("--verify-keys") {

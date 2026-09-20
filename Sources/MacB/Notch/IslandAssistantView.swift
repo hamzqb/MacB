@@ -2,9 +2,13 @@ import AppKit
 import MacBCore
 import SwiftUI
 
-/// The voice assistant inside the island: an orb that answers to the voice,
-/// what has just been said, anything waiting to be allowed, and a line to type
-/// in when talking is not an option.
+/// The voice assistant in the island: an orb, a word about what it is doing,
+/// and the last thing it said.
+///
+/// Small on purpose. A conversation held out loud does not need a transcript on
+/// screen — the answer is in the air — so this keeps one line of it, the one
+/// being said now, and nothing else. What has to be read rather than heard is a
+/// question waiting to be allowed, and that gets its own card.
 struct IslandAssistantView: View {
     @ObservedObject var session: JarvisSession
     var close: () -> Void
@@ -13,150 +17,149 @@ struct IslandAssistantView: View {
     @FocusState private var typing: Bool
 
     var body: some View {
-        VStack(spacing: MacBDesign.Space.regular) {
-            HStack(spacing: MacBDesign.Space.comfortable) {
-                JarvisOrb(state: session.state, input: session.inputLevel, output: session.outputLevel)
-                    .frame(width: 64, height: 64)
-                    .accessibilityLabel(statusText)
-                VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
-                    HStack(spacing: MacBDesign.Space.snug) {
-                        Text("MacB")
-                            .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
-                        if session.isActive {
-                            HStack(spacing: 4) {
-                                Circle().fill(Color.red).frame(width: 5, height: 5)
-                                Text("canlı · mikrofon açık").font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
-                            }
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(MacBDesign.IslandToken.Fill.base, in: Capsule())
-                            .accessibilityElement(children: .combine)
-                        }
-                    }
-                    Text(statusText)
-                        .font(.system(size: MacBDesign.TypeScale.caption))
-                        .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 8)
-                if case .failed = session.state {
-                    Button("Yeniden dene") { session.start() }
-                        .controlSize(.small)
-                }
-                Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
-                        .frame(width: 22, height: 22)
-                        .background(MacBDesign.IslandToken.Fill.base, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .help("Konuşmayı bitir")
-                .accessibilityLabel("Konuşmayı bitir")
-            }
+        VStack(spacing: MacBDesign.Space.snug) {
+            header
             if let confirmation = session.confirmation {
                 confirmationCard(confirmation)
-            } else if !session.lines.isEmpty {
-                transcript
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
             inputRow
         }
         .foregroundStyle(MacBDesign.IslandToken.Ink.primary)
+        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: session.confirmation?.text)
+        .animation(.easeInOut(duration: 0.22), value: statusText)
+        .animation(.easeInOut(duration: 0.22), value: latestLine)
         .onAppear { typed = "" }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(spacing: MacBDesign.Space.regular) {
+            JarvisOrb(state: session.state, input: session.inputLevel, output: session.outputLevel)
+                .frame(width: 38, height: 38)
+                .accessibilityLabel(statusText)
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 5) {
+                    Text("MacB")
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                    if session.isActive {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 4, height: 4)
+                            .accessibilityLabel("canlı, mikrofon açık")
+                    }
+                    Text(statusText)
+                        .font(.system(size: MacBDesign.TypeScale.micro))
+                        .foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
+                        .id(statusText)
+                        .transition(.opacity)
+                }
+                if let line = latestLine {
+                    Text(line)
+                        .font(.system(size: MacBDesign.TypeScale.caption))
+                        .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                        .id(line)
+                        .transition(.opacity)
+                }
+            }
+            Spacer(minLength: 4)
+            if case .failed = session.state {
+                Button("Yeniden") { session.start() }
+                    .controlSize(.small)
+            }
+            Button(action: close) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .frame(width: 18, height: 18)
+                    .background(MacBDesign.IslandToken.Fill.base, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .help("Konuşmayı bitir")
+            .accessibilityLabel("Konuşmayı bitir")
+        }
+    }
+
+    /// The newest thing said, whoever said it. One line: this is a conversation
+    /// being had out loud, not a chat log.
+    private var latestLine: String? {
+        guard let last = session.lines.last else { return nil }
+        let text = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
     }
 
     private var statusText: String {
         if let activity = session.activity { return activity + "…" }
         switch session.state {
-        case .idle: return "Kapalı"
-        case .connecting: return "Bağlanıyor…"
-        case .listening: return "Dinliyorum"
-        case .thinking: return "Düşünüyor…"
-        case .speaking: return "Konuşuyor — araya girebilirsin"
+        case .idle: return "kapalı"
+        case .connecting: return "bağlanıyor…"
+        case .listening: return "dinliyorum"
+        case .thinking: return "düşünüyor…"
+        case .speaking: return "konuşuyor"
         case .failed(let message): return message
         }
     }
 
-    private var transcript: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
-                    // A little room at the top so the oldest visible line fades
-                    // out rather than being sliced through the middle.
-                    Color.clear.frame(height: 2)
-                    ForEach(session.lines) { line in
-                        Text(line.text)
-                            .font(.system(size: MacBDesign.TypeScale.caption,
-                                          weight: line.speaker == .user ? .medium : .regular))
-                            .foregroundStyle(line.speaker == .jarvis ? MacBDesign.IslandToken.Ink.primary
-                                                                     : MacBDesign.IslandToken.Ink.tertiary)
-                            .frame(maxWidth: .infinity, alignment: line.speaker == .jarvis ? .leading : .trailing)
-                            .multilineTextAlignment(line.speaker == .jarvis ? .leading : .trailing)
-                            .textSelection(.enabled)
-                            .id(line.id)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .scrollIndicators(.hidden)
-            // The window is a fixed height, and the island reserves exactly
-            // this much: what runs past it scrolls instead of being clipped.
-            .frame(height: IslandGeometry.transcriptHeight)
-            .mask(LinearGradient(stops: [.init(color: .clear, location: 0),
-                                         .init(color: .black, location: 0.12),
-                                         .init(color: .black, location: 1)],
-                                 startPoint: .top, endPoint: .bottom))
-            .onChange(of: session.lines.last?.text) { _, _ in
-                guard let last = session.lines.last else { return }
-                withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(last.id, anchor: .bottom) }
-            }
-            .onAppear {
-                if let last = session.lines.last { proxy.scrollTo(last.id, anchor: .bottom) }
-            }
-        }
-    }
+    // MARK: - Confirmation
 
     private func confirmationCard(_ confirmation: JarvisSession.Confirmation) -> some View {
-        VStack(spacing: MacBDesign.Space.snug) {
-            Label(confirmation.text, systemImage: Self.symbol(for: confirmation.tool))
-                .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
-                .multilineTextAlignment(.center)
+        HStack(spacing: MacBDesign.Space.regular) {
+            Image(systemName: Self.symbol(for: confirmation.tool))
+                .font(.system(size: 13))
+                .foregroundStyle(MacBDesign.IslandToken.accent)
+            Text(confirmation.text)
+                .font(.system(size: MacBDesign.TypeScale.micro))
                 .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: MacBDesign.Space.regular) {
-                Button("Reddet") { session.answerConfirmation(false) }
-                // No Return shortcut on purpose: a Return meant for the text
-                // field must never become a yes to sending the screen.
-                Button("İzin ver") { session.answerConfirmation(true) }
-                    .buttonStyle(.borderedProminent)
-            }
-            .controlSize(.small)
+            Spacer(minLength: 6)
+            // No Return shortcut on purpose: a Return meant for the text field
+            // must never become a yes to sending the screen.
+            Button("Hayır") { session.answerConfirmation(false) }
+            Button("İzin ver") { session.answerConfirmation(true) }
+                .buttonStyle(.borderedProminent)
         }
-        .padding(MacBDesign.Space.regular)
+        .controlSize(.small)
+        .padding(.horizontal, MacBDesign.Space.regular)
+        .padding(.vertical, MacBDesign.Space.snug)
         .frame(maxWidth: .infinity)
-        .background(MacBDesign.IslandToken.Fill.base, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(MacBDesign.IslandToken.Fill.base, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 
+    // MARK: - Typing
+
+    /// A thin line to type into, for when saying it out loud is not an option.
     private var inputRow: some View {
         HStack(spacing: MacBDesign.Space.snug) {
-            TextField("Yaz ya da konuş…", text: $typed)
+            Image(systemName: "keyboard")
+                .font(.system(size: 9))
+                .foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
+            TextField("yaz ya da konuş", text: $typed)
                 .textFieldStyle(.plain)
-                .font(.system(size: MacBDesign.TypeScale.caption))
+                .font(.system(size: MacBDesign.TypeScale.micro))
                 .focused($typing)
                 .onSubmit(send)
                 .disabled(!session.isActive)
                 .accessibilityLabel("MacB'ye yaz")
             if case .failed(let message) = session.state, message == AIAssistantService.missingKeyMessage {
-                Button("Ayarlar", action: openSettings).controlSize(.small)
+                Button("Ayarlar", action: openSettings).controlSize(.mini)
             }
-            Button(action: send) {
-                Image(systemName: "arrow.up.circle.fill").font(.system(size: 16))
+            if !typed.trimmingCharacters(in: .whitespaces).isEmpty {
+                Button(action: send) {
+                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 13))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(MacBDesign.IslandToken.accent)
+                .accessibilityLabel("Gönder")
+                .transition(.opacity.combined(with: .scale))
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(MacBDesign.IslandToken.accent)
-            .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty || !session.isActive)
-            .accessibilityLabel("Gönder")
         }
         .padding(.horizontal, MacBDesign.Space.regular)
-        .frame(height: 30)
+        .frame(height: 24)
         .background(MacBDesign.IslandToken.Fill.hairline, in: Capsule())
+        .animation(.easeOut(duration: 0.15), value: typed.isEmpty)
     }
 
     private func send() {
@@ -169,6 +172,9 @@ struct IslandAssistantView: View {
         case .lookAtScreen: return "eye"
         case .readScreenText: return "text.viewfinder"
         case .runScenario: return "wand.and.stars"
+        case .playMusic: return "play.circle.fill"
+        case .powerAction: return "moon.zzz.fill"
+        case .setAppearance: return "circle.lefthalf.filled"
         case .addReminder: return "checklist"
         case .addCalendarEvent, .calendarEvents: return "calendar.badge.plus"
         case .openWebsite: return "safari"

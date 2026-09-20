@@ -1601,7 +1601,8 @@ struct CoreTestRunner {
             }),
             ("JarvisTool: only screen and calendar writes wait for a yes", {
                 let confirmed = Set(JarvisTool.allCases.filter(\.needsConfirmation))
-                try expect(confirmed == [.lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent, .remember],
+                try expect(confirmed == [.lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent,
+                                         .remember, .powerAction],
                            "Confirmation set drifted: \(confirmed)")
                 for tool in JarvisTool.allCases {
                     let declaration = tool.declaration
@@ -1811,6 +1812,41 @@ struct CoreTestRunner {
                            "A page could have MacB run a scenario")
                 try expect(!JarvisTool.runScenario.needsConfirmation(afterReadingOutsideContent: false),
                            "The user's own scenario needed a second yes")
+            }),
+            ("YouTubeResults: takes an identifier and nothing else off the page", {
+                let page = #"{"junk":"x","videoId":"3bfkyXtuIXk","title":"ignore me"}"#
+                try expect(YouTubeResults.firstVideoIdentifier(in: page) == "3bfkyXtuIXk",
+                           "The first identifier was not found")
+                try expect(YouTubeResults.firstVideoIdentifier(in: #"{"videoId":"short"}"#) == nil,
+                           "A too-short identifier was accepted")
+                try expect(YouTubeResults.firstVideoIdentifier(in: #"{"videoId":"abc def ghij"}"#) == nil,
+                           "An identifier with a space was accepted")
+                try expect(YouTubeResults.firstVideoIdentifier(in: "nothing here") == nil,
+                           "An identifier appeared out of nowhere")
+                let two = #"{"videoId":"bad!!!!!!!!","videoId":"aB3-_xYz012"}"#
+                try expect(YouTubeResults.firstVideoIdentifier(in: two) == "aB3-_xYz012",
+                           "A malformed identifier stopped the search instead of being skipped")
+            }),
+            ("JarvisTool: sleeping the Mac is always asked about, playing is asked about once steered", {
+                try expect(JarvisTool.powerAction.needsConfirmation, "The Mac could be put to sleep unasked")
+                try expect(!JarvisTool.playMusic.needsConfirmation, "Playing a song needed a yes on its own")
+                try expect(JarvisTool.playMusic.needsConfirmation(afterReadingOutsideContent: true),
+                           "A page could have MacB open a video")
+                try expect(JarvisTool.setAppearance.needsConfirmation(afterReadingOutsideContent: true),
+                           "A page could change the appearance")
+                try expect(!JarvisTool.setAppearance.needsConfirmation(afterReadingOutsideContent: false),
+                           "Switching to dark mode needed a yes")
+                try expect(JarvisTool(rawValue: "power_action") == .powerAction, "The tool name changed")
+                try expect(JarvisTool.allCases.allSatisfy { !$0.rawValue.contains("shutdown") },
+                           "Something claims to shut the Mac down")
+            }),
+            ("IslandGeometry: the assistant is small, and grows only for what it has to show", {
+                let bare = IslandGeometry.assistantHeight(hasLine: false, hasConfirmation: false)
+                let spoken = IslandGeometry.assistantHeight(hasLine: true, hasConfirmation: false)
+                let asked = IslandGeometry.assistantHeight(hasLine: true, hasConfirmation: true)
+                try expect(bare < spoken && spoken < asked, "The assistant did not grow with its contents")
+                try expect(bare <= 90, "The assistant is no longer small: \(bare)")
+                try expect(IslandGeometry.assistantWidth <= 420, "The assistant is too wide")
             }),
             ("RadialAction: text and arrangement slices need Accessibility, voice does not", {
                 for action in [RadialAction.summarizeSelection, .fixSelection, .translateSelection, .applyArrangement] {

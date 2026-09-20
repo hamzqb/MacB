@@ -13,6 +13,9 @@
 - Cost meter: an estimate of what OpenAI has cost today and this month, from the provider's own token counts. Only numbers are stored — never a question or an answer.
 - `read_screen_text`: the assistant can read what is on screen with Apple's own recognition on this Mac and send only the words, which is cheaper than a screenshot and shows far less. Still confirmed every time.
 - Morning briefing: one greeting a day in the island with the weather, what is on today and anything waiting, read aloud by macOS's own voice. Costs nothing and needs no key.
+- MacB can put the Mac to sleep, sleep just the display or lock the screen (each asked about every time), and switch macOS between dark and light. It will not shut down or restart: those close unsaved work, and a voice assistant that mishears should not be able to end a session.
+- "Play X": MacB opens the first matching video on YouTube and it starts playing, or opens Spotify or Music on the search. Only a video identifier is read out of the results page, so nothing written on YouTube reaches the model.
+- The assistant in the island is about half the size it was: an orb, what it is doing, and the one line being said — no transcript, since the answer is in the air. What has to be read gets its own card.
 - Voice scenarios: a name for several steps — windows, stay-awake, apps, volume, music, timers and your own Shortcuts — run from the menu, from Settings or by asking MacB. MacB can run one but cannot write one.
 - The assistant always answers in Turkish, has a character setting, a clearer voice list, and connects faster: the socket and the microphone now open at the same time.
 - The island's assistant keeps the newest words in a fixed window instead of cutting them off, the orb carries the state in its colour, and a closed island shows it as a small pulsing dot with no transcript.

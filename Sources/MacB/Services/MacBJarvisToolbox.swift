@@ -54,6 +54,16 @@ import ScreenCaptureKit
         switch tool {
         case .lookAtScreen:
             return "MacB ekranının bir görüntüsünü OpenAI'ye göndermek istiyor."
+        case .powerAction:
+            switch SystemActions.Power(rawValue: arguments["action"] as? String ?? "") {
+            case .displaySleep: return "MacB ekranı kapatmak istiyor."
+            case .lock: return "MacB ekranı kilitlemek istiyor."
+            default: return "MacB Mac'i uyku moduna almak istiyor."
+            }
+        case .playMusic:
+            return "Okuduğu bir içerikten sonra \u{201C}\(arguments["query"] as? String ?? "")\u{201D} çalmak istiyor."
+        case .setAppearance:
+            return "Okuduğu bir içerikten sonra görünümü değiştirmek istiyor."
         case .readScreenText:
             return "MacB ekrandaki yazıyı okumak istiyor. Görüntü Mac'ten çıkmaz; yalnız bulunan yazı gönderilir."
         case .runScenario:
@@ -98,6 +108,29 @@ import ScreenCaptureKit
             case .success(let jpeg): return .image(jpeg: jpeg, question: arguments["question"] as? String)
             case .failure(let error): return fail(error.localizedDescription)
             }
+        case .playMusic:
+            let query = (arguments["query"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let service = MusicSearch.Service(rawValue: arguments["service"] as? String ?? "") ?? .youtube
+            let outcome = await MusicSearch.play(query, on: service)
+            guard outcome.opened else { return fail(outcome.message) }
+            return ok(["message": outcome.message, "playing": outcome.isPlaying, "service": service.rawValue])
+        case .powerAction:
+            guard let action = SystemActions.Power(rawValue: arguments["action"] as? String ?? "") else {
+                return fail("Bilinmeyen işlem.")
+            }
+            // The answer is written before the Mac goes, because afterwards
+            // there is nobody listening.
+            let message = SystemActions.message(for: action)
+            guard SystemActions.power(action) else { return fail("Yapılamadı.") }
+            return ok(["message": message])
+        case .setAppearance:
+            guard let mode = SystemActions.Appearance(rawValue: arguments["mode"] as? String ?? "") else {
+                return fail("Bilinmeyen görünüm.")
+            }
+            guard SystemActions.appearance(mode) else {
+                return fail("Görünüm değiştirilemedi; Sistem Ayarları › Gizlilik › Otomasyon'dan MacB'ye izin ver.")
+            }
+            return ok(["mode": mode.rawValue])
         case .runScenario:
             let name = (arguments["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty else { return fail("Senaryo adı boş.") }

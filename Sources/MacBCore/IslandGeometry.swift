@@ -79,20 +79,16 @@ public enum IslandGeometry {
     /// Full expanded panel height: navigation, body, and padding, with empty bodies collapsing away.
     /// The voice assistant: the orb and its line, plus room for what has
     /// been said and for a question waiting to be allowed.
-    public static func assistantHeight(transcriptLines: Int, hasConfirmation: Bool) -> CGFloat {
-        let base: CGFloat = 132
-        // A fixed window rather than a line count: a "line" of speech wraps to
-        // two or three on screen, so counting them reserved too little room and
-        // the text was cut through the middle.
-        let transcript: CGFloat = transcriptLines > 0 ? transcriptHeight : 0
-        return base + transcript + (hasConfirmation ? 96 : 0)
+    public static func assistantHeight(hasLine: Bool, hasConfirmation: Bool) -> CGFloat {
+        // The orb, its line of status, and the thin row to type in.
+        let base: CGFloat = 78
+        // One thing said, at up to two lines on screen.
+        let line: CGFloat = hasLine ? 32 : 0
+        return base + line + (hasConfirmation ? 44 : 0)
     }
 
-    /// How much of the conversation is on screen at once. What scrolls off is
-    /// still there; the newest is always the one showing.
-    public static let transcriptHeight: CGFloat = 84
-
-    public static let assistantWidth: CGFloat = 560
+    /// Narrow: it holds an orb, a few words and a question, not a document.
+    public static let assistantWidth: CGFloat = 380
 
     /// The morning briefing: a line of greeting and one line per thing worth
     /// saying, plus the row of buttons under it.

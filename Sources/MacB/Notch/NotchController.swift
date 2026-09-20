@@ -759,8 +759,9 @@ struct IslandToast: Equatable {
         case .timer:
             return IslandGeometry.timerHeight
         case .assistant:
-            return IslandGeometry.assistantHeight(transcriptLines: assistant.lines.count,
-                                                  hasConfirmation: assistant.confirmation != nil)
+            return IslandGeometry.assistantHeight(
+                hasLine: !(assistant.lines.last?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+                hasConfirmation: assistant.confirmation != nil)
         case .briefing:
             return IslandGeometry.briefingHeight(lines: briefing.lines.count)
         }

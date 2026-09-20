@@ -13,6 +13,9 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     case lookAtScreen = "look_at_screen"
     case readScreenText = "read_screen_text"
     case runScenario = "run_scenario"
+    case playMusic = "play_music"
+    case powerAction = "power_action"
+    case setAppearance = "set_appearance"
     case readSelection = "read_selected_text"
     case openApplication = "open_application"
     case openWebsite = "open_website"
@@ -40,7 +43,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// every later conversation: a fact slipped in once would steer them all.
     public var needsConfirmation: Bool {
         switch self {
-        case .lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent, .remember: return true
+        case .lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent, .remember, .powerAction:
+            return true
         default: return false
         }
     }
@@ -77,7 +81,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         guard tainted else { return false }
         switch self {
         case .openApplication, .openWebsite, .copyToClipboard, .addNote, .forget, .calendarEvents,
-             .runScenario:
+             .runScenario, .playMusic, .setAppearance:
             return true
         case .webSearch:
             return privateContent
@@ -93,6 +97,9 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .lookAtScreen: return "Ekrana bakıyor"
         case .readScreenText: return "Ekrandaki yazıyı okuyor"
         case .runScenario: return "Senaryoyu çalıştırıyor"
+        case .playMusic: return "Şarkıyı arıyor"
+        case .powerAction: return "Mac'i uyutuyor"
+        case .setAppearance: return "Görünümü değiştiriyor"
         case .readSelection: return "Seçili metni okuyor"
         case .openApplication: return "Uygulama açıyor"
         case .openWebsite: return "Sayfa açıyor"
@@ -132,6 +139,12 @@ public enum JarvisTool: String, CaseIterable, Sendable {
             return "Open or bring forward an application by name, e.g. Safari, Spotify, Notes."
         case .openWebsite:
             return "Open an http or https address in the default browser."
+        case .playMusic:
+            return "Play something by name. service picks where: 'youtube' opens the first matching video and it starts playing, 'spotify' opens Spotify on the search, 'apple_music' opens Music on the search. Use it when the user names a song, an artist, a video or a channel. For pausing or skipping what is already playing, use media_control instead."
+        case .powerAction:
+            return "Put the Mac to sleep, put only the display to sleep, or lock the screen. The user is asked to allow it each time. You cannot shut down or restart."
+        case .setAppearance:
+            return "Switch macOS between dark and light appearance, or back to automatic."
         case .media:
             return "Control music that is playing: play, pause, toggle, next, previous."
         case .setVolume:
@@ -181,6 +194,15 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .runScenario: return object(["name": string], required: ["name"])
         case .openApplication: return object(["name": string], required: ["name"])
         case .openWebsite: return object(["url": string], required: ["url"])
+        case .playMusic:
+            return object(["query": string,
+                           "service": ["type": "string", "enum": ["youtube", "spotify", "apple_music"]]],
+                          required: ["query"])
+        case .powerAction:
+            return object(["action": ["type": "string", "enum": ["sleep", "display_sleep", "lock"]]],
+                          required: ["action"])
+        case .setAppearance:
+            return object(["mode": ["type": "string", "enum": ["dark", "light", "auto"]]], required: ["mode"])
         case .media:
             return object(["action": ["type": "string", "enum": ["play", "pause", "toggle", "next", "previous"]]],
                           required: ["action"])

@@ -528,6 +528,8 @@ private final class Flag: @unchecked Sendable {
         awakeMenu.delegate = self
         keepAwakeMenu = awakeMenu
         menu.setSubmenu(awakeMenu, for: menu.addItem(withTitle: "Uyanık tut", action: nil, keyEquivalent: ""))
+        let sleepItem = menu.addItem(withTitle: "Mac'i uyut", action: #selector(sleepMac), keyEquivalent: "")
+        sleepItem.target = self
         let cleanKeyboard = menu.addItem(withTitle: "Klavyeyi 1 dakika kilitle", action: #selector(startKeyboardCleaning), keyEquivalent: "")
         cleanKeyboard.target = self
         let settings = menu.addItem(withTitle: "Ayarlar ve izinler…", action: #selector(showSettings), keyEquivalent: ",")
@@ -600,6 +602,10 @@ private final class Flag: @unchecked Sendable {
     @objc private func showScenarioSettings() {
         UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
         showSettings()
+    }
+
+    @objc private func sleepMac() {
+        SystemActions.power(.sleep)
     }
 
     @objc private func showBriefing() {
