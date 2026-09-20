@@ -192,9 +192,7 @@ struct SettingsView: View {
                 }
             }
             section("Pencere düzenleri", "rectangle.3.group") {
-                Text("Açık pencerelerin yerini kaydet, sonra tek hareketle geri getir. Sadece çalışan uygulamaların pencereleri taşınır; hiçbir şey açılmaz ya da kapanmaz.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                intro("Açık pencerelerin yerini kaydet, sonra tek hareketle geri getir. Sadece çalışan uygulamaların pencereleri taşınır; hiçbir şey açılmaz ya da kapanmaz.")
                 if !permissions.accessibility {
                     message("Erişilebilirlik izni gerekir.", warning: true)
                 }
@@ -268,9 +266,7 @@ struct SettingsView: View {
                 }
             }
             section("Yapay zekâ anahtarları", "key.horizontal") {
-                Text("Halkadaki Yapay zekâ dilimi, menüdeki \u{201C}Yapay zekâya sor\u{201D} ve seçili metin işleri bu anahtarlarla çalışır. Her anahtar Keychain'e yazılır — plist'e, dosyaya ya da koda değil — ve bir daha ekranda gösterilmez. Bir anahtar yalnız ait olduğu servise gider; giden tek şey sorduğun soru.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                intro("Halkadaki Yapay zekâ dilimi, menüdeki \u{201C}Yapay zekâya sor\u{201D} ve seçili metin işleri bu anahtarlarla çalışır. Her anahtar Keychain'e yazılır — plist'e, dosyaya ya da koda değil — ve bir daha ekranda gösterilmez. Bir anahtar yalnız ait olduğu servise gider; giden tek şey sorduğun soru.")
                 HStack(spacing: MacBDesign.Space.regular) {
                     Text("Soruları cevaplayan")
                         .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
@@ -296,9 +292,7 @@ struct SettingsView: View {
                 message("Anahtarını bir yere yapıştırdıysan (sohbet, not, ekran görüntüsü) onu iptal et ve yenisini üret. Sızmış bir anahtar senin faturana çalışır.", warning: true)
             }
             section("Sesli senaryolar", "wand.and.stars") {
-                Text("Birkaç işi tek isme bağla: \u{201C}toplantı moduna geç\u{201D} dediğinde pencereler düzene girsin, Mac uyanık kalsın, müzik dursun. Adımları burada sen yazarsın; MacB yalnız var olan bir senaryoyu çalıştırabilir, yenisini yazamaz.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                intro("Birkaç işi tek isme bağla: \u{201C}toplantı moduna geç\u{201D} dediğinde pencereler düzene girsin, Mac uyanık kalsın, müzik dursun. Adımları burada sen yazarsın; MacB yalnız var olan bir senaryoyu çalıştırabilir, yenisini yazamaz.")
                 HStack(spacing: MacBDesign.Space.regular) {
                     TextField("Yeni senaryo adı", text: $scenarioName)
                         .textFieldStyle(.roundedBorder)
@@ -323,10 +317,8 @@ struct SettingsView: View {
                               isOn: $preferences.showInDock)
             }
             section("Günaydın brifingi", "sun.horizon") {
-                Text("Sabah Mac'i açtığında MacB seni selamlar ve günün özetini island'da gösterir: hava, bugünkü ilk iş, bekleyen hatırlatıcılar, pil. Hepsi bu Mac'ten okunur, hiçbir yere bir şey gitmez ve anahtar gerekmez.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                settingToggle("Brifingi göster", detail: "Günde bir kez, seçtiğin saatten sonra Mac uyandığında.",
+                settingToggle("Brifingi göster",
+                              detail: "Sabah Mac uyandığında island'da selam, hava, bugünkü ilk iş ve pil. Günde bir kez.",
                               isOn: $preferences.briefingEnabled)
                 HStack(spacing: MacBDesign.Space.regular) {
                     Text("En erken saat").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
@@ -337,31 +329,42 @@ struct SettingsView: View {
                     .labelsHidden().fixedSize()
                     .disabled(!preferences.briefingEnabled)
                 }
-                settingToggle("Sesli oku", detail: "macOS'un kendi Türkçe sesiyle okunur; internete çıkmaz, ücretsizdir.",
+                settingToggle("Sesli oku", detail: "macOS'un kendi Türkçe sesiyle. Ücretsiz, internetsiz.",
                               isOn: $preferences.briefingSpeaks)
                     .disabled(!preferences.briefingEnabled)
-                HStack {
+                HStack(spacing: MacBDesign.Space.close) {
                     Button("Şimdi dene") { briefing.give() }
                     if briefing.isVisible { Button("Kapat") { briefing.dismiss() } }
                     Spacer()
                 }
-                message("Takvim ve hatırlatıcılar yalnız izin verdiysen okunur; brifing kendi başına izin penceresi açmaz.")
+                message("Her şey bu Mac'ten okunur, hiçbir yere gitmez, anahtar gerekmez. Takvim ve hatırlatıcılar yalnız izin verdiysen okunur.")
             }
             section("Maliyet", "turkishlirasign.circle") {
-                Text("MacB yalnız OpenAI'ye ödenen tahmini tutarı sayar; ücretsiz sağlayıcılar sıfır yazar. Sadece sayılar tutulur — hangi soruyu sorduğun değil. Kesin rakam OpenAI'nin kendi panosundadır.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: MacBDesign.Space.comfortable) {
                     costBox("Bugün", aiCost.todayText, "\(aiCost.today.requests) istek")
                     costBox("Bu ay", aiCost.monthText, "\(aiCost.spending.days.count) gün")
                     Spacer(minLength: 8)
                     Button("Sayacı sıfırla", role: .destructive) { aiCost.reset() }
                 }
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Text("Günlük sınır").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                    Spacer(minLength: 8)
+                    Picker("Günlük sınır", selection: $aiCost.dailyLimit) {
+                        ForEach(AIBudget.choices, id: \.self) { Text(AIBudget.title($0)).tag($0) }
+                    }
+                    .labelsHidden().fixedSize()
+                }
+                if aiCost.dailyLimit > 0 {
+                    budgetBar
+                }
+                message(aiCost.isOverDailyLimit
+                        ? "Sınır doldu: sesli asistan ve ücretli sorular bugünlük kapalı. Ücretsiz sağlayıcılar çalışmaya devam eder."
+                        : "Sınıra ulaşınca MacB ücretli isteği başlatmaz — para harcandıktan sonra değil, önce durur.",
+                        warning: aiCost.isOverDailyLimit)
+                message("Yalnız OpenAI'ye ödenen tahmini tutar sayılır; ücretsiz sağlayıcılar sıfır yazar. Sadece sayılar tutulur, hangi soruyu sorduğun değil. Kesin rakam OpenAI'nin panosundadır.")
             }
             section("Sesli asistan", "person.wave.2") {
-                Text("MacB (okunuşu \u{201C}Mek bi\u{201D}) canlı sesli asistanın: konuşursun, konuşarak cevap verir, lafını bölebilirsin. İnternette araştırır, uygulama açar, müziği ve sesi yönetir, zamanlayıcı kurar, takvimine bakar, istersen ekranına bakıp okur.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                intro("MacB (okunuşu \u{201C}Mek bi\u{201D}) canlı sesli asistanın: konuşursun, konuşarak cevap verir, lafını bölebilirsin. İnternette araştırır, uygulama açar, müziği ve sesi yönetir, zamanlayıcı kurar, takvimine bakar, istersen ekranına bakıp okur.")
                 settingToggle("\(JarvisHotKey.displayKeys) ile aç", detail: "Halkadaki \u{201C}MacB ile konuş\u{201D} dilimi ve menüdeki aynı adlı komut her zaman çalışır.",
                               isOn: $preferences.jarvisHotKeyEnabled)
                 if jarvisHotKeyFailed {
@@ -388,7 +391,9 @@ struct SettingsView: View {
                     Text("Model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     Spacer(minLength: 8)
                     Picker("Model", selection: $preferences.jarvisModel) {
-                        ForEach(JarvisProtocol.models, id: \.self) { Text($0).tag($0) }
+                        ForEach(JarvisProtocol.models, id: \.self) {
+                            Text("\($0) — \(JarvisProtocol.priceNote(for: $0))").tag($0)
+                        }
                         if !JarvisProtocol.models.contains(preferences.jarvisModel) {
                             Text(preferences.jarvisModel).tag(preferences.jarvisModel)
                         }
@@ -396,8 +401,8 @@ struct SettingsView: View {
                     .labelsHidden().fixedSize()
                 }
                 message("MacB her zaman Türkçe konuşur; ona başka dilde yazsan da Türkçe cevap verir.")
-                message("Sesli asistan açıkken mikrofon sesi canlı olarak OpenAI'ye gider (Sesle sor'dan farkı bu). Kaydedilmez; panel kapanınca ya da 90 saniye sessiz kalınca bağlantı kapanır. Ekran görüntüsü ve takvime ekleme her seferinde onayını ister.")
-                message("Canlı ses ücretlidir: yaklaşık dakikası birkaç sent, uzun konuşmada daha fazla.", warning: true)
+                message("Sesli asistan açıkken mikrofon sesi canlı olarak OpenAI'ye gider (Sesle sor'dan farkı bu). Kaydedilmez; panel kapanınca, 30 saniye sessiz kalınca ya da 6 dakika dolunca bağlantı kapanır.")
+                message("Canlı ses ücretlidir ve sessizlik de sayılır. Ucuz tutmanın yolu: \u{201C}mini\u{201D} modeli, kısa konuşma, Maliyet'teki günlük sınır.", warning: true)
                 message("Ekrandan, seçimden ya da internetten bir şey okuduktan sonra MacB bir şey açmak, panoya koymak ya da not almak isterse önce sana sorar. Böylece bir sayfadaki yazı onu yönlendiremez.")
                 rowDivider
                 HStack {
@@ -426,9 +431,7 @@ struct SettingsView: View {
                 }
             }
             section("Seçili metin ve ses", "text.line.3.summary") {
-                Text("Halkaya Seçimi özetle, Seçimi düzelt, Seçimi çevir ve Sesle sor dilimlerini ekleyebilirsin. Sonuç panele gelir ve panoya kopyalanır; uygulama izin veriyorsa seçimin yerine de konabilir.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                intro("Halkaya Seçimi özetle, Seçimi düzelt, Seçimi çevir ve Sesle sor dilimlerini ekleyebilirsin. Sonuç panele gelir ve panoya kopyalanır; uygulama izin veriyorsa seçimin yerine de konabilir.")
                 HStack(spacing: MacBDesign.Space.regular) {
                     Text("Çeviri dili").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     Spacer(minLength: 8)
@@ -511,9 +514,7 @@ struct SettingsView: View {
             }
             section("Uygulama kaldırma", "trash") {
                 Color.clear.frame(height: 0).id(Self.removalAnchor)
-                Text("Uygulamayı, yardımcılarını ve kullanıcı kalıntılarını arar. Hiçbir şey silinmez, hepsi Çöp Sepeti'ne taşınır.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                intro("Uygulamayı, yardımcılarını ve kullanıcı kalıntılarını arar. Hiçbir şey silinmez, hepsi Çöp Sepeti'ne taşınır.")
                 Button("Uygulama seç…") {
                     Task {
                         if faceUnlock.settings.guards(.uninstaller) && !faceUnlock.isUnlocked(.uninstaller) {
@@ -537,9 +538,7 @@ struct SettingsView: View {
                 }
             }
             section("Kaynak kullanımı", "chart.bar.xaxis") {
-                Text("Belleği ve işlemciyi en çok kim kullanıyor. Yardımcı süreçler kendi uygulamalarının altında toplanır.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                intro("Belleği ve işlemciyi en çok kim kullanıyor. Yardımcı süreçler kendi uygulamalarının altında toplanır.")
                 Picker("", selection: $processSort) {
                     Text("Bellek").tag(ProcessSort.memory)
                     Text("İşlemci").tag(ProcessSort.cpu)
@@ -561,9 +560,7 @@ struct SettingsView: View {
             }
             section("Önbellek temizliği", "sparkles.rectangle.stack") {
                 Color.clear.frame(height: 0).id(Self.cacheAnchor)
-                Text("Uygulamaların yeniden oluşturabildiği geçici klasörleri arar. Belgeler, ayarlar ve uygulama verileri hiç taranmaz.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                intro("Uygulamaların yeniden oluşturabildiği geçici klasörleri arar. Belgeler, ayarlar ve uygulama verileri hiç taranmaz.")
                 Button(utilities.hasScannedCaches ? "Yeniden tara" : "Önbellekleri tara", action: utilities.scanCaches)
                 if !utilities.cacheItems.isEmpty {
                     VStack(alignment: .leading, spacing: MacBDesign.Space.comfortable) {
@@ -603,10 +600,7 @@ struct SettingsView: View {
                 Image(systemName: "arrow.uturn.backward")
                     .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
                     .foregroundStyle(MacBDesign.accent)
-                Text("\(title) Çöp Sepeti'nde. Eski yerine geri konabilir.")
-                    .font(.system(size: MacBDesign.TypeScale.body))
-                    .foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                intro("\(title) Çöp Sepeti'nde. Eski yerine geri konabilir.")
                 Spacer(minLength: MacBDesign.Space.close)
                 Button("Geri al", action: utilities.undoLastTrashMove)
                 Button("Kapat", action: utilities.forgetTrashMove)
@@ -716,9 +710,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                     Text(shelf.items.isEmpty ? "Dosyaların için küçük bir yer." : "\(shelf.items.count) öğe elinin altında.")
                         .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
-                    Text("Dosyalar yerinde kalır. Raftan kaldırmak dosyayı silmez.")
-                        .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                    intro("Dosyalar yerinde kalır. Raftan kaldırmak dosyayı silmez.")
                 }
                 HStack(spacing: MacBDesign.Space.regular) {
                     Button("Dosya ekle…", action: shelf.chooseFiles)
@@ -1332,9 +1324,7 @@ struct SettingsView: View {
                 }
             }
             section("Hızlı erişim", "square.grid.2x2") {
-                Text("Island'daki Uygulamalar bölümünde yalnızca buraya eklediklerin görünür. MacB kurulu uygulamaları taramaz.")
-                    .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                intro("Island'daki Uygulamalar bölümünde yalnızca buraya eklediklerin görünür. MacB kurulu uygulamaları taramaz.")
                 HStack(spacing: MacBDesign.Space.regular) {
                     Button("Uygulama veya klasör ekle…", action: launcher.choose)
                     Spacer()
@@ -1603,6 +1593,22 @@ struct SettingsView: View {
         .frame(minWidth: 96, alignment: .leading)
     }
 
+    /// How much of today's allowance is gone. A number on its own does not
+    /// answer "am I close?"; a bar does, without being read.
+    private var budgetBar: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(MacBDesign.cardStroke)
+                Capsule()
+                    .fill(aiCost.isOverDailyLimit ? Color(nsColor: .systemRed) : MacBDesign.accent)
+                    .frame(width: max(2, proxy.size.width * aiCost.limitFraction))
+            }
+        }
+        .frame(height: 5)
+        .motion(MacBDesign.Motion.progress, value: aiCost.limitFraction)
+        .accessibilityLabel("Günlük sınırın \(Int(aiCost.limitFraction * 100)) yüzdesi kullanıldı")
+    }
+
     private var rowDivider: some View { Divider().opacity(0.45) }
 
     /// The ring being edited: the general one, or one application's.
@@ -1869,6 +1875,16 @@ struct SettingsView: View {
             .padding(.top, MacBDesign.Space.hair)
         }
         .accessibilityElement(children: .contain)
+    }
+
+    /// A card's explanation, folded away until somebody wants it.
+    ///
+    /// Every section opened with a paragraph. Read once each, they are worth
+    /// having; stacked down a window they are a wall of grey that the controls
+    /// have to be found inside. Two lines and a "daha" is the same text without
+    /// the wall.
+    private func intro(_ text: String) -> some View {
+        SettingsIntro(text: text)
     }
 
     private func message(_ text: String, warning: Bool = false) -> some View {

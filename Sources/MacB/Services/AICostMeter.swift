@@ -19,10 +19,23 @@ import MacBCore
     /// conversation ends.
     @Published private(set) var lastCost: Double?
 
-    private let url: URL
-    private var isUnreadable = false
+    /// The most MacB may spend in a day before it stops asking anything that
+    /// costs money. Zero is no ceiling.
+    @Published var dailyLimit: Double {
+        didSet { defaults.set(dailyLimit, forKey: Self.limitKey) }
+    }
 
-    init(url: URL? = nil) {
+    private let url: URL
+    private let defaults: UserDefaults
+    private var isUnreadable = false
+    private static let limitKey = "aiDailyLimit"
+
+    init(url: URL? = nil, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        // `object(forKey:)` rather than `double(forKey:)`: an unset key reads
+        // as zero, and zero means "no ceiling" — a fresh install would start
+        // with the limit switched off.
+        dailyLimit = (defaults.object(forKey: Self.limitKey) as? Double) ?? AIBudget.fallback
         self.url = url ?? FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MacB", isDirectory: true)
@@ -35,6 +48,16 @@ import MacBCore
 
     var todayText: String { AIPricing.money(today.dollars) }
     var monthText: String { AIPricing.money(thisMonth) }
+    var limitText: String { AIBudget.title(dailyLimit) }
+
+    /// Whether today's spending has reached the ceiling.
+    var isOverDailyLimit: Bool { AIBudget.isOver(spent: today.dollars, limit: dailyLimit) }
+
+    /// How much of today's allowance is gone, 0 to 1, for a bar.
+    var limitFraction: Double {
+        guard dailyLimit > 0 else { return 0 }
+        return min(1, today.dollars / dailyLimit)
+    }
 
     /// Records one request. Free providers cost nothing and are still counted
     /// as requests, so the settings window can say how much was asked for free.

@@ -97,9 +97,19 @@ enum JarvisToolOutcome {
     private var hasReadPrivateContent = false
 
     /// A conversation nobody speaks in closes after this long.
-    private static let quietLimit: TimeInterval = 90
+    ///
+    /// Every second of that silence is billed: an open Realtime session keeps
+    /// sending the microphone, and input audio is charged whether or not
+    /// anybody said anything. Ninety seconds of nothing cost more than the
+    /// question that preceded it, so the wait is short enough to be cheap and
+    /// long enough to finish a sentence in.
+    private static let quietLimit: TimeInterval = 30
     /// No conversation stays open longer than this, whatever happens.
-    private static let hardLimit: TimeInterval = 20 * 60
+    ///
+    /// Realtime resends the whole conversation on every turn, so a long one
+    /// does not cost linearly — it costs by the square. Twenty minutes was a
+    /// bill nobody asked for.
+    private static let hardLimit: TimeInterval = 6 * 60
     private static let connectLimit: TimeInterval = 15
     private static let maxLines = 12
 
@@ -153,6 +163,9 @@ enum JarvisToolOutcome {
         pendingAudio = []
         isSessionReady = false
         startedAt = Date()
+        if let cost, cost.isOverDailyLimit {
+            return fail("Bugünlük harcama sınırına ulaşıldı (\(cost.limitText)). Ayarlar \u{203A} Maliyet'ten değiştirebilirsin.")
+        }
         guard let key = keys.read(.openAI) else { return fail(Self.missingVoiceKeyMessage) }
         guard let url = JarvisProtocol.url(model: model()) else { return fail("Model adı geçersiz.") }
         state = .connecting

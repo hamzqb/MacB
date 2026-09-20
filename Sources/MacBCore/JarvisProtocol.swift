@@ -386,11 +386,30 @@ public enum JarvisEvent: Equatable, Sendable {
 }
 
 public enum JarvisProtocol {
-    public static let defaultModel = "gpt-realtime-2.1"
-    /// The speech-to-speech models, newest first. `mini` is markedly cheaper
-    /// and a little less sure of itself; both speak Turkish.
-    public static let models = ["gpt-realtime-2.1", "gpt-realtime", "gpt-realtime-mini",
+    /// The cheap one, on purpose.
+    ///
+    /// Speech-to-speech is billed per second of audio in both directions, and
+    /// the full model costs about three times what this one does for a
+    /// conversation that sounds the same to somebody asking it to open
+    /// Spotify. Anybody who wants the difference can pick it in Settings; the
+    /// default should not quietly spend triple.
+    public static let defaultModel = "gpt-realtime-mini"
+    /// The speech-to-speech models, cheapest first. All of them speak Turkish.
+    public static let models = ["gpt-realtime-mini", "gpt-realtime-2.1", "gpt-realtime",
                                 "gpt-4o-realtime-preview"]
+
+    /// What each model costs, in words, for the model picker.
+    public static func priceNote(for model: String) -> String {
+        model.contains("mini") ? "en ucuz" : "pahalı"
+    }
+
+    /// A ceiling on one spoken answer.
+    ///
+    /// Output audio is the most expensive thing MacB buys, and a model that
+    /// decides to explain something at length is the one way a short question
+    /// becomes an expensive one. Roughly a minute of speech: past that, it was
+    /// not answering any more.
+    public static let maximumResponseTokens = 900
     public static let sampleRate = 24_000
 
     public static func url(model: String) -> URL? {
@@ -479,7 +498,8 @@ public enum JarvisProtocol {
                     ]
                 ],
                 "tools": JarvisTool.allCases.map(\.declaration),
-                "tool_choice": "auto"
+                "tool_choice": "auto",
+                "max_output_tokens": maximumResponseTokens
             ] as [String: Any]
         ]
     }

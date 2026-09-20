@@ -99,13 +99,23 @@ public enum IslandGeometry {
     /// Narrow: it holds an orb and a couple of words, not a document.
     public static let assistantWidth: CGFloat = 300
 
-    /// The morning briefing: a line of greeting and one line per thing worth
-    /// saying, plus the row of buttons under it.
-    public static func briefingHeight(lines: Int) -> CGFloat {
-        88 + CGFloat(min(6, max(1, lines))) * 22
+    /// The morning briefing: a greeting, a row of chips when there is anything
+    /// worth a chip, and the two buttons under them.
+    ///
+    /// It used to reserve a line's height per spoken sentence, which meant a
+    /// card of three short facts opened a panel with an empty half. The chips
+    /// sit on one row whatever they say, so the height is now two fixed rows
+    /// and an optional one.
+    public static func briefingHeight(chipCount: Int) -> CGFloat {
+        let greeting: CGFloat = 32
+        let chips: CGFloat = chipCount > 0 ? 8 + 26 : 0
+        let actions: CGFloat = 8 + 28
+        return greeting + chips + actions
     }
 
-    public static let briefingWidth: CGFloat = 460
+    /// Narrower than it was: chips are short, and a wide card of short chips is
+    /// mostly gap.
+    public static let briefingWidth: CGFloat = 380
 
     public static func expandedHeight(bodyHeight: CGFloat) -> CGFloat {
         guard bodyHeight > 0 else { return navigationHeight + topPadding + bottomPadding }

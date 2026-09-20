@@ -58,7 +58,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var defaultModel: String {
         switch self {
         case .openAI: return "gpt-5-mini"
-        case .groq: return "llama-3.1-8b-instant"
+        case .groq: return "llama-3.3-70b-versatile"
         case .openRouter: return "meta-llama/llama-3.3-70b-instruct:free"
         case .gemini: return "gemini-2.5-flash"
         case .huggingFace: return "meta-llama/Llama-3.3-70B-Instruct"
@@ -116,11 +116,11 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .openAI:
             return "Ücretli. Canlı sesli asistan ve kaynak gösteren web araması yalnız bunda var."
         case .groq:
-            return "Ücretsiz ve çok hızlı. Panel, seçili metin ve halka için iyi. Web araması yok."
+            return "Ücretsiz ve çok hızlı; ama küçük modelleri zayıf cevap verir. Web araması yok."
         case .openRouter:
             return "Ücretsiz modeller var. Model adını kendin yazabilirsin."
         case .gemini:
-            return "Google'ın ücretsiz katmanı. Uzun metinlerde iyi."
+            return "Ücretsiz katmanı güçlü. Metin soruları için önerilen: MacB anahtar varsa bunu seçer."
         case .huggingFace:
             return "Ücretsiz katman dar; yedek olarak dursun."
         }
@@ -135,8 +135,8 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .openAI:
             return ["gpt-6-astra", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-4.1-mini"]
         case .groq:
-            return ["llama-3.1-8b-instant", "llama-3.3-70b-versatile",
-                    "openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3-32b"]
+            return ["llama-3.3-70b-versatile", "openai/gpt-oss-120b",
+                    "qwen/qwen3-32b", "openai/gpt-oss-20b", "llama-3.1-8b-instant"]
         case .openRouter:
             return ["meta-llama/llama-3.3-70b-instruct:free", "deepseek/deepseek-chat-v3.1:free",
                     "google/gemma-3-27b-it:free", "qwen/qwen3-235b-a22b:free"]
@@ -148,9 +148,15 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     }
 
     /// Providers a question can actually be sent to, in the order they should be
-    /// offered: the free and fast ones first, because that is the one somebody
-    /// without a paid account wants picked for them.
-    public static let textOrder: [AIProvider] = [.groq, .gemini, .openRouter, .openAI, .huggingFace]
+    /// offered.
+    ///
+    /// Free first, so MacB never quietly spends money a stored free key would
+    /// have covered — but free is not the only rule. Groq used to be first
+    /// because it is the fastest, and its free model is an eight-billion
+    /// parameter one that answers a real question badly: fast nonsense is
+    /// still nonsense. Gemini's free tier is a frontier-class model, so the
+    /// good free one goes first and the fast one is the fallback.
+    public static let textOrder: [AIProvider] = [.gemini, .groq, .openRouter, .openAI, .huggingFace]
 
     /// The provider to use when nobody has chosen one, given what is stored.
     ///

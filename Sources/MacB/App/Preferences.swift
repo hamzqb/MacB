@@ -255,10 +255,11 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
 
     /// Whether MacB has a Dock icon and appears in the ⌘Tab switcher.
     ///
-    /// Off by default, which is what a notch utility normally wants: it lives
-    /// in the island and the menu bar, and an extra Dock icon is clutter. On,
-    /// because somebody asked where MacB was in ⌘Tab and the honest answer is
-    /// that an accessory application is not there to be found.
+    /// On by default. It was off, which is what a notch utility normally
+    /// wants — it lives in the island and the menu bar, and an extra Dock icon
+    /// is clutter. But macOS gives no way to be in ⌘Tab without being in the
+    /// Dock, and somebody going to ⌘Tab to find MacB and not finding it is a
+    /// worse outcome than one more icon. Off is still one switch away.
     @Published var showInDock: Bool { didSet { defaults.set(showInDock, forKey: "showInDock") } }
     /// Rings for particular applications, by bundle identifier. Anything not
     /// in here gets `radialMenuLayout`.
@@ -313,7 +314,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "radialMenuThreeFinger": false,
                                     "aiModel": Preferences.defaultAIModel,
                                     "aiProvider": "",
-                                    "showInDock": false,
+                                    "showInDock": true,
                                     "secondaryTimeZone": "America/New_York"])
         dockEnabled = defaults.bool(forKey: "dockEnabled")
         notchEnabled = defaults.bool(forKey: "notchEnabled")

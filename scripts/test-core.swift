@@ -1737,6 +1737,49 @@ struct CoreTestRunner {
                                               facts: Briefing.Facts(battery: 14, isCharging: true))
                 try expect(!charging.contains(where: { $0.contains("Pil") }), "A charging Mac was told to plug in")
             }),
+            ("Briefing: the eye gets chips, the ear gets sentences", {
+                let full = Briefing.Facts(weather: "Yalova 25 derece, kapalı.", weatherShort: "25° kapalı",
+                                          weatherSymbol: "cloud.fill", nextEvent: "09:30 toplantı",
+                                          eventCount: 3, reminderCount: 2, battery: 9,
+                                          isCharging: false, waitingAgents: 1)
+                let chips = Briefing.chips(for: full)
+                try expect(chips.count <= Briefing.maximumChips, "The row of chips wrapped")
+                try expect(chips.contains(where: { $0.text == "25° kapalı" }), "The weather chip lost its words")
+                try expect(chips.contains(where: { $0.text.contains("+2") }), "The other events were not counted")
+                try expect(chips.contains(where: { $0.text == "%9" && $0.isUrgent }),
+                           "A nearly flat battery was not urgent, or was dropped for something calmer")
+                let empty = Briefing.chips(for: Briefing.Facts())
+                try expect(empty.count == 1 && empty[0].text == "Takvim boş",
+                           "An empty day said nothing at all")
+                let charging = Briefing.chips(for: Briefing.Facts(battery: 9, isCharging: true))
+                try expect(!charging.contains(where: { $0.symbol.hasPrefix("battery") }),
+                           "A charging Mac was told to plug in")
+            }),
+            ("IslandGeometry: the briefing reserves the rows it draws, not one per sentence", {
+                let bare = IslandGeometry.briefingHeight(chipCount: 0)
+                let withChips = IslandGeometry.briefingHeight(chipCount: 1)
+                try expect(withChips > bare, "A row of chips reserved no room")
+                try expect(IslandGeometry.briefingHeight(chipCount: 4) == withChips,
+                           "Chips on one row grew the panel per chip")
+                try expect(withChips < 140, "The briefing still reserves more than it draws")
+            }),
+            ("AIBudget: the ceiling stops the spending before it happens", {
+                try expect(AIBudget.isOver(spent: 0.50, limit: 0.50), "Reaching the limit was not over it")
+                try expect(!AIBudget.isOver(spent: 0.49, limit: 0.50), "Under the limit was refused")
+                try expect(!AIBudget.isOver(spent: 99, limit: 0), "Zero was treated as a ceiling of nothing")
+                try expect(AIBudget.title(0) == "Sınırsız", "No ceiling was not named")
+                try expect(AIBudget.choices.contains(AIBudget.fallback), "The default is not one of the choices")
+            }),
+            ("AIPricing: the mini voice model is not billed as the full one", {
+                let usage = AITokenUsage(inputTokens: 0, outputTokens: 0,
+                                         inputAudioTokens: 10_000, outputAudioTokens: 10_000)
+                let mini = AIPricing.rate(provider: .openAI, model: "gpt-realtime-mini").cost(of: usage)
+                let full = AIPricing.rate(provider: .openAI, model: "gpt-realtime-2.1").cost(of: usage)
+                try expect(mini > 0, "The mini model was counted as free")
+                try expect(mini < full / 2, "The mini model was billed at nearly the full rate")
+                try expect(JarvisProtocol.defaultModel.contains("mini"),
+                           "The default voice model is the expensive one")
+            }),
             ("Briefing: once a day, and never in the small hours", {
                 func date(_ hour: Int, day: Int = 4) throws -> Date {
                     try require(Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: day, hour: hour)),

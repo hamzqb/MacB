@@ -64,6 +64,9 @@ struct IslandAssistantView: View {
         HStack(spacing: MacBDesign.Space.snug) {
             JarvisOrb(state: session.state, input: session.inputLevel, output: session.outputLevel)
                 .frame(width: 26, height: 26)
+            JarvisWaveform(state: session.state,
+                           level: session.state == .speaking ? session.outputLevel : session.inputLevel)
+                .frame(width: 26, height: 14)
             Text(statusText)
                 .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
                 .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
@@ -139,10 +142,12 @@ struct IslandAssistantView: View {
             // No Return shortcut on purpose: a Return meant for the text field
             // must never become a yes to sending the screen.
             Button("Hayır") { session.answerConfirmation(false) }
+                .buttonStyle(IslandCapsuleButtonStyle())
             Button("İzin ver") { session.answerConfirmation(true) }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(IslandCapsuleButtonStyle(isPrimary: true))
         }
-        .controlSize(.small)
+        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+        .buttonStyle(.plain)
         .padding(.horizontal, MacBDesign.Space.snug)
         .padding(.vertical, 4)
         .frame(maxWidth: .infinity)
@@ -279,6 +284,54 @@ struct JarvisOrb: View {
             }
         }
         .allowsHitTesting(false)
+    }
+}
+
+/// Five bars beside the orb that move with whoever is talking.
+///
+/// The orb alone says which state MacB is in but not whether anything is
+/// actually reaching the microphone — a listening orb and a deaf one look the
+/// same. Bars do not: they are flat when nothing is arriving and they move when
+/// it is, which is the one question somebody has while talking to a computer.
+/// Costs nothing; the levels are already being measured for the orb.
+struct JarvisWaveform: View {
+    let state: JarvisSession.State
+    let level: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Only while somebody is talking. Thinking and connecting have the orb's
+    /// own motion, and a waveform there would be pretending to hear something.
+    private var isLive: Bool {
+        switch state {
+        case .listening, .speaking: return true
+        default: return false
+        }
+    }
+
+    var body: some View {
+        let color = JarvisOrb.palette(for: state)[0]
+        GeometryReader { geometry in
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || !isLive)) { context in
+                let time = context.date.timeIntervalSinceReferenceDate
+                let energy = isLive ? min(1, max(0, level)) : 0
+                HStack(alignment: .center, spacing: 2) {
+                    ForEach(0..<5, id: \.self) { bar in
+                        // Each bar runs at its own speed, so the row reads as a
+                        // wave rather than five things blinking together.
+                        let phase = reduceMotion ? 0 : sin(time * (2.4 + Double(bar) * 0.55) + Double(bar))
+                        let height = geometry.size.height * (0.18 + energy * (0.42 + 0.4 * phase))
+                        Capsule()
+                            .fill(color.opacity(0.35 + energy * 0.5))
+                            .frame(height: max(2, height))
+                    }
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+            }
+        }
+        .opacity(isLive ? 1 : 0)
+        .animation(reduceMotion ? nil : MacBDesign.Motion.quick, value: isLive)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 

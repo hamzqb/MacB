@@ -119,7 +119,13 @@ public enum AIPricing {
     public static func rate(provider: AIProvider, model: String) -> AIRate {
         guard provider == .openAI else { return .free }
         let name = model.lowercased()
-        if name.hasPrefix("gpt-realtime") || name.contains("realtime") {
+        if name.contains("realtime") {
+            // The mini model is priced as its own thing; without this line it
+            // was counted at the full model's rate and the meter read three
+            // times what the conversation actually cost.
+            if name.contains("mini") {
+                return AIRate(input: 0.6, output: 2.4, inputAudio: 10, outputAudio: 20, cachedInput: 0.06)
+            }
             return AIRate(input: 4, output: 16, inputAudio: 32, outputAudio: 64, cachedInput: 0.4)
         }
         if name.hasPrefix("gpt-5-nano") { return AIRate(input: 0.05, output: 0.4) }
@@ -141,6 +147,28 @@ public enum AIPricing {
         if dollars < 0.01 { return String(format: "$%.4f", dollars) }
         if dollars < 1 { return String(format: "$%.3f", dollars) }
         return String(format: "$%.2f", dollars)
+    }
+}
+
+/// A ceiling on what MacB may spend in a day.
+///
+/// Not a billing control — OpenAI's own limits are that — but the thing that
+/// stops one forgotten voice conversation running up a number nobody meant to
+/// spend. MacB checks it before it opens anything that costs money, so the
+/// refusal happens before the spending, not after.
+public enum AIBudget {
+    /// Zero means no ceiling, and is offered last on purpose.
+    public static let choices: [Double] = [0.25, 0.50, 1, 2, 5, 0]
+
+    public static let fallback: Double = 0.50
+
+    public static func title(_ dollars: Double) -> String {
+        dollars <= 0 ? "Sınırsız" : "Günde " + AIPricing.money(dollars)
+    }
+
+    /// Whether spending this much today means stopping.
+    public static func isOver(spent: Double, limit: Double) -> Bool {
+        limit > 0 && spent >= limit
     }
 }
 

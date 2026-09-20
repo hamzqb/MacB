@@ -19,7 +19,12 @@ import MacBCore
 @MainActor final class BriefingService: ObservableObject {
     /// The briefing on screen right now, if any.
     @Published private(set) var lines: [String] = []
+    /// The same briefing as chips, for the island. Built from the same facts
+    /// the spoken lines are, so the two can never say different things.
+    @Published private(set) var chips: [Briefing.Chip] = []
     @Published private(set) var givenAt: Date?
+    /// The greeting on its own, so the island can set it apart from the facts.
+    @Published private(set) var greeting = ""
     @Published private(set) var isSpeaking = false
 
     private let preferences: Preferences
@@ -101,13 +106,28 @@ import MacBCore
             guard let self else { return }
             let facts = await self.gather()
             self.lines = Briefing.lines(for: now, name: Self.firstName(), facts: facts)
+            self.greeting = Briefing.opening(for: now, name: Self.firstName())
+            self.chips = Briefing.chips(for: facts)
             if speaking ?? self.preferences.briefingSpeaks { self.speak() }
         }
+    }
+
+    /// Fills the card in without gathering anything.
+    ///
+    /// For the measuring probe, which has to draw the real view to find out
+    /// whether it fits the height the island reserves for it, and must not
+    /// touch the weather, the calendar or the battery to do so.
+    func preview(greeting: String, chips: [Briefing.Chip], lines: [String]) {
+        self.greeting = greeting
+        self.chips = chips
+        self.lines = lines
+        givenAt = Date()
     }
 
     /// Takes the briefing off the island.
     func dismiss() {
         lines = []
+        chips = []
         stopSpeaking()
     }
 
@@ -123,6 +143,8 @@ import MacBCore
         }
         if let now = weather.snapshot {
             facts.weather = "\(now.place) \(now.temperature) derece, \(now.condition.lowercased())."
+            facts.weatherShort = "\(now.temperature)° \(now.condition.lowercased())"
+            facts.weatherSymbol = now.symbol
         }
         let snapshot = monitor.snapshot
         facts.battery = snapshot.batteryPercent.map { Int($0.rounded()) }

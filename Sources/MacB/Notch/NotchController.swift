@@ -765,7 +765,7 @@ struct IslandToast: Equatable {
                     && !(assistant.lines.last?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
                 hasConfirmation: assistant.confirmation != nil)
         case .briefing:
-            return IslandGeometry.briefingHeight(lines: briefing.lines.count)
+            return IslandGeometry.briefingHeight(chipCount: briefing.chips.count)
         }
     }
 

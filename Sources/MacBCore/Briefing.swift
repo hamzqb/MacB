@@ -31,6 +31,10 @@ public enum Briefing {
     /// Everything the briefing might mention, in the order it should be said.
     public struct Facts: Equatable, Sendable {
         public var weather: String?
+        /// The same weather, short enough to sit in a chip: "25° kapalı".
+        public var weatherShort: String?
+        /// The symbol the weather service already chose for it.
+        public var weatherSymbol: String?
         /// The next thing in the calendar today, already written out.
         public var nextEvent: String?
         public var eventCount: Int
@@ -41,10 +45,13 @@ public enum Briefing {
         /// Assistants that are waiting for an answer right now.
         public var waitingAgents: Int
 
-        public init(weather: String? = nil, nextEvent: String? = nil, eventCount: Int = 0,
+        public init(weather: String? = nil, weatherShort: String? = nil, weatherSymbol: String? = nil,
+                    nextEvent: String? = nil, eventCount: Int = 0,
                     reminderCount: Int = 0, battery: Int? = nil, isCharging: Bool = false,
                     waitingAgents: Int = 0) {
             self.weather = weather
+            self.weatherShort = weatherShort
+            self.weatherSymbol = weatherSymbol
             self.nextEvent = nextEvent
             self.eventCount = eventCount
             self.reminderCount = reminderCount
@@ -56,6 +63,63 @@ public enum Briefing {
 
     /// Below this, and not plugged in, the battery is worth a sentence.
     public static let lowBattery = 30
+
+    /// One fact, small enough to read at a glance.
+    ///
+    /// The spoken briefing is sentences, because that is what a voice can say.
+    /// The one on screen is not: five stacked grey sentences is a paragraph
+    /// nobody reads in the second the island is open. The same facts become a
+    /// row of chips — a glyph and two or three words each — so the weather,
+    /// the next thing and the battery are found by shape rather than by
+    /// reading. Both come from the same `Facts`, so they can never disagree.
+    public struct Chip: Equatable, Sendable, Identifiable {
+        public var symbol: String
+        public var text: String
+        /// A chip that is about something the user should act on.
+        public var isUrgent: Bool
+
+        public init(symbol: String, text: String, isUrgent: Bool = false) {
+            self.symbol = symbol
+            self.text = text
+            self.isUrgent = isUrgent
+        }
+
+        public var id: String { symbol + "|" + text }
+    }
+
+    /// At most this many chips. Past four the row wraps, and a wrapped row of
+    /// chips is the paragraph they were meant to replace.
+    public static let maximumChips = 4
+
+    public static func chips(for facts: Facts) -> [Chip] {
+        var chips: [Chip] = []
+        if let short = facts.weatherShort, !short.isEmpty {
+            chips.append(Chip(symbol: facts.weatherSymbol ?? "cloud.sun.fill", text: short))
+        }
+        if let next = facts.nextEvent, !next.isEmpty {
+            let more = facts.eventCount > 1 ? " +\(facts.eventCount - 1)" : ""
+            chips.append(Chip(symbol: "calendar", text: next + more))
+        } else if facts.eventCount == 0 {
+            chips.append(Chip(symbol: "calendar", text: "Takvim boş"))
+        }
+        if facts.reminderCount > 0 {
+            chips.append(Chip(symbol: "checklist", text: "\(facts.reminderCount) hatırlatıcı"))
+        }
+        if facts.waitingAgents > 0 {
+            chips.append(Chip(symbol: "sparkles", text: "\(facts.waitingAgents) asistan bekliyor", isUrgent: true))
+        }
+        if let battery = facts.battery, battery <= lowBattery, !facts.isCharging {
+            chips.append(Chip(symbol: "battery.25", text: "%\(battery)", isUrgent: true))
+        }
+        // An urgent chip is the reason the briefing is worth looking at, so it
+        // survives the cut when there are more facts than room.
+        if chips.count > maximumChips {
+            let urgent = chips.filter(\.isUrgent)
+            let rest = chips.filter { !$0.isUrgent }
+            chips = Array((urgent + rest).prefix(maximumChips))
+        }
+        return chips
+    }
 
     /// The lines of a briefing: the greeting, then only what is actually worth
     /// hearing. A briefing that lists everything every morning stops being

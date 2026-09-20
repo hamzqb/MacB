@@ -170,6 +170,13 @@ import MacBCore
             errorMessage = Self.missingKeyMessage
             return
         }
+        // The ceiling only applies to the provider that charges. A free key
+        // that is already stored should never be refused because a paid one
+        // was used earlier in the day.
+        if !provider.isFree, let cost, cost.isOverDailyLimit {
+            errorMessage = "Bugünlük harcama sınırına ulaşıldı (\(cost.limitText)). Ayarlar \u{203A} Maliyet'ten değiştir ya da ücretsiz bir sağlayıcı seç."
+            return
+        }
         let history = turns
         turns.append(turn)
         errorMessage = nil

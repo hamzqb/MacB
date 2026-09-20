@@ -148,6 +148,31 @@ import Security
                 print("with confirmation: \(Int(IslandGeometry.assistantHeight(showsInput: true, showsCaptions: true, hasConfirmation: true)))")
             }
         }
+        if arguments.contains("--measure-briefing") {
+            // Same check for the briefing card: the island reserves a height
+            // for it, and this draws the real view to see whether it fits.
+            return {
+                let preferences = Preferences()
+                let briefing = BriefingService(preferences: preferences, weather: WeatherService(),
+                                               monitor: SystemMonitorService(), activity: AIActivityService())
+                let chips = [Briefing.Chip(symbol: "cloud.fill", text: "25° kapalı"),
+                             Briefing.Chip(symbol: "calendar", text: "09:30 toplantı +2"),
+                             Briefing.Chip(symbol: "battery.25", text: "%9", isUrgent: true)]
+                briefing.preview(greeting: "İyi günler Hamza.", chips: chips,
+                                 lines: ["İyi günler Hamza.", "Yalova 25 derece, kapalı."])
+                let view = IslandBriefingView(briefing: briefing, close: {}, talk: {})
+                let host = NSHostingView(rootView: view)
+                host.frame = NSRect(x: 0, y: 0, width: IslandGeometry.briefingWidth, height: 400)
+                host.layoutSubtreeIfNeeded()
+                let fitting = host.fittingSize
+                let reserved = IslandGeometry.briefingHeight(chipCount: chips.count)
+                print("width: \(IslandGeometry.briefingWidth) needs: \(Int(fitting.width.rounded()))")
+                print("fits: \(Int(fitting.height.rounded())) reserved: \(Int(reserved.rounded()))")
+                print(fitting.height <= reserved ? "ok: sığıyor" : "MISS: taşıyor")
+                print(fitting.width <= IslandGeometry.briefingWidth ? "ok: genişlik yeter" : "MISS: dar")
+                print("without chips: \(Int(IslandGeometry.briefingHeight(chipCount: 0)))")
+            }
+        }
         if arguments.contains("--verify-keys") {
             // Asks each provider whether its stored key works. Runs inside the
             // application, which owns the Keychain items, so nothing is
