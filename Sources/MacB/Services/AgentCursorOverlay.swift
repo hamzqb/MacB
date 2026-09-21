@@ -32,9 +32,9 @@ import SwiftUI
         guard isEnabled else { return }
         if window == nil { window = makeWindow() }
         guard let window else { return }
-        let size = NSSize(width: 168, height: 52)
-        window.setFrame(NSRect(x: point.x + 14, y: point.y - 62, width: size.width, height: size.height), display: true)
-        window.contentView = NSHostingView(rootView: AgentCursorBadge(label: label))
+        let size = NSSize(width: 38, height: 38)
+        window.setFrame(NSRect(x: point.x + 10, y: point.y - 44, width: size.width, height: size.height), display: true)
+        window.contentView = NSHostingView(rootView: AgentCursorBadge())
         window.orderFrontRegardless()
         isVisible = true
     }
@@ -47,7 +47,7 @@ import SwiftUI
     }
 
     private func makeWindow() -> NSPanel {
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 168, height: 52),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 38, height: 38),
                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -60,35 +60,20 @@ import SwiftUI
 }
 
 private struct AgentCursorBadge: View {
-    let label: String
     var body: some View {
-        HStack(spacing: 8) {
-            ZStack(alignment: .topLeading) {
-                Image(systemName: "cursorarrow")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.45), radius: 4, y: 2)
-                Circle()
-                    .fill(Color(nsColor: .systemOrange))
-                    .frame(width: 7, height: 7)
-                    .offset(x: 17, y: 3)
-                    .opacity(0.95)
-            }
-            Text(label)
-                .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
-                .lineLimit(1)
-                .foregroundStyle(.white.opacity(0.94))
-            Spacer(minLength: 0)
+        ZStack(alignment: .topTrailing) {
+            Image(systemName: "cursorarrow")
+                .font(.system(size: 25, weight: .bold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(Color(nsColor: .systemOrange))
+                .shadow(color: .black.opacity(0.40), radius: 5, y: 3)
+            Circle()
+                .fill(Color(nsColor: .systemOrange))
+                .frame(width: 7, height: 7)
+                .overlay(Circle().stroke(.white.opacity(0.72), lineWidth: 1))
+                .offset(x: -2, y: 2)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.black.opacity(0.72))
-                .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(.white.opacity(0.14), lineWidth: 0.8))
-                .shadow(color: .black.opacity(0.32), radius: 22, y: 12)
-        }
-        .padding(4)
+        .frame(width: 38, height: 38)
+        .accessibilityLabel("MacB göstergesi")
     }
 }

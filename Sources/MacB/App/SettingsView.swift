@@ -2283,7 +2283,7 @@ private struct WatchersSettingsView: View {
             activeList
             settings
         }
-        .onAppear { cursor.pulse(label: "MacB takip modunda") }
+        .onAppear { cursor.pulse(label: "MacB AI takipte") }
     }
 
     private var hero: some View {
@@ -2299,7 +2299,7 @@ private struct WatchersSettingsView: View {
                 }
                 .frame(width: 76, height: 76)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Jarvis gözü")
+                    Text("MacB AI")
                         .font(.system(size: 28, weight: .semibold))
                     Text("Site fiyatı, metin değişimi, GitHub release ve sistem yükünü arkada sakin sakin izler. Bir şey olunca notch’ta haber verir; gereksiz izin istemez.")
                         .font(.system(size: MacBDesign.TypeScale.body))
