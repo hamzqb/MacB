@@ -157,11 +157,11 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     var summary: String {
         switch self {
         case .webSearch:
-            return "Search the web for current or checkable information and get a short answer with sources. Use it for news, prices, facts, research."
+            return "Search the web for current or checkable information. Returns result snippets and the text of the top page, fetched on the Mac for free; answer from them. Use it for news, prices, facts, research."
         case .lookAtScreen:
-            return "Look at what is on the user's screen right now (the user is asked to allow it each time). Use it when they say 'this', 'on my screen', or ask you to read, explain or check something they are looking at, including ads, pages, errors or documents."
+            return "Send a picture of the user's screen to a paid vision model. Costs money, so it is the last resort: for words on screen use read_screen_text, for a web page use read_browser_page, both free and on the Mac. Use this only when what matters is a picture, a layout or a colour."
         case .readScreenText:
-            return "Read the text that is on the user's screen right now, recognised on the Mac itself (the user is asked to allow it each time). PREFER THIS over look_at_screen whenever the answer is in words — an advertisement, an article, an error message, a document, a page. Only use look_at_screen when what matters is a picture, a layout or a colour."
+            return "Read the text that is on the user's screen right now, recognised on the Mac itself, free. PREFER THIS over look_at_screen whenever the answer is in words — an advertisement, an article, an error message, a document, a page. Only use look_at_screen when what matters is a picture, a layout or a colour."
         case .runScenario:
             return "Run one of the user's own saved scenarios by name — a set of steps they wrote themselves, such as 'toplantı modu'. You cannot create or change one, only run one that exists; if the name does not match, say which ones there are."
         case .readSelection:

@@ -238,6 +238,27 @@ import Security
                     .appendingPathComponent("macb-probe-jobs.json"))
             }
         }
+        if let index = arguments.firstIndex(of: "--search-probe"), arguments.count > index + 1 {
+            // The free web search end to end: the results page, the parser and
+            // the top page. Prints counts and sites, not what the pages say.
+            let query = arguments[index + 1]
+            return {
+                let started = Date()
+                guard let url = WebSearchResults.searchURL(for: query),
+                      let html = await MacBJarvisToolbox.fetchHTML(url, timeout: 8) else {
+                    print("MISS: results page could not be fetched"); return
+                }
+                let results = WebSearchResults.parse(html)
+                print("results: \(results.count) in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+                for result in results { print("  \(result.site) — snippet \(result.snippet.count) chars") }
+                if let first = results.first, let page = await MacBJarvisToolbox.fetchHTML(first.url, timeout: 5) {
+                    print("top page text: \(WebSearchResults.pageText(page).count) chars")
+                } else {
+                    print("top page: not readable")
+                }
+                print("total: \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            }
+        }
         if let index = arguments.firstIndex(of: "--job-probe"), arguments.count > index + 1 {
             // Runs one real background job end to end: the free provider, the
             // tool declarations, the policy and the report. No toolbox, so the

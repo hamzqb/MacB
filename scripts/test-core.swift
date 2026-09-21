@@ -2150,6 +2150,29 @@ struct CoreTestRunner {
                 try expect(JarvisTool.allCases.allSatisfy { !$0.rawValue.contains("shutdown") },
                            "Something claims to shut the Mac down")
             }),
+            ("WebSearchResults: free results are read, ads and redirects are handled", {
+                let html = #"""
+                <div class="result result--ad"><a class="result__a" href="https://duckduckgo.com/y.js?ad=1">Reklam</a>
+                <a class="result__snippet" href="x">Satın al</a></div>
+                <div class="result"><a rel="nofollow" class="result__a" href="https://www.mgm.gov.tr/tahmin/il?il=Istanbul">                <b>Istanbul</b> Hava &amp; Durumu</a>
+                <a class="result__snippet" href="https://www.mgm.gov.tr/"><b>Istanbul</b> i&#231;in detaylı hava &quot;tahmini&quot;</a></div>
+                <div class="result"><a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Ftr.wikipedia.org%2Fwiki%2FIstanbul&amp;rut=abc">İstanbul - Vikipedi</a>
+                <a class="result__snippet" href="x">Türkiye'nin en kalabalık şehri.</a></div>
+                <div class="result"><a class="result__a" href="https://www.mgm.gov.tr/tahmin/il?il=Istanbul">Aynı sayfa</a></div>
+                <div class="result"><a class="result__a" href="javascript:alert(1)">Kötü</a></div>
+                """#
+                let results = WebSearchResults.parse(html)
+                try expect(results.count == 2, "Expected two results, got \(results.count)")
+                try expect(results[0].title == "Istanbul Hava & Durumu", "Title: \(results[0].title)")
+                try expect(results[0].snippet == "Istanbul için detaylı hava \"tahmini\"", "Snippet: \(results[0].snippet)")
+                try expect(results[0].site == "mgm.gov.tr", "Site: \(results[0].site)")
+                try expect(results[1].url.absoluteString == "https://tr.wikipedia.org/wiki/Istanbul",
+                           "The redirect was not unwrapped: \(results[1].url)")
+                let page = WebSearchResults.pageText("<html><script>var a = 1</script><style>b{}</style><p>Bugün 25&#176;</p></html>")
+                try expect(page == "Bugün 25°", "Page text: \(page)")
+                try expect(WebSearchResults.searchURL(for: "a b")?.absoluteString.contains("q=a%20b") == true,
+                           "The query was not encoded")
+            }),
             ("IslandGeometry: the assistant sits beside the notch and only grows when asked", {
                 let reading = IslandGeometry.assistantPanelHeight(cameraHeight: 32, showsInput: false,
                                                                   showsDetail: true, hasConfirmation: false)

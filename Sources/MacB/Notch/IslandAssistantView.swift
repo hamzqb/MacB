@@ -74,7 +74,7 @@ struct IslandAssistantPresence: View {
     var body: some View {
         HStack(spacing: MacBDesign.Space.snug) {
             JarvisOrb(state: session.state, input: session.inputLevel, output: session.outputLevel)
-                .frame(width: 20, height: 20)
+                .frame(width: 24, height: 24)
                 .accessibilityLabel("MacB, \(session.islandStatus)")
             if session.isFreeEngine && !hovering {
                 // Free is a mode, not a fault: it gets a mark of its own rather
@@ -329,35 +329,93 @@ struct JarvisOrb: View {
         }
     }
 
-    private var palette: [Color] { JarvisOrb.palette(for: state) }
+    /// Three colours for the plasma inside the orb: the state's two, and a
+    /// neighbouring hue so the swirl has something to swirl against.
+    static func plasma(for state: JarvisSession.State) -> [Color] {
+        let base = palette(for: state)
+        let accent: Color
+        switch state {
+        case .listening: accent = Color(red: 0.55, green: 0.45, blue: 1)
+        case .thinking: accent = Color(red: 1, green: 0.45, blue: 0.85)
+        case .speaking: accent = Color(red: 0.35, green: 0.85, blue: 1)
+        case .connecting: accent = Color(red: 1, green: 0.55, blue: 0.4)
+        case .failed: accent = Color(red: 1, green: 0.6, blue: 0.3)
+        case .idle: accent = Color.white.opacity(0.5)
+        }
+        return [base[0], base[1], accent]
+    }
+
+    /// How fast the plasma turns: slow while waiting, quick while working.
+    private var speed: Double {
+        switch state {
+        case .thinking, .connecting: return 2.2
+        case .speaking: return 1.3
+        case .listening: return 0.9
+        case .idle, .failed: return 0.35
+        }
+    }
 
     var body: some View {
         GeometryReader { geometry in
             let size = min(geometry.size.width, geometry.size.height)
             TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
                 let time = context.date.timeIntervalSinceReferenceDate
-                let pulse = reduceMotion ? 0 : energy
-                let spin = reduceMotion ? 0 : time * (state == .thinking ? 1.6 : 0.4)
+                let pulse = reduceMotion ? 0 : min(1, max(0, energy))
+                let breathe = reduceMotion ? 0 : (sin(time * 1.6) + 1) / 2
+                let spin = reduceMotion ? 0 : time * speed
+                let colors = JarvisOrb.plasma(for: state)
+                let core = size * 0.74
                 ZStack {
+                    // The halo: always breathing a little, swelling with the voice.
                     Circle()
-                        .fill(RadialGradient(colors: [palette[0].opacity(0.45), .clear], center: .center,
-                                             startRadius: size * 0.1, endRadius: size * 0.55))
-                        .scaleEffect(1 + pulse * 0.3)
+                        .fill(RadialGradient(colors: [colors[0].opacity(0.55 + 0.3 * pulse), colors[1].opacity(0.15), .clear],
+                                             center: .center, startRadius: 0, endRadius: size * 0.55))
+                        .scaleEffect(0.95 + breathe * 0.08 + pulse * 0.35)
+                        .blur(radius: size * 0.05)
+                    // The body: dark glass with three lights moving inside it.
+                    ZStack {
+                        Circle().fill(RadialGradient(colors: [colors[1].opacity(0.85), Color.black.opacity(0.92)],
+                                                     center: .center, startRadius: 0, endRadius: core * 0.6))
+                        ForEach(0..<3, id: \.self) { index in
+                            let phase = Double(index) * 2.09
+                            let rate = 1 + Double(index) * 0.37
+                            let reach = core * (0.16 + 0.06 * pulse)
+                            Circle()
+                                .fill(colors[index])
+                                .frame(width: core * (0.58 + 0.18 * pulse), height: core * (0.58 + 0.18 * pulse))
+                                .offset(x: cos(spin * rate + phase) * reach,
+                                        y: sin(spin * rate * 1.23 + phase) * reach)
+                                .blur(radius: core * 0.14)
+                                .blendMode(.plusLighter)
+                        }
+                        // The light the sphere catches from above-left.
+                        Circle()
+                            .fill(RadialGradient(colors: [.white.opacity(0.75), .white.opacity(0)],
+                                                 center: UnitPoint(x: 0.34, y: 0.28),
+                                                 startRadius: 0, endRadius: core * 0.32))
+                            .blendMode(.plusLighter)
+                    }
+                    .frame(width: core, height: core)
+                    .clipShape(Circle())
+                    .scaleEffect(1 + pulse * 0.12 + breathe * 0.02)
+                    // A rim that turns the other way, so the orb reads as an
+                    // object with an edge rather than a blurred dot.
                     Circle()
-                        .fill(AngularGradient(colors: palette + [palette[0]], center: .center, angle: .radians(spin)))
-                        .blur(radius: size * 0.08)
-                        .frame(width: size * 0.68, height: size * 0.68)
-                        .scaleEffect(1 + pulse * 0.22 + (reduceMotion ? 0 : sin(time * 1.7) * 0.02))
-                    Circle()
-                        .fill(RadialGradient(colors: [.white.opacity(0.8), .white.opacity(0)],
-                                             center: UnitPoint(x: 0.38, y: 0.32),
-                                             startRadius: 1, endRadius: size * 0.3))
-                        .frame(width: size * 0.62, height: size * 0.62)
-                        .blendMode(.plusLighter)
-                    Circle()
-                        .strokeBorder(Color.white.opacity(0.25), lineWidth: 0.8)
-                        .frame(width: size * 0.7, height: size * 0.7)
-                        .scaleEffect(1 + pulse * 0.22)
+                        .strokeBorder(AngularGradient(colors: [.white.opacity(0.8), colors[0].opacity(0.25),
+                                                               .white.opacity(0.08), colors[2].opacity(0.6),
+                                                               .white.opacity(0.8)],
+                                                      center: .center, angle: .radians(-spin * 0.7)),
+                                      lineWidth: max(0.8, size * 0.04))
+                        .frame(width: core, height: core)
+                        .scaleEffect(1 + pulse * 0.12 + breathe * 0.02)
+                    // Working: a spark running round the rim.
+                    if state == .thinking || state == .connecting, !reduceMotion {
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: size * 0.1, height: size * 0.1)
+                            .shadow(color: colors[0], radius: size * 0.08)
+                            .offset(x: cos(time * 4) * core * 0.56, y: sin(time * 4) * core * 0.56)
+                    }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .animation(.easeOut(duration: 0.12), value: pulse)

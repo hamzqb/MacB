@@ -34,10 +34,20 @@ struct BrowserAgentPage: Decodable, Sendable {
 }
 
 struct BrowserAgentActionResult: Decodable, Sendable {
+    /// Where the element was on screen, top-left origin, in points.
+    struct Box: Decodable, Sendable {
+        let x: Double
+        let y: Double
+        let w: Double
+        let h: Double
+        var rect: CGRect { CGRect(x: x, y: y, width: w, height: h) }
+    }
+
     let ok: Bool
     let message: String
     let title: String?
     let url: String?
+    let box: Box?
 }
 
 @MainActor
@@ -210,6 +220,11 @@ final class BrowserAgentService {
             const s = getComputedStyle(el), r = el.getBoundingClientRect();
             return s.visibility !== 'hidden' && s.display !== 'none' && r.width > 2 && r.height > 2;
           };
+          const boxOf = (el) => {
+            const r = el.getBoundingClientRect();
+            const chrome = Math.max(0, window.outerHeight - window.innerHeight);
+            return { x: window.screenX + r.left, y: window.screenY + chrome + r.top, w: r.width, h: r.height };
+          };
           const labelFor = (el) => {
             const id = el.id;
             const byFor = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
@@ -222,11 +237,12 @@ final class BrowserAgentService {
             .filter((el) => !['hidden', 'password'].includes((el.type || '').toLowerCase()));
           const el = fields.find((field) => score(field).includes(wanted));
           if (!el) return JSON.stringify({ ok: false, message: 'Alan bulunamadı.', title: document.title, url: location.href });
+          const box = boxOf(el);
           el.focus();
           el.value = value;
           el.dispatchEvent(new Event('input', { bubbles: true }));
           el.dispatchEvent(new Event('change', { bubbles: true }));
-          return JSON.stringify({ ok: true, message: `Alan dolduruldu: ${labelFor(el) || el.placeholder || el.name || el.id}`, title: document.title, url: location.href });
+          return JSON.stringify({ ok: true, message: `Alan dolduruldu: ${labelFor(el) || el.placeholder || el.name || el.id}`, title: document.title, url: location.href, box });
         })()
         """
     }
@@ -241,14 +257,20 @@ final class BrowserAgentService {
             const s = getComputedStyle(el), r = el.getBoundingClientRect();
             return s.visibility !== 'hidden' && s.display !== 'none' && r.width > 2 && r.height > 2;
           };
+          const boxOf = (el) => {
+            const r = el.getBoundingClientRect();
+            const chrome = Math.max(0, window.outerHeight - window.innerHeight);
+            return { x: window.screenX + r.left, y: window.screenY + chrome + r.top, w: r.width, h: r.height };
+          };
           const controls = [...document.querySelectorAll('button, a[href], input[type="button"], input[type="submit"], [role="button"]')]
             .filter(visible);
           const textOf = (el) => clean(el.innerText || el.value || el.getAttribute('aria-label') || el.title || '');
           const el = controls.find((control) => textOf(control).toLocaleLowerCase('tr').includes(wanted));
           if (!el) return JSON.stringify({ ok: false, message: 'Tıklanacak öğe bulunamadı.', title: document.title, url: location.href });
           const label = textOf(el);
+          const box = boxOf(el);
           el.click();
-          return JSON.stringify({ ok: true, message: `Tıklandı: ${label}`, title: document.title, url: location.href });
+          return JSON.stringify({ ok: true, message: `Tıklandı: ${label}`, title: document.title, url: location.href, box });
         })()
         """
     }
