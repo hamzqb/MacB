@@ -266,7 +266,8 @@ private final class Flag: @unchecked Sendable {
         engine: FreeVoiceEngine(
             keys: aiKey,
             model: { [weak self] provider in self?.preferences.model(for: provider) ?? provider.defaultModel },
-            preferred: { [weak self] in AIProvider(rawValue: self?.preferences.aiProvider ?? "") }),
+            preferred: { [weak self] in AIProvider(rawValue: self?.preferences.aiProvider ?? "") },
+            usesLocal: { [weak self] in self?.preferences.localModelEnabled ?? false }),
         cost: aiCost)
     private lazy var mail: MailService = {
         let service = MailService()
@@ -292,7 +293,8 @@ private final class Flag: @unchecked Sendable {
             keys: aiKey,
             model: { [weak self] provider in self?.preferences.model(for: provider) ?? provider.defaultModel },
             preferred: { [weak self] in AIProvider(rawValue: self?.preferences.aiProvider ?? "") },
-            readsScreen: { [weak self] in self?.preferences.freeEngineReadsScreen ?? false }),
+            readsScreen: { [weak self] in self?.preferences.freeEngineReadsScreen ?? false },
+            usesLocal: { [weak self] in self?.preferences.localModelEnabled ?? false }),
         model: { [weak self] in self?.preferences.jarvisModel ?? JarvisProtocol.defaultModel })
     private lazy var jarvisTools = MacBJarvisToolbox(
         keys: aiKey, searchModel: { [weak self] in self?.preferences.aiModel ?? Preferences.defaultAIModel },

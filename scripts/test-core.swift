@@ -2208,6 +2208,82 @@ struct CoreTestRunner {
                 try expect(ownerText.contains("Hamza") && !ownerText.contains("GUEST"), "The owner became a guest")
                 try expect(ProtectedArea.allCases.contains(.assistant), "The assistant cannot be put behind the face")
             }),
+            ("LocalModel: Qwen's template, tool calls in and out, the file", {
+                let tools = [JarvisTool.setVolume.chatDeclaration]
+                let calls = [JarvisCall(callID: "c1", name: "set_volume", arguments: "{\"percent\":30}")]
+                let messages: [[String: Any]] = [
+                    ["role": "system", "content": "Sen MacB'sin."],
+                    ["role": "user", "content": "sesi kıs"],
+                    AIChatStream.assistantToolMessage(calls, text: ""),
+                    AIChatStream.toolResultMessage(callID: "c1", output: "{\"ok\":true}"),
+                    ["role": "assistant", "content": "Kıstım."],
+                    ["role": "user", "content": "sağ ol"]
+                ]
+                let prompt = LocalModel.prompt(messages: messages, tools: tools, reminder: "")
+                try expect(LocalModel.prompt(messages: messages, tools: tools, reminder: "R").hasSuffix("sağ ol\n\nR<|im_end|>\n<|im_start|>assistant\n"),
+                           "The newest request does not carry the reminder")
+                try expect(prompt.hasPrefix("<|im_start|>system\nSen MacB'sin.\n\n# Tools"), "The system turn is not first")
+                try expect(prompt.contains("\"name\":\"set_volume\""), "The tool is not declared")
+                try expect(prompt.contains("<|im_start|>assistant\n<tool_call>\n{\"name\": \"set_volume\", \"arguments\": {\"percent\":30}}\n</tool_call><|im_end|>"),
+                           "A past call is not written back the way Qwen wrote it")
+                try expect(prompt.contains("<|im_start|>user\n<tool_response>\n{\"ok\":true}\n</tool_response><|im_end|>"),
+                           "A tool result is not a user turn with tool_response")
+                try expect(prompt.hasSuffix("<|im_start|>user\nsağ ol<|im_end|>\n<|im_start|>assistant\n"),
+                           "The answer turn is not left open")
+                try expect(prompt == LocalModel.prompt(messages: messages, tools: tools, reminder: ""), "The prompt is not byte-stable")
+                let afterCall = LocalModel.prompt(messages: Array(messages.prefix(4)), tools: tools, reminder: "R")
+                try expect(afterCall.hasSuffix("</tool_response>\n" + LocalModel.afterTool + "<|im_end|>\n<|im_start|>assistant\n"),
+                           "The newest tool result does not say what to do next")
+
+                let output = LocalModel.parse("Bakıyorum.\n<tool_call>\n{\"name\": \"weather\", \"arguments\": {}}\n</tool_call>\n<tool_call>\n{\"name\": \"start_timer\", \"arguments\": {\"minutes\": 5}}\n</tool_call>")
+                try expect(output.text == "Bakıyorum.", "Speech kept tool text: \(output.text)")
+                try expect(output.calls.map(\.name) == ["weather", "start_timer"], "Calls: \(output.calls.map(\.name))")
+                try expect(output.calls[1].argumentObject["minutes"] as? Int == 5, "Arguments were lost")
+                try expect(LocalModel.parse("Tamam <tool_call>\n{\"name\": \"weather\", \"argu").calls.isEmpty,
+                           "A call cut off by the limit was run")
+                try expect(LocalModel.parse("<tool_call>{not json}</tool_call>").calls.isEmpty, "A broken call was run")
+                try expect(LocalModel.current.sha256.count == 64 && LocalModel.current.url.host == "huggingface.co",
+                           "The model file is not pinned")
+                try expect(LocalModel.current.sizeText == "2,5 GB", "Size reads \(LocalModel.current.sizeText)")
+                try expect(LocalModel.idleUnload(onBattery: true) < LocalModel.idleUnload(onBattery: false),
+                           "Battery keeps the model longer")
+                let local = LocalModel.instructions(userName: "Hamza", memory: ["Kahveyi sade içer"])
+                try expect(local.contains("<tool_call>") && !local.contains("Never read out JSON") && !local.contains("GOOD:"),
+                           "The local instructions discourage tool calls again")
+                try expect(local.contains("Hamza") && local.contains("Kahveyi sade içer"), "Name or memory missing")
+                let guestText = LocalModel.instructions(userName: "Hamza", memory: ["Kahveyi sade içer"], guest: true)
+                try expect(local == LocalModel.instructions(userName: "Hamza", memory: ["Kahveyi sade içer"]),
+                           "The instructions change by themselves, so their cache would never be reused")
+                let now = Date(timeIntervalSince1970: 1_790_000_000)
+                try expect(LocalModel.reminder(now: now, timeZone: TimeZone(identifier: "Europe/Istanbul")!).contains("2026"),
+                           "The time is not in the reminder")
+                let fresh = LocalModel.withExamples([["role": "system", "content": "s"], ["role": "user", "content": "u"]])
+                try expect(fresh.first?["content"] as? String == "s" && fresh.last?["content"] as? String == "u"
+                           && fresh.count == LocalModel.examples.count + 2,
+                           "The example is not between the instructions and the conversation")
+                try expect((fresh[fresh.count - 3]["content"] as? String ?? "").contains("Örnek burada bitti"),
+                           "The example does not end clearly")
+                let acted = [["role": "system", "content": "s"]] + Array(messages.dropFirst())
+                try expect(LocalModel.withExamples(acted).count == acted.count,
+                           "The example stayed after a real tool call, and would be recounted as real work")
+                try expect(!guestText.contains("Hamza") && !guestText.contains("Kahve") && guestText.contains("GUEST"),
+                           "A guest heard the owner's name or memory")
+            }),
+            ("SpokenStream: sentences as they are written, never a tool call", {
+                var stream = SpokenStream()
+                try expect(stream.feed("Tamam, bak").isEmpty, "Half a sentence was spoken")
+                try expect(stream.feed("Tamam, bakıyorum. Hava") == ["Tamam, bakıyorum."], "The first sentence waited")
+                try expect(stream.feed("Tamam, bakıyorum. Hava 3.5 derece") .isEmpty, "A decimal point ended a sentence")
+                try expect(stream.feed("Tamam, bakıyorum. Hava 3.5 derece! <tool_") == ["Hava 3.5 derece!"],
+                           "The second sentence was not given")
+                try expect(stream.finish("Tamam, bakıyorum. Hava 3.5 derece! <tool_call>\n{\"name\": \"x\"}\n</tool_call>").isEmpty,
+                           "A tool call was spoken")
+                var tail = SpokenStream()
+                try expect(tail.finish("Görüşürüz 😄") == ["Görüşürüz"], "The last words or the emoji were wrong")
+                try expect(JarvisProtocol.plainSpoken("Saat 10 # 3 👍🏽 tamam") == "Saat 10 # 3 tamam", "Emoji handling broke digits")
+                try expect(JarvisProtocol.plainSpoken("Şunları yaptım:\n- Sesi kıstım\n- Spotify'ı açtım\nBitti.")
+                           == "Şunları yaptım: Sesi kıstım, Spotify'ı açtım, Bitti.", "List items run together")
+            }),
             ("Presence: away, back, the welcome card and what may be named", {
                 try expect(!Presence.isAway(idleSeconds: 60) && Presence.isAway(idleSeconds: 11 * 60), "Away threshold")
                 try expect(Presence.isBack(idleSeconds: 3) && !Presence.isBack(idleSeconds: 120), "Back threshold")

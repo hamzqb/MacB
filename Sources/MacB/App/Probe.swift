@@ -308,6 +308,90 @@ import Security
                     .appendingPathComponent("macb-probe-run.json"))
             }
         }
+        if arguments.contains("--local-llm-probe") {
+            // The local model on the free engine's real prompt: instructions,
+            // tools and the local voice note, then a few Turkish turns. Prints
+            // timings, what it said and which tools it asked for — nothing
+            // runs, and nothing leaves the Mac.
+            return {
+                guard LocalLLM.isInstalled() else { return print("MISS: yerel model yok") }
+                let tools = JarvisTool.freeEngineTools(readsScreen: true)
+                var messages: [[String: Any]] = [[
+                    "role": "system", "content": LocalModel.instructions(userName: "Hamza")
+                ]]
+                if let path = ProcessInfo.processInfo.environment["MACB_LLM_SYSTEM_FILE"],
+                   let text = try? String(contentsOfFile: path, encoding: .utf8) {
+                    messages = [["role": "system", "content": text]]
+                }
+                let declarations = tools.map(\.chatDeclaration)
+                if let dump = ProcessInfo.processInfo.environment["MACB_LLM_DUMP"] {
+                    try? LocalModel.prompt(messages: messages + [["role": "user", "content": "sesi kıs"]], tools: declarations)
+                        .write(toFile: dump, atomically: true, encoding: .utf8)
+                }
+                let turns = values(after: "--local-llm-probe")
+                let asks = turns.isEmpty
+                    ? ["selam, nasılsın", "sesi biraz kıs", "yarın hava nasıl olacak", "bana kısaca bir şaka yap",
+                       "5 dakikalık zamanlayıcı kur", "Safari'yi aç", "teşekkürler kanka"]
+                    : turns
+                // What a conversation does: read the fixed part while the user speaks.
+                var prefix = LocalModel.prompt(messages: LocalModel.withExamples([messages[0]]), tools: declarations, reminder: "")
+                prefix.removeLast("<|im_start|>assistant\n".count)
+                let warm = Date()
+                LocalLLM.shared.prepare(prompt: prefix)
+                _ = LocalLLM.shared.isLoaded
+                print(String(format: "load + instructions: %.2fs, tools: %d, instructions %d chars, tools %d chars",
+                             Date().timeIntervalSince(warm), tools.count,
+                             (messages[0]["content"] as? String ?? "").count,
+                             declarations.map { LocalModel.prompt(messages: [], tools: [$0]).count }.reduce(0, +)))
+                for ask in asks {
+                    messages.append(["role": "user", "content": ask])
+                    let prompt = LocalModel.prompt(messages: LocalModel.withExamples(messages), tools: declarations)
+                    let started = Date()
+                    do {
+                        let first = FirstSentence()
+                        let (text, stats) = try await LocalLLM.shared.generate(prompt: prompt, maximumTokens: 300) { text in
+                            first.see(text, since: started)
+                        }
+                        let output = LocalModel.parse(text)
+                        let total = Date().timeIntervalSince(started)
+                        if let seconds = first.seconds { print(String(format: "  ilk cümle sesli: %.2fs", seconds)) }
+                        print(String(format: "» %@\n  %.2fs total | load %.2fs | read %d new of %d (%.2fs) | %d tok %.1f tok/s",
+                                     ask, total, stats.loadSeconds, stats.promptTokens - stats.reusedTokens,
+                                     stats.promptTokens, stats.readSeconds, stats.generatedTokens, stats.tokensPerSecond))
+                        if !output.text.isEmpty { print("  söz: \(output.text)") }
+                        if ProcessInfo.processInfo.environment["MACB_LLM_RAW"] == "1" {
+                            print("  ham: \(text.replacingOccurrences(of: "\n", with: "⏎"))")
+                        }
+                        for call in output.calls { print("  araç: \(call.name) \(call.arguments)") }
+                        messages.append(AIChatStream.assistantToolMessage(output.calls, text: output.text))
+                        guard !output.calls.isEmpty else { continue }
+                        for call in output.calls {
+                            // Stand-in results, so the answer after them reads like a real one.
+                            let result: [String: Any]
+                            switch call.name {
+                            case "weather": result = ["ok": true, "tomorrow": "17-24°C, parçalı bulutlu, yağmur yok"]
+                            case "read_mail": result = ["ok": true, "important": [["from": "Ayşe", "subject": "Sözleşme taslağı"]]]
+                            default: result = ["ok": true]
+                            }
+                            messages.append(AIChatStream.toolResultMessage(callID: call.callID, output: JarvisProtocol.result(result)))
+                        }
+                        let after = Date()
+                        let (followUp, more) = try await LocalLLM.shared.generate(
+                            prompt: LocalModel.prompt(messages: LocalModel.withExamples(messages), tools: declarations),
+                            maximumTokens: 200)
+                        let spoken = LocalModel.parse(followUp)
+                        print(String(format: "  sonra (%.2fs, %d tok): %@", Date().timeIntervalSince(after),
+                                     more.generatedTokens, spoken.text))
+                        messages.append(AIChatStream.assistantToolMessage(spoken.calls, text: spoken.text))
+                    } catch {
+                        print("» \(ask)\n  MISS: \(error.localizedDescription)")
+                    }
+                }
+                print(String(format: "all: %.1fs", Date().timeIntervalSince(warm)))
+                if let rss = Self.residentMegabytes() { print("memory: \(rss) MB") }
+                LocalLLM.shared.unloadAndWait()
+            }
+        }
         if arguments.contains("--voice-probe") {
             // The briefing's Gemini path without the speaker: fetch, wrap,
             // open in a player, report the length. Nothing is played.
@@ -587,5 +671,28 @@ import Security
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
         return String(decoding: data, as: UTF8.self)
+    }
+
+    /// This process's resident memory, for the probes.
+    static func residentMegabytes() -> Int? {
+        var info = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? Int(info.resident_size / 1_048_576) : nil
+    }
+}
+
+/// When the first sentence of an answer could have been spoken, for the probe.
+private final class FirstSentence: @unchecked Sendable {
+    private var stream = SpokenStream()
+    private(set) var seconds: Double?
+
+    func see(_ text: String, since started: Date) {
+        guard seconds == nil, !stream.feed(text).isEmpty else { return }
+        seconds = Date().timeIntervalSince(started)
     }
 }

@@ -260,7 +260,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .media:
             return "Control music that is playing: play, pause, toggle, next, previous."
         case .setVolume:
-            return "Set the Mac's output volume in percent, 0 to 100."
+            return "Set the Mac's output volume: percent for an exact level (0 to 100), or change for a step from where it is now (+10 a bit louder, -10 a bit quieter, -20 much quieter)."
         case .startTimer:
             return "Start a countdown timer on the island, in minutes."
         case .keepAwake:
@@ -355,7 +355,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .media:
             return object(["action": ["type": "string", "enum": ["play", "pause", "toggle", "next", "previous"]]],
                           required: ["action"])
-        case .setVolume: return object(["percent": ["type": "integer", "minimum": 0, "maximum": 100]], required: ["percent"])
+        case .setVolume: return object(["percent": ["type": "integer", "minimum": 0, "maximum": 100],
+                                        "change": ["type": "integer", "minimum": -100, "maximum": 100]], required: [])
         case .startTimer: return object(["minutes": ["type": "number", "minimum": 0.1, "maximum": 600]], required: ["minutes"])
         case .keepAwake: return object(["minutes": ["type": "integer", "minimum": 0, "maximum": 1440], "off": ["type": "boolean"]])
         case .arrangeWindow:
@@ -791,10 +792,23 @@ public enum JarvisProtocol {
             }
             lines.append(line)
         }
-        var text = lines.joined(separator: " ")
+        // A list read out loses its line breaks; without a comma between the
+        // items the synthesiser runs them together in one breath.
+        let written = lines.filter { !$0.isEmpty }
+        var text = written.enumerated().map { index, line in
+            guard index < written.count - 1, let last = line.last, !".!?,:;…".contains(last) else { return line }
+            return line + ","
+        }.joined(separator: " ")
         for mark in ["**", "__", "```", "`", "~~"] {
             text = text.replacingOccurrences(of: mark, with: "")
         }
+        // A synthesiser reads an emoji by its name — "gülen yüz" in the middle
+        // of a sentence. Digits and # are emoji too, by Unicode's count, so
+        // only the pictures go.
+        text = String(String.UnicodeScalarView(text.unicodeScalars.filter { scalar in
+            let picture = scalar.properties.isEmojiPresentation || (scalar.properties.isEmoji && scalar.value > 0x238C)
+            return !picture && scalar.value != 0xFE0F && scalar.value != 0x200D
+        }))
         return text.split(separator: " ", omittingEmptySubsequences: true)
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)

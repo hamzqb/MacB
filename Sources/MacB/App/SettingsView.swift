@@ -112,6 +112,7 @@ struct SettingsView: View {
     @ObservedObject var watchers: WatchTaskStore
     @ObservedObject var agentCursor: AgentCursorOverlay
     @ObservedObject private var voiceStudio = VoiceStudio.shared
+    @ObservedObject private var localModel = LocalModelStore.shared
     var jarvisHotKeyFailed = false
     @ObservedObject var jarvisMemory: JarvisMemoryStore
     var openPanel: () -> Void
@@ -577,7 +578,10 @@ struct SettingsView: View {
                 message((JarvisEngineChoice(rawValue: preferences.jarvisEngine) ?? .automatic).note)
                 Toggle("Ücretsiz motor ekranı okuyabilsin", isOn: $preferences.freeEngineReadsScreen)
                     .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
-                message("Ekrandaki yazı ve düğme adları bu Mac'te okunur, ama cevap için ücretsiz sağlayıcıya (Gemini, Groq) gider; onlar ücretsiz katmanda bu metni eğitimde kullanabilir. Kapalıyken ekranı yalnız canlı motor okur.")
+                message("Ekrandaki yazı ve düğme adları bu Mac'te okunur, ama cevap için ücretsiz sağlayıcıya (Gemini, Groq) gider; onlar ücretsiz katmanda bu metni eğitimde kullanabilir. Kapalıyken ekranı yalnız canlı motor okur. Yerel model kullanılırken bu ayar gerekmez: yazı Mac'ten çıkmaz.")
+                rowDivider
+                localModelRows
+                rowDivider
                 HStack(spacing: MacBDesign.Space.regular) {
                     Text("Canlı model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     Spacer(minLength: 8)
@@ -2306,6 +2310,36 @@ struct SettingsView: View {
         } else {
             VoiceStudio.shared.previewSystem(identifier: preferences.briefingVoice)
         }
+    }
+
+    /// The local model: download, state, and whether the free engine uses it.
+    @ViewBuilder private var localModelRows: some View {
+        HStack(spacing: MacBDesign.Space.regular) {
+            Text("Yerel model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+            Spacer(minLength: 8)
+            switch localModel.state {
+            case .missing, .failed:
+                Button("İndir (\(localModel.file.sizeText))") { localModel.download() }
+            case .downloading(let progress):
+                ProgressView(value: progress).frame(width: 120)
+                Text("%\(Int(progress * 100))").font(.system(size: MacBDesign.TypeScale.caption).monospacedDigit())
+                    .foregroundStyle(MacBDesign.muted)
+                Button("Vazgeç") { localModel.cancel() }
+            case .verifying:
+                ProgressView().controlSize(.small)
+                Text("Doğrulanıyor…").font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+            case .ready:
+                Label("Hazır", systemImage: "checkmark.circle.fill")
+                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
+                    .foregroundStyle(Color(nsColor: .systemGreen))
+                Button("Çöp Sepeti’ne Taşı") { localModel.moveToTrash() }
+            }
+        }
+        if case .failed(let reason) = localModel.state { message(reason, warning: true) }
+        Toggle("Ücretsiz modda önce yerel modeli kullan", isOn: $preferences.localModelEnabled)
+            .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+            .disabled(localModel.state != .ready)
+        message("\(localModel.file.title) bu Mac'te çalışır: internet gerekmez, sınır yok, ücret yok; söylediğin ve ekrandan okuduğu hiçbir şey Mac'ten çıkmaz. Bir kez indirilir (Hugging Face), parmak izi doğrulanır. Konuşma bitince birkaç dakika içinde bellekten çıkar; pildeyken daha çabuk. Web araması ve hava durumu yine internet ister.")
     }
 
     private func message(_ text: String, warning: Bool = false) -> some View {

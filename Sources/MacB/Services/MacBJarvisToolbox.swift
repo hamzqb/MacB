@@ -248,7 +248,19 @@ import ScreenCaptureKit
         case .media:
             return mediaControl(arguments["action"] as? String ?? "toggle")
         case .setVolume:
-            let percent = max(0, min(100, (arguments["percent"] as? NSNumber)?.intValue ?? 50))
+            let target: Int
+            if let exact = (arguments["percent"] as? NSNumber)?.intValue {
+                target = exact
+            } else if let change = (arguments["change"] as? NSNumber)?.intValue {
+                // "A bit quieter" is a step from where the volume is now.
+                var readError: NSDictionary?
+                let now = NSAppleScript(source: "output volume of (get volume settings)")?
+                    .executeAndReturnError(&readError).int32Value ?? 50
+                target = Int(now) + change
+            } else {
+                return fail("percent ya da change gerekli.")
+            }
+            let percent = max(0, min(100, target))
             var error: NSDictionary?
             NSAppleScript(source: "set volume output volume \(percent)")?.executeAndReturnError(&error)
             return error == nil ? ok(["volume": percent]) : fail("Ses ayarlanamadı.")

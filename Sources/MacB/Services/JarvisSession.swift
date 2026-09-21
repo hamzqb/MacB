@@ -85,6 +85,9 @@ enum JarvisToolOutcome {
     private var freeObservers: Set<AnyCancellable> = []
     /// The free conversation said goodbye; end it once the voice has finished.
     private var freeIsEnding = false
+    /// Some of this turn's answer has already been said, sentence by
+    /// sentence, while the local model was still writing it.
+    private var freeSpokeThisTurn = false
     private var socket: URLSessionWebSocketTask?
     private var receiver: Task<Void, Never>?
     private var audio: JarvisAudio?
@@ -492,19 +495,21 @@ enum JarvisToolOutcome {
     /// on-device recognition, so what goes out is the sentence, not the sound.
     private func startFree(generation current: Int, note: String?) {
         guard freeEngine?.isAvailable == true else {
-            return fail("Ücretsiz mod için ücretsiz bir sağlayıcı anahtarı gerekiyor. Ayarlar \u{203A} Araçlar.")
+            return fail("Ücretsiz mod için yerel modeli indir ya da ücretsiz bir sağlayıcı anahtarı ekle. Ayarlar \u{203A} Asistan.")
         }
         state = .connecting
         observeFreeLevels()
-        freeMessages = [[
-            "role": "system",
-            "content": JarvisProtocol.instructions(
-                now: Date(),
-                userName: NSFullUserName().split(separator: " ").first.map(String.init),
-                memory: memory.facts, persona: persona(), scenarios: scenarioNames(), guest: isGuest)
-                + Self.freeEngineNote
-        ]]
+        let userName = NSFullUserName().split(separator: " ").first.map(String.init)
+        // The local model gets its own, shorter instructions; see
+        // `LocalModel.instructions`.
+        let instructions = freeEngine?.runsLocally == true
+            ? LocalModel.instructions(userName: userName, memory: memory.facts, persona: persona(),
+                                      scenarios: scenarioNames(), guest: isGuest)
+            : JarvisProtocol.instructions(now: Date(), userName: userName, memory: memory.facts, persona: persona(),
+                                          scenarios: scenarioNames(), guest: isGuest) + Self.freeEngineNote
+        freeMessages = [["role": "system", "content": instructions]]
         if let note { append(.jarvis, note) }
+        freeEngine?.prepare(messages: freeMessages, tools: freeEngine?.conversationTools.filter(mayRun) ?? [])
         limitTimer = Timer.scheduledTimer(withTimeInterval: Self.hardLimit, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.generation == current else { return }
@@ -517,7 +522,7 @@ enum JarvisToolOutcome {
     /// What the free engine is told that the live one is not: it is answering
     /// by text and being read aloud, so anything that only works on a screen is
     /// worse than useless here.
-    private static let freeEngineNote = """
+    static let freeEngineNote = """
 
 
         You are running in the free mode: what you write is read aloud by the         Mac's own synthesiser. Write one or two spoken sentences, never         Markdown, never a list, never an address or a path. You cannot see the         screen in this mode — say so if asked. You cannot be interrupted, so do         not ask a question and keep talking.
@@ -563,6 +568,7 @@ enum JarvisToolOutcome {
 
     private func askFree(_ text: String, generation current: Int) {
         freeMessages.append(["role": "user", "content": text])
+        freeSpokeThisTurn = false
         state = .thinking
         inputLevel = 0
         Task { [weak self] in await self?.answerFree(generation: current) }
@@ -574,13 +580,18 @@ enum JarvisToolOutcome {
             guard generation == current, isActive else { return }
             do {
                 let tools = engine.conversationTools.filter(mayRun)
-                let reply = try await engine.answer(messages: freeMessages, tools: tools)
+                // The local model is heard while it writes: each sentence is
+                // said as soon as it is finished.
+                let reply = try await engine.answer(messages: freeMessages, tools: tools) { [weak self] sentence in
+                    self?.sayFree(sentence, generation: current)
+                }
                 guard generation == current, isActive else { return }
-                if let provider = engine.provider {
+                if !reply.isLocal, let provider = engine.provider {
                     cost?.record(provider: provider, model: "", usage: reply.usage)
                 }
                 if reply.calls.isEmpty {
                     freeMessages.append(["role": "assistant", "content": reply.text])
+                    if reply.wasStreamed { return finishFreeSpeech() }
                     speakFree(JarvisProtocol.plainSpoken(reply.text))
                     return
                 }
@@ -588,9 +599,9 @@ enum JarvisToolOutcome {
                 let ending = await runFreeTools(reply.calls, generation: current)
                 guard generation == current, isActive else { return }
                 if ending {
-                    speakFree(JarvisProtocol.plainSpoken(reply.text.isEmpty ? "Görüşürüz." : reply.text))
                     freeIsEnding = true
-                    return
+                    return sayLastFree(reply.wasStreamed && freeSpokeThisTurn ? nil : "Görüşürüz.",
+                                       unless: reply.wasStreamed ? nil : reply.text)
                 }
                 // Trim the tail so a long tool conversation cannot grow without
                 // bound; the system message always stays.
@@ -603,7 +614,42 @@ enum JarvisToolOutcome {
             }
         }
         guard generation == current, isActive else { return }
-        speakFree("Bunu beceremedim.")
+        sayLastFree("Bunu beceremedim.", unless: nil)
+    }
+
+    /// One sentence of an answer still being written.
+    private func sayFree(_ sentence: String, generation current: Int) {
+        guard generation == current, isActive, isFreeEngine else { return }
+        if freeSpokeThisTurn, let last = lines.indices.last, lines[last].speaker == .jarvis {
+            lines[last].text += " " + sentence
+        } else {
+            append(.jarvis, sentence)
+        }
+        freeSpokeThisTurn = true
+        guard TurkishSpeaker.hasTurkishVoice else { return }
+        state = .speaking
+        speaker.append(sentence)
+    }
+
+    /// The last of a streamed answer has been said, or is being said.
+    private func finishFreeSpeech() {
+        guard isActive, isFreeEngine else { return }
+        guard freeSpokeThisTurn, TurkishSpeaker.hasTurkishVoice else {
+            return freeIsEnding ? end() : listenFree()
+        }
+        speaker.finishAppending()
+    }
+
+    /// Closes a turn with `fallback` — or with the model's own `unless`, when
+    /// it wrote words that were not streamed — after whatever was streamed.
+    private func sayLastFree(_ fallback: String?, unless written: String?) {
+        let text = written.flatMap { $0.isEmpty ? nil : JarvisProtocol.plainSpoken($0) } ?? fallback
+        guard freeSpokeThisTurn else {
+            guard let text else { return freeIsEnding ? end() : listenFree() }
+            return speakFree(text)
+        }
+        if let text { sayFree(text, generation: generation) }
+        finishFreeSpeech()
     }
 
     private func runFreeTools(_ calls: [JarvisCall], generation current: Int) async -> Bool {

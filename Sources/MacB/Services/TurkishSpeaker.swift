@@ -107,9 +107,39 @@ import MacBCore
         }
     }
 
+    /// More sentences are on their way: finishing the queue is not the end.
+    private var expectsMore = false
+
+    /// Adds one sentence to what is being said, without cutting it off —
+    /// for an answer that is still being written. `finishAppending` says
+    /// the last one has arrived.
+    func append(_ sentence: String) {
+        let line = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty else { return }
+        if !isSpeaking {
+            stop(notify: false)
+            isSpeaking = true
+            startLevels()
+        }
+        expectsMore = true
+        let utterance = AVSpeechUtterance(string: line)
+        utterance.voice = Self.voice(identifier: preferredVoiceIdentifier())
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.94
+        utterance.pitchMultiplier = 1.02
+        utterance.preUtteranceDelay = synthesizer.isSpeaking ? 0.12 : 0
+        utterance.postUtteranceDelay = 0.04
+        synthesizer.speak(utterance)
+    }
+
+    func finishAppending() {
+        expectsMore = false
+        if isSpeaking, !synthesizer.isSpeaking { finished() }
+    }
+
     func stop() { stop(notify: true) }
 
     private func stop(notify: Bool) {
+        expectsMore = false
         levelTimer?.invalidate()
         levelTimer = nil
         level = 0
@@ -204,7 +234,7 @@ extension TurkishSpeaker: AVSpeechSynthesizerDelegate {
     /// talking, and it heard itself.
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         Task { @MainActor in
-            guard !self.synthesizer.isSpeaking else { return }
+            guard !self.synthesizer.isSpeaking, !self.expectsMore else { return }
             self.finished()
         }
     }

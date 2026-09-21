@@ -38,6 +38,9 @@ rm -rf "$app_dir"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$binary_dir/MacB" "$app_dir/Contents/MacOS/MacB"
 cp Resources/Info.plist "$app_dir/Contents/Info.plist"
+# The local model's GPU kernels, as source: ggml compiles them on this Mac's
+# GPU driver when a model first loads (see scripts/vendor-llama.sh).
+cp -R Vendor/llama-metal "$app_dir/Contents/Resources/ggml-metal"
 # The build number is the commit count, so every build of a new commit reports a
 # number nobody had to remember to raise. A dirty or gitless tree keeps whatever
 # the checked-in plist says, rather than inventing a number.

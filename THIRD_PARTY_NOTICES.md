@@ -1,8 +1,34 @@
 # Third-party notices
 
-MacB ships no third-party source code and no third-party model weights. This
-file records the work MacB learned from, and the licence reasons behind two
+MacB ships one third-party library, llama.cpp, and no third-party model
+weights. This file records that library, the model MacB can download at the
+user's request, the work MacB learned from, and the licence reasons behind two
 deliberate omissions.
+
+## llama.cpp and ggml — vendored source
+
+- Project: [ggml-org/llama.cpp](https://github.com/ggml-org/llama.cpp), release
+  v0.4.1 (commit b29c606), which includes ggml
+- Licence: MIT, Copyright (c) 2023-2026 The ggml authors
+- Where: `Vendor/llama` (the library, compiled into MacB) and
+  `Vendor/llama-metal` (its GPU kernels as source, copied into the app and
+  compiled by the GPU driver). The full licence is in `Vendor/llama/LICENSE`.
+- How it got there: `scripts/vendor-llama.sh`, from an unmodified checkout.
+
+It runs the local model inside MacB's own process. Nothing about it talks to
+the network.
+
+## Qwen 3 4B Instruct (2507) — downloaded on request, not bundled
+
+- Model: Qwen/Qwen3-4B-Instruct-2507, as the 4-bit GGUF file
+  `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` published by unsloth on Hugging Face
+- Licence: Apache 2.0, Copyright Alibaba Cloud (Qwen team)
+- SHA-256: `3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597`
+
+MacB does not ship the weights. They are fetched only when the user presses
+"İndir" under Settings › Asistan › Yerel model, checked against the SHA-256
+above, and kept in `~/Library/Application Support/MacB/Models`. Removing them
+moves the file to the Trash.
 
 ## Glance — architectural reference
 
