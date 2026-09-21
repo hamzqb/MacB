@@ -260,6 +260,7 @@ private final class Flag: @unchecked Sendable {
     private let jarvisMemory = JarvisMemoryStore()
     private let agentJobs = AgentJobStore()
     private let agentCursor = AgentCursorOverlay()
+    private let browserAgent = BrowserAgentService()
     private lazy var agentRunner = AgentJobRunner(
         store: agentJobs,
         engine: FreeVoiceEngine(
@@ -294,7 +295,7 @@ private final class Flag: @unchecked Sendable {
         cost: aiCost,
         media: media, timer: islandTimer, windowLayout: windowLayout, arrangements: arrangements, note: quickNote,
         selection: selectedText, systemMonitor: systemMonitor, weather: weather, aiActivity: aiActivity,
-        memory: jarvisMemory, scenarios: scenarios, watchers: watchers, mail: mail, jobs: agentJobs,
+        memory: jarvisMemory, scenarios: scenarios, watchers: watchers, browserAgent: browserAgent, mail: mail, jobs: agentJobs,
         notify: { [weak self] symbol, message in self?.notifyIsland(symbol: symbol, message: message) })
     private lazy var aiPanel = AIPanelController(assistant: assistant, speech: speech,
                                                  selection: selectedText) { [weak self] in

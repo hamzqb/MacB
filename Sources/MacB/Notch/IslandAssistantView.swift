@@ -230,6 +230,8 @@ struct IslandAssistantView: View {
         case .calendarEvents: return "Takvimine bakayım mı?"
         case .lookAtScreen: return "Ekrana bakayım mı?"
         case .readScreenText: return "Ekrandaki yazıyı okuyayım mı?"
+        case .readBrowserPage: return "Tarayıcıdaki sayfayı okuyayım mı?"
+        case .browserAction: return "Tarayıcıda yapayım mı?"
         case .addReminder: return "Hatırlatıcı ekleyeyim mi?"
         case .addCalendarEvent: return "Takvime ekleyeyim mi?"
         case .powerAction: return "Mac için bu işlemi yapayım mı?"
@@ -242,6 +244,8 @@ struct IslandAssistantView: View {
         switch tool {
         case .lookAtScreen: return "eye"
         case .readScreenText: return "text.viewfinder"
+        case .readBrowserPage: return "safari"
+        case .browserAction: return "cursorarrow.click"
         case .runScenario: return "wand.and.stars"
         case .playMusic: return "play.circle.fill"
         case .powerAction: return "moon.zzz.fill"

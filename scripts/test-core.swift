@@ -1573,7 +1573,7 @@ struct CoreTestRunner {
                            "A memory could be written without a yes")
                 try expect(JarvisTool.lookAtScreen.needsConfirmation(afterReadingOutsideContent: false), "The screen went out unasked")
                 try expect(Set(JarvisTool.allCases.filter(\.readsOutsideContent))
-                           == [.webSearch, .lookAtScreen, .readScreenText, .readSelection, .calendarEvents,
+                           == [.webSearch, .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .calendarEvents,
                                .media, .codingAgents, .readMail],
                            "The outside-content set drifted")
                 try expect(JarvisProtocol.event(from: #"{"type":"response.created"}"#) == .responseStarted, "Response start missed")
@@ -1602,7 +1602,7 @@ struct CoreTestRunner {
             ("JarvisTool: only screen and calendar writes wait for a yes", {
                 let confirmed = Set(JarvisTool.allCases.filter(\.needsConfirmation))
                 try expect(confirmed == [.lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent,
-                                         .remember, .powerAction, .readMail, .createWatcher],
+                                         .remember, .powerAction, .readMail, .createWatcher, .browserAction],
                            "Confirmation set drifted: \(confirmed)")
                 try expect(JarvisTool.readMail.readsPrivateContent,
                            "Somebody's mail was not counted as private")
@@ -1968,7 +1968,7 @@ struct CoreTestRunner {
                     try expect(!AgentPolicy.runsUnattended(tool), "\(tool) acts unattended")
                 }
                 // And some things not even as a suggestion.
-                for tool in [JarvisTool.lookAtScreen, .readScreenText, .readSelection, .powerAction] {
+                for tool in [JarvisTool.lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .powerAction] {
                     try expect(AgentPolicy.isForbidden(tool), "\(tool) was allowed into a background job")
                     try expect(!AgentPolicy.availableTools.contains(tool),
                                "\(tool) was still declared to the job")

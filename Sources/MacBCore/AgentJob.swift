@@ -149,7 +149,7 @@ public enum AgentPolicy {
     /// somebody. Ending the conversation, because there is no conversation.
     public static func isForbidden(_ tool: JarvisTool) -> Bool {
         switch tool {
-        case .lookAtScreen, .readScreenText, .readSelection, .powerAction, .endConversation,
+        case .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .powerAction, .endConversation,
              .startBackgroundJob, .backgroundJobs:
             return true
         default:

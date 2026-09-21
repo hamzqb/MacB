@@ -24,6 +24,7 @@ import ScreenCaptureKit
     private let mail: MailService?
     private let jobs: AgentJobStore?
     private let watchers: WatchTaskStore?
+    private let browserAgent: BrowserAgentService?
     /// Starts a background job. Set by the app, which owns the runner.
     var startJob: ((String) -> Bool)?
     private let aiActivity: AIActivityService
@@ -36,11 +37,13 @@ import ScreenCaptureKit
          windowLayout: WindowLayoutService, arrangements: WindowArrangementService, note: QuickNoteStore,
          selection: SelectedTextService, systemMonitor: SystemMonitorService, weather: WeatherService,
          aiActivity: AIActivityService, memory: JarvisMemoryStore, scenarios: ScenarioStore,
-         watchers: WatchTaskStore? = nil, mail: MailService? = nil, jobs: AgentJobStore? = nil,
+         watchers: WatchTaskStore? = nil, browserAgent: BrowserAgentService? = nil,
+         mail: MailService? = nil, jobs: AgentJobStore? = nil,
          notify: @escaping (String, String) -> Void) {
         self.mail = mail
         self.jobs = jobs
         self.watchers = watchers
+        self.browserAgent = browserAgent
         self.scenarios = scenarios
         self.weather = weather
         self.cost = cost
@@ -93,6 +96,14 @@ import ScreenCaptureKit
             let raw = arguments["url"] as? String ?? ""
             let host = URL(string: raw.contains("://") ? raw : "https://" + raw)?.host ?? raw
             return "Okuduğu bir içerikten sonra \(host) sitesini açmak istiyor."
+        case .browserAction:
+            let action = arguments["action"] as? String ?? "işlem"
+            let target = arguments["target"] as? String ?? ""
+            let value = arguments["value"] as? String
+            if action == "fill" {
+                return "Tarayıcıda “\(target)” alanına “\(value ?? "")” yazılsın mı?"
+            }
+            return "Tarayıcıda “\(target)” öğesine tıklansın mı?"
         case .webSearch:
             return "Özel bilgilerini gördükten sonra internette şunu aramak istiyor: \u{201C}\(arguments["query"] as? String ?? "")\u{201D}"
         case .calendarEvents:
@@ -186,6 +197,10 @@ import ScreenCaptureKit
             return openApplication(arguments["name"] as? String ?? "")
         case .openWebsite:
             return openWebsite(arguments["url"] as? String ?? "")
+        case .readBrowserPage:
+            return await readBrowserPage(maxTextCharacters: (arguments["max_text_chars"] as? NSNumber)?.intValue)
+        case .browserAction:
+            return await browserAction(arguments)
         case .media:
             return mediaControl(arguments["action"] as? String ?? "toggle")
         case .setVolume:
@@ -325,6 +340,44 @@ import ScreenCaptureKit
     }
 
     // MARK: - Watchers
+
+    private func readBrowserPage(maxTextCharacters: Int?) async -> JarvisToolOutcome {
+        guard let browserAgent else { return fail("Browser Agent kapalı.") }
+        do {
+            let page = try await browserAgent.readActivePage(maxTextCharacters: maxTextCharacters ?? 8_000)
+            return ok([
+                "browser": page.browser,
+                "title": page.title,
+                "url": page.url,
+                "text": page.text,
+                "fields": page.fields.map {
+                    ["label": $0.label, "placeholder": $0.placeholder, "name": $0.name,
+                     "type": $0.type, "value": $0.value] as [String: Any]
+                },
+                "buttons": page.buttons.map { ["text": $0.text, "kind": $0.kind] },
+                "links": page.links.map { ["text": $0.text, "kind": $0.kind] },
+                "note": "Read locally from the browser. No screenshot or paid vision model was used."
+            ])
+        } catch {
+            return fail(error.localizedDescription)
+        }
+    }
+
+    private func browserAction(_ arguments: [String: Any]) async -> JarvisToolOutcome {
+        guard let browserAgent else { return fail("Browser Agent kapalı.") }
+        let action = arguments["action"] as? String ?? ""
+        let target = (arguments["target"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = arguments["value"] as? String
+        guard !target.isEmpty else { return fail("Hedef yok.") }
+        do {
+            let result = try await browserAgent.perform(action: action, target: target, value: value)
+            guard result.ok else { return fail(result.message) }
+            notify("cursorarrow.click", result.message)
+            return ok(["message": result.message, "title": result.title ?? "", "url": result.url ?? ""])
+        } catch {
+            return fail(error.localizedDescription)
+        }
+    }
 
     private func createWatcher(_ arguments: [String: Any]) async -> JarvisToolOutcome {
         guard let watchers else { return fail("Takip sistemi kapalı.") }

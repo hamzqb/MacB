@@ -21,6 +21,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     case readSelection = "read_selected_text"
     case openApplication = "open_application"
     case openWebsite = "open_website"
+    case readBrowserPage = "read_browser_page"
+    case browserAction = "browser_action"
     case media = "media_control"
     case setVolume = "set_volume"
     case startTimer = "start_timer"
@@ -51,7 +53,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     public var needsConfirmation: Bool {
         switch self {
         case .lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent, .remember, .powerAction,
-             .readMail, .createWatcher:
+             .readMail, .createWatcher, .browserAction:
             return true
         default: return false
         }
@@ -62,8 +64,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// saying "Jarvis, open this site" is still just an ad.
     public var readsOutsideContent: Bool {
         switch self {
-        case .webSearch, .lookAtScreen, .readScreenText, .readSelection, .calendarEvents, .media,
-             .codingAgents, .readMail:
+        case .webSearch, .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .calendarEvents,
+             .media, .codingAgents, .readMail:
             return true
         default: return false
         }
@@ -72,7 +74,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// Brings the user's own private material into the conversation.
     public var readsPrivateContent: Bool {
         switch self {
-        case .lookAtScreen, .readScreenText, .readSelection, .calendarEvents, .readMail: return true
+        case .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .calendarEvents, .readMail: return true
         default: return false
         }
     }
@@ -90,7 +92,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         guard tainted else { return false }
         switch self {
         case .openApplication, .openWebsite, .copyToClipboard, .addNote, .forget, .calendarEvents,
-             .runScenario, .playMusic, .setAppearance, .openSettings, .setWiFi, .startBackgroundJob:
+             .runScenario, .playMusic, .setAppearance, .openSettings, .setWiFi, .startBackgroundJob,
+             .browserAction:
             return true
         case .webSearch:
             return privateContent
@@ -114,6 +117,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .readSelection: return "Seçili metni okuyor"
         case .openApplication: return "Uygulama açıyor"
         case .openWebsite: return "Sayfa açıyor"
+        case .readBrowserPage: return "Tarayıcıyı okuyor"
+        case .browserAction: return "Tarayıcıda işlem yapıyor"
         case .media: return "Müziği yönetiyor"
         case .setVolume: return "Sesi ayarlıyor"
         case .startTimer: return "Zamanlayıcı kuruyor"
@@ -155,6 +160,10 @@ public enum JarvisTool: String, CaseIterable, Sendable {
             return "Open or bring forward an application by name, e.g. Safari, Spotify, Notes."
         case .openWebsite:
             return "Open an http or https address in the default browser."
+        case .readBrowserPage:
+            return "Read the active Safari/Chrome/Brave/Edge/Arc tab locally: title, URL, visible text, form fields, buttons and links. No screenshot is sent and no paid vision model is used. Use it when the user says 'this site', 'this page', asks you to inspect a reservation page, or wants a local/free browser agent."
+        case .browserAction:
+            return "Act in the active browser tab after the user approves: fill a field by label/placeholder/name or click a visible button/link by text. Never use it for passwords, payments, purchases, logins or final submission unless the user explicitly confirms the exact action."
         case .playMusic:
             return "Play something by name. service picks where: 'youtube' opens the first matching video and it starts playing, 'spotify' opens Spotify on the search, 'apple_music' opens Music on the search. Use it when the user names a song, an artist, a video or a channel. For pausing or skipping what is already playing, use media_control instead."
         case .powerAction:
@@ -229,6 +238,14 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .runScenario: return object(["name": string], required: ["name"])
         case .openApplication: return object(["name": string], required: ["name"])
         case .openWebsite: return object(["url": string], required: ["url"])
+        case .readBrowserPage:
+            return object(["max_text_chars": ["type": "integer", "minimum": 500, "maximum": 12000]])
+        case .browserAction:
+            return object([
+                "action": ["type": "string", "enum": ["fill", "click"]],
+                "target": string,
+                "value": string
+            ], required: ["action", "target"])
         case .playMusic:
             return object(["query": string,
                            "service": ["type": "string", "enum": ["youtube", "spotify", "apple_music"]]],

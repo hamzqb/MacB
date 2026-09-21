@@ -4,7 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case general = "Genel", windows = "Pencereler", widgets = "Widget'lar", tools = "Araçlar", watchers = "Takipçiler", automation = "Otomasyon", appearance = "Görünüm", privacy = "Gizlilik", permissions = "İzinler", doctor = "Doğrulama"
+    case general = "Genel", windows = "Pencereler", widgets = "Widget'lar", tools = "Araçlar", watchers = "MacB AI", automation = "Otomasyon", appearance = "Görünüm", privacy = "Gizlilik", permissions = "İzinler", doctor = "Doğrulama"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -26,7 +26,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .windows: return "Pencerelerini daha az uğraşla yerleştir."
         case .widgets: return "Island'da ne göründüğüne ve hangi sırada durduğuna sen karar ver."
         case .tools: return "Günlük işlerin için güvenli, yerel yardımcılar."
-        case .watchers: return "Fiyat, site, release ve sistem değişimlerini MacB takip etsin."
+        case .watchers: return "Konuşarak takip, web işleri ve yerel otomasyon kur."
         case .automation: return "Bir şey olunca MacB senin yerine yapsın."
         case .appearance: return "Küçük ayrıntılar, daha sakin bir masaüstü."
         case .privacy: return "Özel alanlarını neyin açacağına sen karar ver."
@@ -2271,6 +2271,7 @@ private struct WatchersSettingsView: View {
     @State private var repo = ""
     @State private var systemThreshold = "85"
     @State private var metric: WatchMetric = .cpuPercent
+    @State private var showManualCreate = false
 
     private var quickColumns: [GridItem] {
         [GridItem(.adaptive(minimum: 250), spacing: 12, alignment: .top)]
@@ -2279,8 +2280,9 @@ private struct WatchersSettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             hero
-            quickCreate
+            voiceFirst
             activeList
+            manualFallback
             settings
         }
         .onAppear { cursor.pulse(label: "MacB AI takipte") }
@@ -2301,7 +2303,7 @@ private struct WatchersSettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("MacB AI")
                         .font(.system(size: 28, weight: .semibold))
-                    Text("Site fiyatı, metin değişimi, GitHub release ve sistem yükünü arkada sakin sakin izler. Bir şey olunca notch’ta haber verir; gereksiz izin istemez.")
+                    Text("Konuşarak verdiğin takip ve web işlerini sakin sakin yürütür. Sayfa okuma localdir; tıklama, yazma ve dışarı etki eden işler sende onay bekler.")
                         .font(.system(size: MacBDesign.TypeScale.body))
                         .foregroundStyle(MacBDesign.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2325,6 +2327,65 @@ private struct WatchersSettingsView: View {
         .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(MacBDesign.cardStroke, lineWidth: 0.8))
     }
 
+    private var voiceFirst: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 16) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .fill(LinearGradient(colors: [MacBDesign.accent.opacity(0.30), .pink.opacity(0.16), .cyan.opacity(0.12)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    Image(systemName: "waveform.and.mic")
+                        .font(.system(size: 31, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 70, height: 70)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Konuş, MacB AI kursun")
+                        .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+                    Text("Bu ekran form doldurman için değil. “Bu ürün ucuzlayınca söyle”, “şu sitede stok gelirse haber ver” ya da “tarayıcıdaki rezervasyon formunu doldur” dediğinde MacB işi burada sakince yönetir.")
+                        .font(.system(size: MacBDesign.TypeScale.caption))
+                        .foregroundStyle(MacBDesign.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 10)], spacing: 10) {
+                promptChip("Bu ürün 20.000 altına düşünce haber ver", "tag")
+                promptChip("Bu sayfada stok gelirse söyle", "text.page")
+                promptChip("Bu GitHub reposuna yeni sürüm çıkınca haber ver", "shippingbox")
+                promptChip("CPU 85 üstüne çıkarsa uyar", "gauge.with.dots.needle.67percent")
+                promptChip("Aktif tarayıcıdaki sayfayı oku", "safari")
+                promptChip("Rezervasyon formunu doldur, göndermeden bana sor", "cursorarrow.click")
+            }
+        }
+        .padding(18)
+        .background {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color.primary.opacity(0.035))
+                .overlay(alignment: .bottomLeading) {
+                    Circle().fill(MacBDesign.accent.opacity(0.10)).frame(width: 150, height: 150).blur(radius: 24).offset(x: -70, y: 76)
+                }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).strokeBorder(MacBDesign.cardStroke, lineWidth: 0.8))
+    }
+
+    private func promptChip(_ text: String, _ symbol: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                .foregroundStyle(MacBDesign.accent)
+            Text(text)
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
+                .foregroundStyle(Color.primary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(MacBDesign.cardStroke.opacity(0.85), lineWidth: 0.7))
+    }
+
     private func stat(_ title: String, _ value: String, _ symbol: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: symbol).font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
@@ -2340,46 +2401,81 @@ private struct WatchersSettingsView: View {
 
     private var quickCreate: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Hızlı takip ekle")
-                .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Elle takip ekle")
+                    .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+                Text("Normalde konuşarak kuracaksın; bu bölüm yedek. Link, repo veya sistem eşiği yazarsan MacB AI onu da takip eder.")
+                    .font(.system(size: MacBDesign.TypeScale.caption))
+                    .foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             LazyVGrid(columns: quickColumns, spacing: 12) {
-                creatorCard(symbol: "tag", title: "Fiyat düşünce", tint: .orange) {
-                    TextField("Ürün sayfası", text: $priceURL).textFieldStyle(.roundedBorder)
-                    TextField("Eşik: 19999", text: $priceThreshold).textFieldStyle(.roundedBorder)
-                    Button("Fiyatı takip et") { addPrice() }.disabled(priceURL.isEmpty || Double(priceThreshold.replacingOccurrences(of: ",", with: ".")) == nil)
+                creatorCard(symbol: "tag", title: "Ürün fiyatı", detail: "Ürün linkini ve almak istediğin en yüksek fiyatı gir. Altına inerse haber verir.", tint: .orange) {
+                    TextField("Ürün linki", text: $priceURL).textFieldStyle(.roundedBorder)
+                    TextField("Hedef fiyat, örn. 19999", text: $priceThreshold).textFieldStyle(.roundedBorder)
+                    Button("Fiyat düşünce haber ver") { addPrice() }.disabled(priceURL.isEmpty || Double(priceThreshold.replacingOccurrences(of: ",", with: ".")) == nil)
                 }
-                creatorCard(symbol: "text.page", title: "Sitede metin", tint: .cyan) {
-                    TextField("Sayfa adresi", text: $textURL).textFieldStyle(.roundedBorder)
-                    TextField("Aranacak metin boşsa değişimi izler", text: $textNeedle).textFieldStyle(.roundedBorder)
-                    Button("Siteyi takip et") { addText() }.disabled(textURL.isEmpty)
+                creatorCard(symbol: "text.page", title: "Sayfa değişimi", detail: "Bir yazı görünürse haber verir. Yazıyı boş bırakırsan sayfanın genel değişimini izler.", tint: .cyan) {
+                    TextField("Sayfa linki", text: $textURL).textFieldStyle(.roundedBorder)
+                    TextField("Aranacak yazı, örn. stokta", text: $textNeedle).textFieldStyle(.roundedBorder)
+                    Button("Sayfayı takip et") { addText() }.disabled(textURL.isEmpty)
                 }
-                creatorCard(symbol: "shippingbox", title: "GitHub release", tint: .purple) {
-                    TextField("owner/repo veya GitHub URL", text: $repo).textFieldStyle(.roundedBorder)
-                    Text("Yeni tag çıkınca notch’ta haber verir.").font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
-                    Button("Release takip et") { addRelease() }.disabled(repo.isEmpty)
+                creatorCard(symbol: "shippingbox", title: "GitHub sürümü", detail: "Bir repo yaz. Yeni release/tag çıkınca MacB AI sana haber verir.", tint: .purple) {
+                    TextField("owner/repo veya GitHub linki", text: $repo).textFieldStyle(.roundedBorder)
+                    Button("Yeni sürümü takip et") { addRelease() }.disabled(repo.isEmpty)
                 }
-                creatorCard(symbol: "gauge.with.dots.needle.67percent", title: "Sistem eşiği", tint: .green) {
+                creatorCard(symbol: "gauge.with.dots.needle.67percent", title: "Mac yorulunca", detail: "CPU, bellek veya pil belli seviyeye gelince haber verir. Örn. CPU 85 üstüne çıkarsa.", tint: .green) {
                     Picker("Metrik", selection: $metric) {
                         Text("CPU").tag(WatchMetric.cpuPercent)
                         Text("Bellek").tag(WatchMetric.memoryPercent)
                         Text("Pil").tag(WatchMetric.batteryPercent)
                     }.pickerStyle(.segmented)
-                    TextField("Eşik", text: $systemThreshold).textFieldStyle(.roundedBorder)
-                    Button("Sistemi takip et") { addSystem() }.disabled(Double(systemThreshold.replacingOccurrences(of: ",", with: ".")) == nil)
+                    TextField("Seviye, örn. 85", text: $systemThreshold).textFieldStyle(.roundedBorder)
+                    Button("Bu seviyede haber ver") { addSystem() }.disabled(Double(systemThreshold.replacingOccurrences(of: ",", with: ".")) == nil)
                 }
             }
         }
     }
 
-    private func creatorCard<Content: View>(symbol: String, title: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
+    private var manualFallback: some View {
+        DisclosureGroup(isExpanded: $showManualCreate) {
+            quickCreate
+                .padding(.top, 12)
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                    .foregroundStyle(MacBDesign.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Elle eklemek gerekirse")
+                        .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+                    Text("Konuşma yerine direkt link girmek istediğinde aç.")
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+                        .foregroundStyle(MacBDesign.muted)
+                }
+                Spacer()
+            }
+        }
+        .padding(16)
+        .background(Color.primary.opacity(0.030), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(MacBDesign.cardStroke, lineWidth: 0.7))
+    }
+
+    private func creatorCard<Content: View>(symbol: String, title: String, detail: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 11) {
-            HStack(spacing: 9) {
-                Image(systemName: symbol)
-                    .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
-                    .foregroundStyle(tint)
-                    .frame(width: 28, height: 28)
-                    .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                Text(title).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 9) {
+                    Image(systemName: symbol)
+                        .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+                        .foregroundStyle(tint)
+                        .frame(width: 28, height: 28)
+                        .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    Text(title).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+                }
+                Text(detail)
+                    .font(.system(size: MacBDesign.TypeScale.caption))
+                    .foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             content()
         }
@@ -2392,7 +2488,7 @@ private struct WatchersSettingsView: View {
     private var activeList: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Takip kartları").font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+                Text("MacB AI’ın işleri").font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
                 Spacer()
                 if store.isChecking { ProgressView().controlSize(.small) }
             }
@@ -2401,9 +2497,9 @@ private struct WatchersSettingsView: View {
                     Image(systemName: "sparkle.magnifyingglass")
                         .font(.system(size: 30, weight: .semibold))
                         .foregroundStyle(MacBDesign.accent)
-                    Text("Henüz takip yok")
+                    Text("Henüz iş yok")
                         .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
-                    Text("Bir site, fiyat, repo veya sistem eşiği ekleyince burada canlı kart olarak duracak.")
+                    Text("Konuşarak bir takip, web işi veya sistem uyarısı verdiğinde burada canlı kart olarak duracak.")
                         .font(.system(size: MacBDesign.TypeScale.caption))
                         .foregroundStyle(MacBDesign.muted)
                         .multilineTextAlignment(.center)
