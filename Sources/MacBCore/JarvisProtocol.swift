@@ -497,8 +497,11 @@ public enum JarvisProtocol {
     /// default should not quietly spend triple.
     public static let defaultModel = "gpt-realtime-mini"
     /// The speech-to-speech models, cheapest first. All of them speak Turkish.
-    public static let models = ["gpt-realtime-mini", "gpt-realtime-2.1", "gpt-realtime",
-                                "gpt-4o-realtime-preview"]
+    public static let models = ["gpt-realtime-mini", "gpt-realtime-2.1", "gpt-realtime"]
+    /// Models that used to be selectable but no longer answer on the Realtime API.
+    /// If one is saved in preferences, MacB silently moves back to the cheap
+    /// supported default instead of failing a conversation that could have run.
+    public static let retiredModels: Set<String> = ["gpt-4o-realtime-preview"]
 
     /// What each model costs, in words, for the model picker.
     public static func priceNote(for model: String) -> String {

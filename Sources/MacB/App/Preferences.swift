@@ -350,7 +350,13 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         screenshotShelfEnabled = defaults.bool(forKey: "screenshotShelfEnabled")
         translationTarget = defaults.string(forKey: "translationTarget") ?? "tr"
         jarvisVoice = defaults.string(forKey: "jarvisVoice") ?? JarvisVoice.marin.rawValue
-        jarvisModel = defaults.string(forKey: "jarvisModel") ?? JarvisProtocol.defaultModel
+        let storedJarvisModel = defaults.string(forKey: "jarvisModel") ?? JarvisProtocol.defaultModel
+        if JarvisProtocol.retiredModels.contains(storedJarvisModel) {
+            jarvisModel = JarvisProtocol.defaultModel
+            defaults.set(JarvisProtocol.defaultModel, forKey: "jarvisModel")
+        } else {
+            jarvisModel = storedJarvisModel
+        }
         jarvisEngine = defaults.string(forKey: "jarvisEngine") ?? JarvisEngineChoice.automatic.rawValue
         briefingVoice = defaults.string(forKey: "briefingVoice") ?? ""
         mailEnabled = defaults.bool(forKey: "mailEnabled")
