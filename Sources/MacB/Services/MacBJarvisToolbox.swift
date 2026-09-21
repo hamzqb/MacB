@@ -23,6 +23,7 @@ import ScreenCaptureKit
     private let scenarios: ScenarioStore
     private let mail: MailService?
     private let jobs: AgentJobStore?
+    private let watchers: WatchTaskStore?
     /// Starts a background job. Set by the app, which owns the runner.
     var startJob: ((String) -> Bool)?
     private let aiActivity: AIActivityService
@@ -35,10 +36,11 @@ import ScreenCaptureKit
          windowLayout: WindowLayoutService, arrangements: WindowArrangementService, note: QuickNoteStore,
          selection: SelectedTextService, systemMonitor: SystemMonitorService, weather: WeatherService,
          aiActivity: AIActivityService, memory: JarvisMemoryStore, scenarios: ScenarioStore,
-         mail: MailService? = nil, jobs: AgentJobStore? = nil,
+         watchers: WatchTaskStore? = nil, mail: MailService? = nil, jobs: AgentJobStore? = nil,
          notify: @escaping (String, String) -> Void) {
         self.mail = mail
         self.jobs = jobs
+        self.watchers = watchers
         self.scenarios = scenarios
         self.weather = weather
         self.cost = cost
@@ -244,6 +246,16 @@ import ScreenCaptureKit
                  "waiting_for_you": job.proposals.filter(\.isPending).count] as [String: Any]
             }
             return ok(["running": jobs.running.count, "jobs": listed])
+        case .createWatcher:
+            return await createWatcher(arguments)
+        case .listWatchers:
+            guard let watchers else { return fail("Takip sistemi kapalı.") }
+            let listed = watchers.tasks.prefix(12).map { task in
+                ["title": task.title, "kind": task.kind.title, "target": task.target,
+                 "condition": task.condition.title, "enabled": task.isEnabled,
+                 "status": task.status.title, "last_value": task.lastValue ?? ""] as [String: Any]
+            }
+            return ok(["active": watchers.activeCount, "triggered": watchers.triggeredCount, "watchers": listed])
         case .addReminder:
             return await addReminder(title: arguments["title"] as? String ?? "",
                                      due: JarvisDates.parse(arguments["due"] as? String))
@@ -310,6 +322,45 @@ import ScreenCaptureKit
         case .endConversation:
             return .end
         }
+    }
+
+    // MARK: - Watchers
+
+    private func createWatcher(_ arguments: [String: Any]) async -> JarvisToolOutcome {
+        guard let watchers else { return fail("Takip sistemi kapalı.") }
+        let kind = arguments["kind"] as? String ?? ""
+        let title = arguments["title"] as? String ?? ""
+        let target = arguments["target"] as? String ?? ""
+        let interval = max(5, min(1440, (arguments["interval_minutes"] as? NSNumber)?.intValue ?? 30))
+        let threshold = (arguments["threshold"] as? NSNumber)?.doubleValue ?? 0
+        let condition = arguments["condition"] as? String ?? ""
+        let task: WatchTask
+        switch kind {
+        case "website_price":
+            guard threshold > 0 else { return fail("Fiyat eşiği yok.") }
+            task = watchers.addWebsitePrice(title: title, url: target, threshold: threshold,
+                                            below: condition != "above", intervalMinutes: interval)
+        case "website_text":
+            task = watchers.addWebsiteText(title: title, url: target, text: arguments["text"] as? String,
+                                           intervalMinutes: interval)
+        case "github_release":
+            task = watchers.addGitHubRelease(title: title, repository: target, intervalMinutes: interval)
+        case "system_metric":
+            let metric: WatchMetric
+            switch arguments["metric"] as? String ?? "cpu" {
+            case "memory": metric = .memoryPercent
+            case "battery": metric = .batteryPercent
+            case "app_cpu": metric = .appCPUPercent
+            case "app_memory": metric = .appMemoryMB
+            default: metric = .cpuPercent
+            }
+            task = watchers.addSystemMetric(title: title, metric: metric, threshold: threshold,
+                                            above: condition != "below", appName: target, intervalMinutes: interval)
+        default:
+            return fail("Bilinmeyen takip türü.")
+        }
+        notify(task.kind.symbol, "Takip eklendi: \(task.title)")
+        return ok(["created": task.title, "kind": task.kind.title, "condition": task.condition.title])
     }
 
     // MARK: - Web

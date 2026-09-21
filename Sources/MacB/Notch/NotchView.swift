@@ -17,6 +17,7 @@ struct NotchView: View {
     @ObservedObject var aiActivity: AIActivityService
     @ObservedObject var systemMonitor: SystemMonitorService
     @ObservedObject var processes: ProcessMonitorService
+    @ObservedObject var watchers: WatchTaskStore
     @ObservedObject var lid: LidAngleService
     @ObservedObject var keyboardCleaning: KeyboardCleaningService
     @ObservedObject var timer: TimerService
@@ -271,7 +272,7 @@ struct NotchView: View {
             case .home:
                 IslandWidgetStrip(store: widgets, media: media, timer: timer, clipboard: clipboard,
                                   aiActivity: aiActivity, systemMonitor: systemMonitor,
-                                  processes: processes, recentFiles: recentFiles, tasks: tasks, launcher: launcher,
+                                  processes: processes, watchers: watchers, recentFiles: recentFiles, tasks: tasks, launcher: launcher,
                                   weather: weather, shelf: shelf, note: note,
                                   preferences: preferences, width: layout.width,
                                   isLeaving: presentation.isLeaving, select: select,

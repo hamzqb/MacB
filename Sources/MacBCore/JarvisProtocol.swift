@@ -31,6 +31,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     case readMail = "read_mail"
     case startBackgroundJob = "start_background_job"
     case backgroundJobs = "background_jobs"
+    case createWatcher = "create_watcher"
+    case listWatchers = "list_watchers"
     case addReminder = "add_reminder"
     case addCalendarEvent = "add_calendar_event"
     case addNote = "add_note"
@@ -49,7 +51,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     public var needsConfirmation: Bool {
         switch self {
         case .lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent, .remember, .powerAction,
-             .readMail:
+             .readMail, .createWatcher:
             return true
         default: return false
         }
@@ -122,6 +124,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .readMail: return "Maillere bakıyor"
         case .startBackgroundJob: return "İşi arkaya alıyor"
         case .backgroundJobs: return "Bekleyen işlere bakıyor"
+        case .createWatcher: return "Takip kuruyor"
+        case .listWatchers: return "Takiplere bakıyor"
         case .addReminder: return "Hatırlatıcı ekliyor"
         case .addCalendarEvent: return "Etkinlik ekliyor"
         case .addNote: return "Not alıyor"
@@ -186,6 +190,10 @@ public enum JarvisTool: String, CaseIterable, Sendable {
                 + " do, in their own words. Then tell them it will be ready and stop."
         case .backgroundJobs:
             return "What the background jobs found, and what is still running."
+        case .createWatcher:
+            return "Create a local watcher that checks a website price, website text/change, GitHub latest release, or a system metric and alerts the user in MacB. Use this when the user asks to follow, watch, track, notify, or tell them when something changes."
+        case .listWatchers:
+            return "List local watchers, their last value, status and alert count."
         case .addReminder:
             return "Add a reminder, optionally with a due time (ISO 8601 local time)."
         case .addCalendarEvent:
@@ -251,6 +259,18 @@ public enum JarvisTool: String, CaseIterable, Sendable {
                            "limit": ["type": "integer", "minimum": 1, "maximum": 20]])
         case .startBackgroundJob:
             return object(["task": string], required: ["task"])
+        case .createWatcher:
+            return object([
+                "kind": ["type": "string", "enum": ["website_price", "website_text", "github_release", "system_metric"]],
+                "title": string,
+                "target": string,
+                "condition": ["type": "string", "enum": ["below", "above", "contains", "changed", "version_changed"]],
+                "threshold": ["type": "number"],
+                "text": string,
+                "metric": ["type": "string", "enum": ["cpu", "memory", "battery", "app_cpu", "app_memory"]],
+                "interval_minutes": ["type": "integer", "minimum": 5, "maximum": 1440]
+            ], required: ["kind", "target"])
+        case .listWatchers: return object([:])
         case .addReminder: return object(["title": string, "due": string], required: ["title"])
         case .addCalendarEvent: return object(["title": string, "start": string, "end": string], required: ["title", "start"])
         case .addNote, .copyToClipboard: return object(["text": string], required: ["text"])

@@ -5,6 +5,7 @@ MacB has no account, analytics, telemetry or advertising. Window previews, clipb
 MacB makes network requests only to:
 
 - GitHub Releases, once per day at most, to check whether a newer MacB version exists.
+- The website and GitHub repository URLs that the user explicitly adds under Watchers. A price or text watcher fetches that page on the chosen interval, and a GitHub release watcher asks GitHub for that repository's latest release. The watched URL, last value and baseline stay in `~/Library/Application Support/MacB/watchers.json`; the file is written user-only. MacB does not send these watcher results to an AI provider unless the user separately asks the assistant about them.
 - Spotify artwork hosts when Spotify reports artwork for the playing track.
 - Open-Meteo's geocoding and forecast services when the weather widget is visible. MacB sends the city name entered by the user and the resolved coordinates; it does not request precise device location.
 - OpenAI's API (`api.openai.com`), only when the user has stored an API key and asks something. What is sent is the typed or spoken question, the last few exchanges of the same conversation, and — only when the user picks "summarise" or "fix" on the ring — the text they had selected, capped at 12,000 characters. Requests are made with `store: false`. The key lives in the Keychain and is never written to a file or a log.

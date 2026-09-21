@@ -4,7 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case general = "Genel", windows = "Pencereler", widgets = "Widget'lar", tools = "Araçlar", automation = "Otomasyon", appearance = "Görünüm", privacy = "Gizlilik", permissions = "İzinler", doctor = "Doğrulama"
+    case general = "Genel", windows = "Pencereler", widgets = "Widget'lar", tools = "Araçlar", watchers = "Takipçiler", automation = "Otomasyon", appearance = "Görünüm", privacy = "Gizlilik", permissions = "İzinler", doctor = "Doğrulama"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -12,6 +12,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .windows: return "rectangle.split.2x1"
         case .widgets: return "square.grid.2x2"
         case .tools: return "wrench.and.screwdriver"
+        case .watchers: return "scope"
         case .automation: return "wand.and.rays"
         case .appearance: return "circle.lefthalf.filled"
         case .privacy: return "faceid"
@@ -25,6 +26,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .windows: return "Pencerelerini daha az uğraşla yerleştir."
         case .widgets: return "Island'da ne göründüğüne ve hangi sırada durduğuna sen karar ver."
         case .tools: return "Günlük işlerin için güvenli, yerel yardımcılar."
+        case .watchers: return "Fiyat, site, release ve sistem değişimlerini MacB takip etsin."
         case .automation: return "Bir şey olunca MacB senin yerine yapsın."
         case .appearance: return "Küçük ayrıntılar, daha sakin bir masaüstü."
         case .privacy: return "Özel alanlarını neyin açacağına sen karar ver."
@@ -107,6 +109,8 @@ struct SettingsView: View {
     @ObservedObject var assistant: AIAssistantService
     @ObservedObject var arrangements: WindowArrangementService
     @ObservedObject var keepAwake: KeepAwakeService
+    @ObservedObject var watchers: WatchTaskStore
+    @ObservedObject var agentCursor: AgentCursorOverlay
     var jarvisHotKeyFailed = false
     @ObservedObject var jarvisMemory: JarvisMemoryStore
     var openPanel: () -> Void
@@ -143,6 +147,7 @@ struct SettingsView: View {
                     case .windows: windowsPage
                     case .widgets: widgetsPage
                     case .tools: toolsPage
+                    case .watchers: WatchersSettingsView(store: watchers, cursor: agentCursor)
                     case .automation: AutomationSettingsView(automation: automation, preferences: preferences)
                     case .appearance: appearancePage
                     case .privacy: PrivacySettingsView(faceUnlock: faceUnlock)
@@ -153,7 +158,7 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, MacBDesign.contentSpacing)
                 .padding(.top, 30)
-                .padding(.bottom, 28)
+                .padding(.bottom, selectedPage == .watchers ? 58 : 28)
                 .frame(maxWidth: 630, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -2254,4 +2259,267 @@ struct SettingsView: View {
 /// Which column the resource list is ordered by.
 enum ProcessSort: String, CaseIterable {
     case memory, cpu
+}
+
+private struct WatchersSettingsView: View {
+    @ObservedObject var store: WatchTaskStore
+    @ObservedObject var cursor: AgentCursorOverlay
+    @State private var priceURL = ""
+    @State private var priceThreshold = ""
+    @State private var textURL = ""
+    @State private var textNeedle = ""
+    @State private var repo = ""
+    @State private var systemThreshold = "85"
+    @State private var metric: WatchMetric = .cpuPercent
+
+    private var quickColumns: [GridItem] {
+        [GridItem(.adaptive(minimum: 250), spacing: 12, alignment: .top)]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            hero
+            quickCreate
+            activeList
+            settings
+        }
+        .onAppear { cursor.pulse(label: "MacB takip modunda") }
+    }
+
+    private var hero: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 18) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .fill(LinearGradient(colors: [MacBDesign.accent.opacity(0.35), .purple.opacity(0.20), .blue.opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    Image(systemName: "scope")
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.25), radius: 10, y: 6)
+                }
+                .frame(width: 76, height: 76)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Jarvis gözü")
+                        .font(.system(size: 28, weight: .semibold))
+                    Text("Site fiyatı, metin değişimi, GitHub release ve sistem yükünü arkada sakin sakin izler. Bir şey olunca notch’ta haber verir; gereksiz izin istemez.")
+                        .font(.system(size: MacBDesign.TypeScale.body))
+                        .foregroundStyle(MacBDesign.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 10) {
+                stat("Aktif", "\(store.activeCount)", "bolt.fill")
+                stat("Yakalanan", "\(store.triggeredCount)", "bell.badge.fill")
+                stat("Durum", store.isChecking ? "Bakıyor" : "Sakin", store.isChecking ? "dot.radiowaves.left.and.right" : "checkmark.seal.fill")
+            }
+        }
+        .padding(18)
+        .background {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(MacBDesign.cardFill)
+                .overlay(alignment: .topTrailing) {
+                    Circle().fill(MacBDesign.accent.opacity(0.16)).frame(width: 180, height: 180).blur(radius: 28).offset(x: 70, y: -90)
+                }
+        }
+        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(MacBDesign.cardStroke, lineWidth: 0.8))
+    }
+
+    private func stat(_ title: String, _ value: String, _ symbol: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold)).monospacedDigit()
+                Text(title).font(.system(size: MacBDesign.TypeScale.micro, weight: .medium)).foregroundStyle(MacBDesign.muted)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color.primary.opacity(0.055), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+    }
+
+    private var quickCreate: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Hızlı takip ekle")
+                .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+            LazyVGrid(columns: quickColumns, spacing: 12) {
+                creatorCard(symbol: "tag", title: "Fiyat düşünce", tint: .orange) {
+                    TextField("Ürün sayfası", text: $priceURL).textFieldStyle(.roundedBorder)
+                    TextField("Eşik: 19999", text: $priceThreshold).textFieldStyle(.roundedBorder)
+                    Button("Fiyatı takip et") { addPrice() }.disabled(priceURL.isEmpty || Double(priceThreshold.replacingOccurrences(of: ",", with: ".")) == nil)
+                }
+                creatorCard(symbol: "text.page", title: "Sitede metin", tint: .cyan) {
+                    TextField("Sayfa adresi", text: $textURL).textFieldStyle(.roundedBorder)
+                    TextField("Aranacak metin boşsa değişimi izler", text: $textNeedle).textFieldStyle(.roundedBorder)
+                    Button("Siteyi takip et") { addText() }.disabled(textURL.isEmpty)
+                }
+                creatorCard(symbol: "shippingbox", title: "GitHub release", tint: .purple) {
+                    TextField("owner/repo veya GitHub URL", text: $repo).textFieldStyle(.roundedBorder)
+                    Text("Yeni tag çıkınca notch’ta haber verir.").font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                    Button("Release takip et") { addRelease() }.disabled(repo.isEmpty)
+                }
+                creatorCard(symbol: "gauge.with.dots.needle.67percent", title: "Sistem eşiği", tint: .green) {
+                    Picker("Metrik", selection: $metric) {
+                        Text("CPU").tag(WatchMetric.cpuPercent)
+                        Text("Bellek").tag(WatchMetric.memoryPercent)
+                        Text("Pil").tag(WatchMetric.batteryPercent)
+                    }.pickerStyle(.segmented)
+                    TextField("Eşik", text: $systemThreshold).textFieldStyle(.roundedBorder)
+                    Button("Sistemi takip et") { addSystem() }.disabled(Double(systemThreshold.replacingOccurrences(of: ",", with: ".")) == nil)
+                }
+            }
+        }
+    }
+
+    private func creatorCard<Content: View>(symbol: String, title: String, tint: Color, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(spacing: 9) {
+                Image(systemName: symbol)
+                    .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 28, height: 28)
+                    .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                Text(title).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+            }
+            content()
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(MacBDesign.cardStroke, lineWidth: 0.7))
+    }
+
+    private var activeList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Takip kartları").font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+                Spacer()
+                if store.isChecking { ProgressView().controlSize(.small) }
+            }
+            if store.tasks.isEmpty {
+                VStack(spacing: 10) {
+                    Image(systemName: "sparkle.magnifyingglass")
+                        .font(.system(size: 30, weight: .semibold))
+                        .foregroundStyle(MacBDesign.accent)
+                    Text("Henüz takip yok")
+                        .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+                    Text("Bir site, fiyat, repo veya sistem eşiği ekleyince burada canlı kart olarak duracak.")
+                        .font(.system(size: MacBDesign.TypeScale.caption))
+                        .foregroundStyle(MacBDesign.muted)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(26)
+                .background(Color.primary.opacity(0.028), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            } else {
+                ForEach(store.tasks) { task in watchRow(task) }
+            }
+            if let error = store.errorMessage {
+                Text(error).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(.orange)
+            }
+        }
+    }
+
+    private func watchRow(_ task: WatchTask) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: task.kind.symbol)
+                .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+                .foregroundStyle(statusColor(task))
+                .frame(width: 38, height: 38)
+                .background(statusColor(task).opacity(0.13), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text(task.title).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold)).lineLimit(1)
+                    Text(task.status.title)
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
+                        .foregroundStyle(statusColor(task))
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(statusColor(task).opacity(0.12), in: Capsule())
+                }
+                Text(task.condition.title)
+                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
+                    .foregroundStyle(MacBDesign.muted)
+                    .lineLimit(1)
+                Text([task.lastValue, task.errorMessage, lastChecked(task)].compactMap { $0 }.joined(separator: " · "))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+                    .foregroundStyle(MacBDesign.muted.opacity(0.82))
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: Binding(get: { task.isEnabled }, set: { store.setEnabled(task, $0) }))
+                .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+            Button { Task { await store.check(id: task.id) } } label: { Image(systemName: "arrow.clockwise") }
+                .buttonStyle(.plain).help("Şimdi kontrol et")
+            Button(role: .destructive) { store.remove(task) } label: { Image(systemName: "trash") }
+                .buttonStyle(.plain).help("Kaldır")
+        }
+        .padding(13)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(MacBDesign.cardStroke, lineWidth: 0.7))
+    }
+
+    private var settings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Ajan görünürlüğü").font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+            Toggle(isOn: $cursor.isEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Ekranda MacB imleç göstergesi")
+                        .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                    Text("MacB bir sayfayı kontrol ederken küçük bir imleç etiketi gösterir. Gerçek mouse’u oynatmaz; sadece ne yaptığını görünür kılar.")
+                        .font(.system(size: MacBDesign.TypeScale.caption))
+                        .foregroundStyle(MacBDesign.muted)
+                }
+            }
+            .toggleStyle(.switch)
+            Button("Göstergede dene") { cursor.pulse(label: "MacB burada") }
+        }
+        .padding(16)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(MacBDesign.cardStroke, lineWidth: 0.7))
+    }
+
+    private func addPrice() {
+        guard let threshold = Double(priceThreshold.replacingOccurrences(of: ",", with: ".")) else { return }
+        store.addWebsitePrice(title: hostTitle(priceURL, fallback: "Fiyat takibi"), url: priceURL, threshold: threshold)
+        priceURL = ""; priceThreshold = ""
+    }
+
+    private func addText() {
+        store.addWebsiteText(title: hostTitle(textURL, fallback: "Site takibi"), url: textURL, text: textNeedle)
+        textURL = ""; textNeedle = ""
+    }
+
+    private func addRelease() {
+        store.addGitHubRelease(title: repo, repository: repo)
+        repo = ""
+    }
+
+    private func addSystem() {
+        guard let threshold = Double(systemThreshold.replacingOccurrences(of: ",", with: ".")) else { return }
+        store.addSystemMetric(title: metric.title, metric: metric, threshold: threshold)
+    }
+
+    private func statusColor(_ task: WatchTask) -> Color {
+        switch task.status {
+        case .triggered: return MacBDesign.accent
+        case .failed: return .red
+        case .checking: return .blue
+        case .ok: return .green
+        case .idle: return MacBDesign.muted
+        }
+    }
+
+    private func lastChecked(_ task: WatchTask) -> String? {
+        guard let date = task.lastCheckedAt else { return nil }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "tr_TR")
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func hostTitle(_ raw: String, fallback: String) -> String {
+        var text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !text.contains("://") { text = "https://" + text }
+        return URL(string: text)?.host ?? fallback
+    }
 }

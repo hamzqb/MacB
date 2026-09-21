@@ -51,6 +51,7 @@ struct IslandToast: Equatable {
     private let aiActivity: AIActivityService
     private let systemMonitor: SystemMonitorService
     private let processes: ProcessMonitorService
+    private let watchers: WatchTaskStore
     private let lid: LidAngleService
     private let keyboardCleaning: KeyboardCleaningService
     private let timer: TimerService
@@ -107,6 +108,7 @@ struct IslandToast: Equatable {
          camera: CameraPreviewService, auth: BiometricAuthService,
          recentTargets: RecentTargetStore, aiActivity: AIActivityService,
          systemMonitor: SystemMonitorService, processes: ProcessMonitorService,
+         watchers: WatchTaskStore,
          lid: LidAngleService, keyboardCleaning: KeyboardCleaningService,
          timer: TimerService, widgets: IslandLayoutStore, launcher: AppLauncherStore,
          background: IslandBackgroundStore, weather: WeatherService, note: QuickNoteStore,
@@ -129,7 +131,7 @@ struct IslandToast: Equatable {
         self.tasks = tasks; self.camera = camera; self.auth = auth
         self.recentTargets = recentTargets; self.openSettings = openSettings
         self.aiActivity = aiActivity; self.systemMonitor = systemMonitor
-        self.processes = processes; self.lid = lid; self.keyboardCleaning = keyboardCleaning
+        self.processes = processes; self.watchers = watchers; self.lid = lid; self.keyboardCleaning = keyboardCleaning
         self.timer = timer; self.widgets = widgets; self.launcher = launcher; self.background = background; self.weather = weather; self.note = note
         self.faceUnlock = faceUnlock
         self.systemEvents = systemEvents
@@ -148,7 +150,7 @@ struct IslandToast: Equatable {
             preferences: preferences, recentFiles: recentFiles, clipboard: clipboard,
             fileActivity: fileActivity, tasks: tasks, camera: camera, auth: auth,
             recentTargets: recentTargets, aiActivity: aiActivity, systemMonitor: systemMonitor,
-            processes: processes, lid: lid,
+            processes: processes, watchers: watchers, lid: lid,
             keyboardCleaning: keyboardCleaning, timer: timer, widgets: widgets, launcher: launcher, background: background, weather: weather, note: note,
             faceUnlock: faceUnlock, assistant: assistant, briefing: briefing, jobs: jobs,
             closeAssistant: { [weak self] in self?.stopAssistant() },

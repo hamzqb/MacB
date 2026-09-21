@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - Radial shortcut ring (Fn + two-finger click or three-finger tap) with app, file and per-application slices.
 - AI panel with web search and sources; selected text can be summarised or corrected from the ring, copied and written back in place.
@@ -24,6 +24,8 @@
 - The island's assistant keeps the newest words in a fixed window instead of cutting them off, the orb carries the state in its colour, and a closed island shows it as a small pulsing dot with no transcript.
 - MacB can appear in the Dock and the ⌘Tab switcher, for anyone who goes looking for it there.
 - Weather falls back to OpenWeatherMap when Open-Meteo does not answer and a key is stored.
+- Added local watcher cards for website prices, website text changes, GitHub releases and CPU/RAM/battery thresholds, with notch alerts and a dedicated Settings page.
+- Added a visible MacB agent cursor badge so background checks can show what MacB is doing without moving the real mouse.
 - Fixed: the window-layout hot key handler no longer swallows other MacB shortcuts.
 - Fixed: launching no longer blocks on a Keychain prompt while checking for a stored API key.
 

@@ -44,6 +44,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
     case notes
     case worldClock
     case topProcesses
+    case watchers
 
     /// The name the library, the settings list and VoiceOver all read from, so a
     /// widget cannot end up called three different things in three places.
@@ -65,6 +66,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
         case .notes: return "Not"
         case .worldClock: return "Dünya saati"
         case .topProcesses: return "Kaynak kullanımı"
+        case .watchers: return "Takipçiler"
         }
     }
 
@@ -86,6 +88,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
         case .notes: return "Aklına geleni hemen yaz"
         case .worldClock: return "İkinci bir şehrin saati"
         case .topProcesses: return "En çok RAM ve işlemci yiyenler"
+        case .watchers: return "Fiyat, site ve release uyarıları"
         }
     }
 
@@ -107,13 +110,14 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
         case .notes: return "note.text"
         case .worldClock: return "globe"
         case .topProcesses: return "chart.bar.xaxis"
+        case .watchers: return "scope"
         }
     }
 
     public var category: IslandWidgetCategory {
         switch self {
         case .media, .timer, .clipboard: return .essentials
-        case .assistantActivity, .quickLaunch, .tasks, .recentFiles, .shelf: return .work
+        case .assistantActivity, .quickLaunch, .tasks, .recentFiles, .shelf, .watchers: return .work
         case .systemStats, .battery, .storage, .topProcesses: return .system
         case .calendar, .weather, .notes, .worldClock: return .life
         }
@@ -128,7 +132,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
             return .medium
         case .systemStats, .weather, .recentFiles, .battery, .storage, .worldClock:
             return .small
-        case .topProcesses: return .medium
+        case .topProcesses, .watchers: return .medium
         }
     }
 
@@ -143,7 +147,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
         switch self {
         case .media, .assistantActivity, .systemStats, .topProcesses: return true
         case .timer, .clipboard, .calendar, .weather, .quickLaunch, .tasks,
-             .recentFiles, .battery, .storage, .shelf, .notes, .worldClock: return false
+             .recentFiles, .battery, .storage, .shelf, .notes, .worldClock, .watchers: return false
         }
     }
 
@@ -151,7 +155,7 @@ public enum IslandWidgetKind: String, Codable, CaseIterable, Sendable {
     public var pollsWhileVisible: Bool {
         switch self {
         case .weather, .calendar, .systemStats, .assistantActivity, .battery, .storage,
-             .worldClock, .topProcesses:
+             .worldClock, .topProcesses, .watchers:
             return true
         case .media, .timer, .clipboard, .quickLaunch, .tasks, .recentFiles, .shelf, .notes:
             return false

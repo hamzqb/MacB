@@ -259,6 +259,7 @@ private final class Flag: @unchecked Sendable {
                                                 monitor: systemMonitor, activity: aiActivity, mail: mail)
     private let jarvisMemory = JarvisMemoryStore()
     private let agentJobs = AgentJobStore()
+    private let agentCursor = AgentCursorOverlay()
     private lazy var agentRunner = AgentJobRunner(
         store: agentJobs,
         engine: FreeVoiceEngine(
@@ -273,6 +274,8 @@ private final class Flag: @unchecked Sendable {
     }()
     private lazy var scenarios = ScenarioStore(keepAwake: keepAwake, arrangements: arrangements,
                                                media: media, timer: islandTimer)
+    private lazy var watchers = WatchTaskStore(systemMonitor: systemMonitor, processes: processes,
+                                               notify: { [weak self] symbol, message in self?.notifyIsland(symbol: symbol, message: message) })
     private lazy var jarvis = JarvisSession(
         keys: aiKey, memory: jarvisMemory, cost: aiCost,
         voice: { [weak self] in JarvisVoice(rawValue: self?.preferences.jarvisVoice ?? "") ?? .marin },
@@ -291,8 +294,8 @@ private final class Flag: @unchecked Sendable {
         cost: aiCost,
         media: media, timer: islandTimer, windowLayout: windowLayout, arrangements: arrangements, note: quickNote,
         selection: selectedText, systemMonitor: systemMonitor, weather: weather, aiActivity: aiActivity,
-        memory: jarvisMemory, scenarios: scenarios, mail: mail, jobs: agentJobs,
-        notify: { [weak self] symbol, message in self?.notch.notify(symbol: symbol, message: message) })
+        memory: jarvisMemory, scenarios: scenarios, watchers: watchers, mail: mail, jobs: agentJobs,
+        notify: { [weak self] symbol, message in self?.notifyIsland(symbol: symbol, message: message) })
     private lazy var aiPanel = AIPanelController(assistant: assistant, speech: speech,
                                                  selection: selectedText) { [weak self] in
         UserDefaults.standard.set("Araçlar", forKey: "settingsPage")
@@ -305,7 +308,7 @@ private final class Flag: @unchecked Sendable {
                                             fileActivity: fileActivity, tasks: tasks, camera: camera,
                                             auth: biometricAuth, recentTargets: recentTargets,
                                             aiActivity: aiActivity, systemMonitor: systemMonitor,
-                                            processes: processes, lid: lid,
+                                            processes: processes, watchers: watchers, lid: lid,
                                             keyboardCleaning: keyboardCleaning,
                                             timer: islandTimer, widgets: widgetLayout, launcher: launcher,
                                             background: islandBackground, weather: weather,
@@ -398,6 +401,7 @@ private final class Flag: @unchecked Sendable {
         aiActivity.start()
         systemMonitor.start()
         processes.start()
+        watchers.start()
         lid.setOpenAngle(preferences.lidHingeAngle)
         lid.setEnabled(preferences.lidHingeEnabled)
         applyPreferences()
@@ -899,6 +903,11 @@ private final class Flag: @unchecked Sendable {
         onboardingWindow?.makeKeyAndOrderFront(nil)
     }
 
+
+    private func notifyIsland(symbol: String, message: String) {
+        notch.notify(symbol: symbol, message: message)
+    }
+
     private func refreshSettingsContent() {
         settingsWindow?.contentView = NSHostingView(rootView: SettingsView(preferences: preferences, permissions: permissions,
             spotify: spotify, appleMusic: appleMusic, browserMedia: browserMedia, camera: camera, shelf: shelf, hotKey: hotKey,
@@ -908,7 +917,7 @@ private final class Flag: @unchecked Sendable {
             faceUnlock: faceUnlock, launcher: launcher, automation: automation,
             loginItem: loginItem, aiKey: aiKey, aiCost: aiCost, mail: mail, briefing: briefing, scenarios: scenarios,
             assistant: assistant,
-            arrangements: arrangements, keepAwake: keepAwake,
+            arrangements: arrangements, keepAwake: keepAwake, watchers: watchers, agentCursor: agentCursor,
             jarvisHotKeyFailed: jarvisHotKey.failed, jarvisMemory: jarvisMemory,
             openPanel: { [weak self] in self?.openNotch() }))
     }
@@ -1049,6 +1058,7 @@ private final class Flag: @unchecked Sendable {
         aiActivity.stop()
         systemMonitor.stop()
         processes.stop()
+        watchers.stop()
         keyboardCleaning.stop()
         recentFiles.stop()
         clipboardShelf.stop()
@@ -1066,6 +1076,7 @@ private final class Flag: @unchecked Sendable {
         aiActivity.start()
         systemMonitor.start()
         processes.start()
+        watchers.start()
         applyPreferences()
         // Somebody has just sat back down. This is the moment a job that
         // finished while they were gone is worth showing.
@@ -1085,6 +1096,7 @@ private final class Flag: @unchecked Sendable {
         aiActivity.stop()
         systemMonitor.stop()
         processes.stop()
+        watchers.stop()
         keyboardCleaning.stop()
         recentFiles.stop()
         clipboardShelf.stop()

@@ -1602,7 +1602,7 @@ struct CoreTestRunner {
             ("JarvisTool: only screen and calendar writes wait for a yes", {
                 let confirmed = Set(JarvisTool.allCases.filter(\.needsConfirmation))
                 try expect(confirmed == [.lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent,
-                                         .remember, .powerAction, .readMail],
+                                         .remember, .powerAction, .readMail, .createWatcher],
                            "Confirmation set drifted: \(confirmed)")
                 try expect(JarvisTool.readMail.readsPrivateContent,
                            "Somebody's mail was not counted as private")
@@ -1611,6 +1611,35 @@ struct CoreTestRunner {
                     try expect((declaration["parameters"] as? [String: Any])?["type"] as? String == "object", "\(tool) has no schema")
                     try expect(!(declaration["description"] as? String ?? "").isEmpty, "\(tool) is undocumented")
                 }
+            }),
+            ("WatchTask: prices, page changes and thresholds are evaluated locally", {
+                try expect(PriceExtractor.firstPrice(in: "Bugün ₺1.299,90") == 1299.9,
+                           "Turkish price format was not read")
+                try expect(PriceExtractor.firstPrice(in: "$1,299.90 now") == 1299.9,
+                           "Dollar price format was not read")
+                try expect(PriceExtractor.firstPrice(in: "1.299 TL") == 1299,
+                           "Trailing TL price format was not read")
+
+                var textTask = WatchTask(title: "Site", kind: .websiteText, target: "https://example.com",
+                                         condition: .textChanged)
+                let first = WatchEvaluation.evaluate(task: textTask,
+                                                     reading: WatchReading(displayValue: "İlk", rawValue: " Merhaba\nMacB "))
+                try expect(!first.triggered && first.baseline == "Merhaba MacB",
+                           "The first page check did not become a clean baseline")
+                textTask.baseline = first.baseline
+                let changed = WatchEvaluation.evaluate(task: textTask,
+                                                       reading: WatchReading(displayValue: "Yeni", rawValue: "Merhaba Jarvis"))
+                try expect(changed.triggered && changed.message == "Sayfa değişti",
+                           "A changed page was not reported")
+
+                let metricTask = WatchTask(title: "CPU", kind: .systemMetric, target: "cpu",
+                                           condition: .metricAbove(.cpuPercent, 80))
+                let high = WatchEvaluation.evaluate(task: metricTask,
+                                                    reading: WatchReading(displayValue: "87%", numericValue: 87, rawValue: "87"))
+                try expect(high.triggered, "A high system metric did not trigger")
+                try expect(WatchTask(title: "Hızlı", kind: .websiteText, target: "x",
+                                     condition: .textChanged, intervalMinutes: 1).intervalMinutes == 5,
+                           "Watcher interval was allowed to poll too aggressively")
             }),
             ("AIProvider: a key only fits the provider it belongs to", {
                 try expect(AIKeyFormat.looksLikeKey("gsk_" + String(repeating: "a", count: 40), for: .groq),

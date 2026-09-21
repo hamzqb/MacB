@@ -11,6 +11,7 @@ struct IslandWidgetStrip: View {
     @ObservedObject var aiActivity: AIActivityService
     @ObservedObject var systemMonitor: SystemMonitorService
     @ObservedObject var processes: ProcessMonitorService
+    @ObservedObject var watchers: WatchTaskStore
     @ObservedObject var recentFiles: RecentFileStore
     @ObservedObject var tasks: TaskStore
     @ObservedObject var launcher: AppLauncherStore
@@ -156,6 +157,7 @@ struct IslandWidgetStrip: View {
         case .notes: NotesWidget(note: note)
         case .worldClock: WorldClockWidget(preferences: preferences)
         case .topProcesses: TopProcessesWidget(processes: processes)
+        case .watchers: WatchersWidget(watchers: watchers)
         }
     }
 
@@ -1301,5 +1303,69 @@ struct WidgetEmptyState: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .accessibilityElement(children: .combine)
         .accessibilityLabel([title, hint].compactMap { $0 }.joined(separator: ", "))
+    }
+}
+
+
+struct WatchersWidget: View {
+    @ObservedObject var watchers: WatchTaskStore
+
+    var body: some View {
+        WidgetCard {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
+                WidgetCaption("Takipçiler")
+                Spacer(minLength: 0)
+                if let latest = watchers.latest {
+                    HStack(spacing: MacBDesign.Space.tight) {
+                        Image(systemName: latest.kind.symbol)
+                            .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+                            .foregroundStyle(color(latest))
+                        VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                            Text(latest.title)
+                                .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+                                .foregroundStyle(MacBDesign.IslandToken.primaryText)
+                                .lineLimit(1)
+                            Text(latest.lastValue ?? latest.condition.title)
+                                .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
+                                .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+                                .lineLimit(1)
+                        }
+                    }
+                } else {
+                    Label("Takip yok", systemImage: "scope")
+                        .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
+                        .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+                }
+                Spacer(minLength: 0)
+                HStack(spacing: MacBDesign.Space.tight) {
+                    mini("Aktif", watchers.activeCount)
+                    mini("Alarm", watchers.triggeredCount)
+                    Spacer(minLength: 0)
+                    if watchers.isChecking { ProgressView().controlSize(.small).tint(MacBDesign.IslandToken.accent) }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Takipçiler, \(watchers.activeCount) aktif")
+    }
+
+    private func mini(_ label: String, _ value: Int) -> some View {
+        Text("\(label) \(value)")
+            .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
+            .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+            .monospacedDigit()
+            .padding(.horizontal, MacBDesign.Space.snug)
+            .padding(.vertical, MacBDesign.Space.hair)
+            .background(MacBDesign.IslandToken.Fill.strong, in: Capsule())
+    }
+
+    private func color(_ task: WatchTask) -> Color {
+        switch task.status {
+        case .triggered: return MacBDesign.IslandToken.accent
+        case .failed: return .red
+        case .checking: return .blue
+        case .ok: return .green
+        case .idle: return MacBDesign.IslandToken.secondaryText
+        }
     }
 }
