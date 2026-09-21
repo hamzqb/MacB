@@ -48,16 +48,10 @@ public enum JarvisTool: String, CaseIterable, Sendable {
 
     /// Needs a yes in the panel before it runs, every time.
     ///
-    /// Memory is on this list because what is remembered is replayed into
-    /// every later conversation: a fact slipped in once would steer them all.
-    public var needsConfirmation: Bool {
-        switch self {
-        case .lookAtScreen, .readScreenText, .addReminder, .addCalendarEvent, .remember, .powerAction,
-             .readMail, .createWatcher, .browserAction:
-            return true
-        default: return false
-        }
-    }
+    /// MacB is meant to feel direct: opening, reading, writing a note or setting
+    /// up a watcher should not stop for a yes. The hard stop is money: payment,
+    /// checkout, card fields or purchase-like browser actions still ask.
+    public var needsConfirmation: Bool { false }
 
     /// Brings text written by someone else into the conversation: a web page,
     /// the screen, a selection, a calendar invitation, a track title. An ad
@@ -88,18 +82,34 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// one road out, and a page could otherwise have Jarvis carry the calendar
     /// to a site in a search. Plain reading and answering stay free.
     public func needsConfirmation(afterReadingOutsideContent tainted: Bool, privateContent: Bool = false) -> Bool {
-        if needsConfirmation { return true }
-        guard tainted else { return false }
-        switch self {
-        case .openApplication, .openWebsite, .copyToClipboard, .addNote, .forget, .calendarEvents,
-             .runScenario, .playMusic, .setAppearance, .openSettings, .setWiFi, .startBackgroundJob,
-             .browserAction:
-            return true
-        case .webSearch:
-            return privateContent
-        default:
-            return false
-        }
+        needsConfirmation(call: nil, afterReadingOutsideContent: tainted, privateContent: privateContent)
+    }
+
+    public func needsConfirmation(call: JarvisCall?, afterReadingOutsideContent tainted: Bool,
+                                  privateContent: Bool = false) -> Bool {
+        if self == .browserAction, let call, Self.isMoneyRelatedBrowserAction(call.argumentObject) { return true }
+        return false
+    }
+
+    public static func isMoneyRelatedBrowserAction(_ arguments: [String: Any]) -> Bool {
+        let action = (arguments["action"] as? String ?? "").lowercased()
+        let target = arguments["target"] as? String ?? ""
+        let value = arguments["value"] as? String ?? ""
+        let haystack = [action, target, value].joined(separator: " ")
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "tr_TR"))
+            .lowercased()
+            .replacingOccurrences(of: "ı", with: "i")
+        let words = [
+            "ode", "odeme", "odeme yap", "satin al", "satinal", "alisverisi tamamla",
+            "siparis ver", "siparisi tamamla", "sepeti onayla", "checkout", "pay", "payment",
+            "purchase", "buy", "place order", "complete order", "subscribe", "subscription",
+            "abonelik", "kart", "kredi karti", "credit card", "card number", "cvv", "cvc",
+            "guvenlik kodu", "son kullanma", "expiry", "billing", "fatura", "invoice",
+            "deposit", "kapora", "ucret", "price", "total"
+        ]
+        if words.contains(where: { haystack.contains($0) }) { return true }
+        let digits = value.filter(\.isNumber)
+        return digits.count >= 12 && digits.count <= 19
     }
 
     /// What the panel says while it runs.

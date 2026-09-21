@@ -614,7 +614,7 @@ enum JarvisToolOutcome {
             }
             // The same gate as the live engine, and for the same reason: a free
             // model is not a more trusted one.
-            if needsUserApproval(for: tool) {
+            if needsUserApproval(for: tool, call: call) {
                 let allowed = await ask(tool, text: toolbox.confirmationText(for: tool, call: call))
                 guard generation == current else { return false }
                 guard allowed else {
@@ -688,7 +688,7 @@ enum JarvisToolOutcome {
                                                    output: JarvisProtocol.result(["ok": false, "error": "unknown tool"])))
                 continue
             }
-            if needsUserApproval(for: tool) {
+            if needsUserApproval(for: tool, call: call) {
                 let allowed = await ask(tool, text: toolbox.confirmationText(for: tool, call: call))
                 guard generation == current else { return }
                 guard allowed else {
@@ -735,9 +735,10 @@ enum JarvisToolOutcome {
     }
 
 
-    private func needsUserApproval(for tool: JarvisTool) -> Bool {
+    private func needsUserApproval(for tool: JarvisTool, call: JarvisCall) -> Bool {
         if allowedReadTools.contains(tool) { return false }
-        return tool.needsConfirmation(afterReadingOutsideContent: hasReadOutsideContent,
+        return tool.needsConfirmation(call: call,
+                                      afterReadingOutsideContent: hasReadOutsideContent,
                                       privateContent: hasReadPrivateContent)
     }
 
