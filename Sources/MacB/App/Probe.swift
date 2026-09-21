@@ -308,6 +308,58 @@ import Security
                     .appendingPathComponent("macb-probe-run.json"))
             }
         }
+        if arguments.contains("--voice-probe") {
+            // The briefing's Gemini path without the speaker: fetch, wrap,
+            // open in a player, report the length. Nothing is played.
+            return {
+                let started = Date()
+                guard let wav = await VoiceStudio.geminiWAV(text: "Günaydın Hamza. Bugün hava güzel.",
+                                                            voice: GeminiSpeech.voices[0]) else {
+                    return print("MISS: Gemini ses vermedi")
+                }
+                let player = try? AVAudioPlayer(data: wav)
+                print("wav: \(wav.count) bytes, \(String(format: "%.1f", player?.duration ?? 0)) s, "
+                      + "\(Int(Date().timeIntervalSince(started) * 1000)) ms " + (player == nil ? "MISS: açılmadı" : "ok"))
+            }
+        }
+        if arguments.contains("--tts-probe") {
+            // Which speech models the Gemini key can use, and whether one
+            // answers with audio. Prints names, status codes and byte counts —
+            // never the key, never the audio.
+            return {
+                guard let key = AIKeyStore().read(.gemini) else { return print("gemini anahtarı yok") }
+                var list = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200")!)
+                list.setValue(key, forHTTPHeaderField: "x-goog-api-key")
+                guard let (data, _) = try? await URLSession.shared.data(for: list),
+                      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let models = object["models"] as? [[String: Any]] else { return print("model listesi alınamadı") }
+                let names = models.compactMap { $0["name"] as? String }.filter { $0.contains("tts") }
+                print("tts models: \(names)")
+                for name in names.prefix(3) {
+                    var request = URLRequest(url: URL(string: "https://generativelanguage.googleapis.com/v1beta/\(name):generateContent")!)
+                    request.httpMethod = "POST"
+                    request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
+                    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                    let body: [String: Any] = [
+                        "contents": [["parts": [["text": "Günaydın, bugün hava güzel."]]]],
+                        "generationConfig": ["responseModalities": ["AUDIO"],
+                                             "speechConfig": ["voiceConfig": ["prebuiltVoiceConfig": ["voiceName": "Kore"]]]]
+                    ]
+                    request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                    let started = Date()
+                    guard let (reply, response) = try? await URLSession.shared.data(for: request) else {
+                        print("\(name): ağ hatası"); continue
+                    }
+                    let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    let json = (try? JSONSerialization.jsonObject(with: reply)) as? [String: Any] ?? [:]
+                    let audio = ((((json["candidates"] as? [[String: Any]])?.first?["content"] as? [String: Any])?["parts"]
+                                  as? [[String: Any]])?.first?["inlineData"] as? [String: Any])?["data"] as? String
+                    let error = (json["error"] as? [String: Any])?["message"] as? String
+                    print("\(name): \(code) audio \(audio.map { Data(base64Encoded: $0)?.count ?? 0 } ?? 0) bytes "
+                          + "\(Int(Date().timeIntervalSince(started) * 1000)) ms \(error.map { String($0.prefix(160)) } ?? "")")
+                }
+            }
+        }
         if let index = arguments.firstIndex(of: "--chat-probe"), arguments.count > index + 2 {
             // One small chat request, with the status and the first of the
             // body, for working out why a provider says no. The key is read

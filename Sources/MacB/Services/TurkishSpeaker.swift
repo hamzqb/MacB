@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import MacBCore
 
 /// macOS reading something out in Turkish.
 ///
@@ -23,6 +24,14 @@ import Foundation
 
     private let synthesizer = AVSpeechSynthesizer()
     private var levelTimer: Timer?
+    /// A Gemini voice playing, or being fetched.
+    private var player: AVAudioPlayer?
+    private var fetchTask: Task<Void, Never>?
+
+    /// Fetches Gemini speech. Set where a Gemini voice may be used — the
+    /// briefing — and nowhere else; unset, a Gemini choice falls back to the
+    /// Mac's own voice.
+    var gemini: ((String, GeminiSpeech.Voice) async -> Data?)?
 
     override init() {
         super.init()
@@ -52,9 +61,39 @@ import Foundation
             .filter { !$0.isEmpty }
         guard !cleaned.isEmpty else { onFinish?(); return }
         stop(notify: false)
-        let voice = Self.voice(identifier: preferredVoiceIdentifier())
         isSpeaking = true
         startLevels()
+        if let chosen = GeminiSpeech.voice(forTag: preferredVoiceIdentifier()), let gemini {
+            // One request for the whole briefing: the model paces the lines
+            // itself. If it does not answer, the Mac says it instead.
+            let fetch = Task { [weak self] in
+                let audio = await gemini(cleaned.joined(separator: "\n"), chosen)
+                guard let self, !Task.isCancelled, self.isSpeaking else { return }
+                if let audio, let player = try? AVAudioPlayer(data: audio) {
+                    player.delegate = self
+                    self.player = player
+                    if player.play() { return }
+                }
+                self.speakWithSystem(cleaned)
+            }
+            fetchTask = fetch
+            // A briefing that waits in silence is worse than a plainer voice:
+            // after six seconds the Mac reads it instead.
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                guard let self, self.fetchTask == fetch, self.player == nil, self.isSpeaking,
+                      !self.synthesizer.isSpeaking else { return }
+                fetch.cancel()
+                self.fetchTask = nil
+                self.speakWithSystem(cleaned)
+            }
+            return
+        }
+        speakWithSystem(cleaned)
+    }
+
+    private func speakWithSystem(_ cleaned: [String]) {
+        let voice = Self.voice(identifier: preferredVoiceIdentifier())
         for (index, line) in cleaned.enumerated() {
             let utterance = AVSpeechUtterance(string: line)
             utterance.voice = voice
@@ -74,7 +113,11 @@ import Foundation
         levelTimer?.invalidate()
         levelTimer = nil
         level = 0
-        let wasSpeaking = isSpeaking || synthesizer.isSpeaking
+        let wasSpeaking = isSpeaking || synthesizer.isSpeaking || player != nil
+        fetchTask?.cancel()
+        fetchTask = nil
+        player?.stop()
+        player = nil
         if synthesizer.isSpeaking { synthesizer.stopSpeaking(at: .immediate) }
         isSpeaking = false
         if notify && wasSpeaking { onFinish?() }
@@ -156,20 +199,36 @@ import Foundation
 }
 
 extension TurkishSpeaker: AVSpeechSynthesizerDelegate {
+    /// Called once per line. Only the last one ends the speech: finishing on
+    /// the first let the free engine start listening while the Mac was still
+    /// talking, and it heard itself.
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.finished() }
+        Task { @MainActor in
+            guard !self.synthesizer.isSpeaking else { return }
+            self.finished()
+        }
     }
 
     nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         Task { @MainActor in self.finished() }
     }
 
-    @MainActor private func finished() {
+    @MainActor fileprivate func finished() {
         levelTimer?.invalidate()
         levelTimer = nil
         level = 0
         guard isSpeaking else { return }
         isSpeaking = false
         onFinish?()
+    }
+}
+
+extension TurkishSpeaker: AVAudioPlayerDelegate {
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor in
+            guard self.player === player else { return }
+            self.player = nil
+            self.finished()
+        }
     }
 }

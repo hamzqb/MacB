@@ -51,6 +51,9 @@ import MacBCore
         givenAt = UserDefaults.standard.object(forKey: Self.lastKey) as? Date
         speaker.preferredVoiceIdentifier = { [weak preferences] in preferences?.briefingVoice ?? "" }
         speaker.onFinish = { [weak self] in self?.isSpeaking = false }
+        // The one place a Gemini voice is allowed: the user picks it for the
+        // briefing, knowing the text goes to Google.
+        speaker.gemini = { text, voice in await VoiceStudio.geminiWAV(text: text, voice: voice) }
     }
 
     var isVisible: Bool { !lines.isEmpty }

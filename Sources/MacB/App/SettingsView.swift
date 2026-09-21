@@ -111,6 +111,7 @@ struct SettingsView: View {
     @ObservedObject var keepAwake: KeepAwakeService
     @ObservedObject var watchers: WatchTaskStore
     @ObservedObject var agentCursor: AgentCursorOverlay
+    @ObservedObject private var voiceStudio = VoiceStudio.shared
     var jarvisHotKeyFailed = false
     @ObservedObject var jarvisMemory: JarvisMemoryStore
     var openPanel: () -> Void
@@ -414,7 +415,7 @@ struct SettingsView: View {
                     .labelsHidden().fixedSize()
                     .disabled(!preferences.briefingEnabled)
                 }
-                settingToggle("Sesli oku", detail: "macOS'un kendi Türkçe sesiyle. Ücretsiz, internetsiz.",
+                settingToggle("Sesli oku", detail: "Mac'in kendi Türkçe sesiyle ya da seçersen daha canlı bir Gemini sesiyle. İkisi de ücretsiz.",
                               isOn: $preferences.briefingSpeaks)
                     .disabled(!preferences.briefingEnabled)
                 HStack(spacing: MacBDesign.Space.regular) {
@@ -422,12 +423,25 @@ struct SettingsView: View {
                     Spacer(minLength: 8)
                     Picker("Ses", selection: $preferences.briefingVoice) {
                         Text("En iyisi (otomatik)").tag("")
-                        ForEach(TurkishSpeaker.installedTurkishVoices(), id: \.identifier) { voice in
-                            Text(TurkishSpeaker.title(for: voice)).tag(voice.identifier)
+                        Section("Mac sesleri — ücretsiz, internetsiz") {
+                            ForEach(TurkishSpeaker.installedTurkishVoices(), id: \.identifier) { voice in
+                                Text(TurkishSpeaker.title(for: voice)).tag(voice.identifier)
+                            }
+                        }
+                        Section("Gemini sesleri — ücretsiz, daha canlı") {
+                            ForEach(GeminiSpeech.voices) { voice in Text(voice.title).tag(voice.tag) }
                         }
                     }
                     .labelsHidden().fixedSize()
                     .disabled(!preferences.briefingSpeaks)
+                    previewButton(tag: briefingPreviewTag) { previewBriefingVoice() }
+                        .disabled(!preferences.briefingSpeaks)
+                }
+                if GeminiSpeech.voice(forTag: preferences.briefingVoice) != nil {
+                    message(aiKey.has(.gemini)
+                            ? "Gemini sesinde brifing metni (hava, takvim başlıkları, mail gönderenleri) sese çevrilmek için Google'a gider; ücretsiz katmanda Google bunu eğitimde kullanabilir. Cevap gelmezse Mac'in kendi sesi okur."
+                            : "Gemini sesi için Araçlar'dan bir Gemini anahtarı gir; o olmadan Mac'in kendi sesi okur.",
+                            warning: !aiKey.has(.gemini))
                 }
                 HStack(spacing: MacBDesign.Space.close) {
                     Button("Sesi dene") { briefing.speak() }
@@ -530,7 +544,13 @@ struct SettingsView: View {
                         ForEach(JarvisVoice.ordered) { Text($0.title).tag($0.rawValue) }
                     }
                     .labelsHidden().fixedSize()
+                    previewButton(tag: "openai:" + preferences.jarvisVoice) {
+                        VoiceStudio.shared.previewOpenAI(JarvisVoice(rawValue: preferences.jarvisVoice) ?? .marin)
+                    }
+                    .disabled(!aiKey.has(.openAI))
                 }
+                message("▶︎ her sesi bir kez OpenAI'den alır (yaklaşık $0.001) ve saklar; sonra dinlemek ücretsiz."
+                        + (voiceStudio.errorMessage.map { " " + $0 } ?? ""))
                 HStack(spacing: MacBDesign.Space.regular) {
                     Text("Karakter").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     Spacer(minLength: 8)
@@ -2250,6 +2270,36 @@ struct SettingsView: View {
     /// the wall.
     private func intro(_ text: String) -> some View {
         SettingsIntro(text: text)
+    }
+
+    /// Plays a sample of the voice beside it; pressed again, stops.
+    private func previewButton(tag: String, action: @escaping () -> Void) -> some View {
+        let isActive = voiceStudio.active == tag
+        return Button(action: action) {
+            Image(systemName: isActive ? "stop.fill" : "play.fill")
+                .font(.system(size: 10, weight: .bold))
+                .frame(width: 24, height: 24)
+                .background(Color.primary.opacity(0.08), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .help(isActive ? "Durdur" : "Sesi dinle")
+        .accessibilityLabel(isActive ? "Durdur" : "Sesi dinle")
+    }
+
+    private var briefingPreviewTag: String {
+        let chosen = preferences.briefingVoice
+        if GeminiSpeech.voice(forTag: chosen) != nil { return chosen }
+        return "system:" + chosen
+    }
+
+    private func previewBriefingVoice() {
+        if let voice = GeminiSpeech.voice(forTag: preferences.briefingVoice) {
+            VoiceStudio.shared.previewGemini(voice)
+        } else if voiceStudio.active == briefingPreviewTag {
+            VoiceStudio.shared.stop()
+        } else {
+            VoiceStudio.shared.previewSystem(identifier: preferences.briefingVoice)
+        }
     }
 
     private func message(_ text: String, warning: Bool = false) -> some View {
