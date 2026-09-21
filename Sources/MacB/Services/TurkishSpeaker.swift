@@ -78,9 +78,9 @@ import MacBCore
             }
             fetchTask = fetch
             // A briefing that waits in silence is worse than a plainer voice:
-            // after six seconds the Mac reads it instead.
+            // after ten seconds the Mac reads it instead.
             Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                try? await Task.sleep(nanoseconds: 10_000_000_000)
                 guard let self, self.fetchTask == fetch, self.player == nil, self.isSpeaking,
                       !self.synthesizer.isSpeaking else { return }
                 fetch.cancel()

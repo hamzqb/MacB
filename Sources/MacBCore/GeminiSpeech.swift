@@ -41,8 +41,10 @@ public enum GeminiSpeech {
         return voices.first { $0.name == name }
     }
 
-    /// Newest first; the next is tried when one is gone or refuses.
-    public static let models = ["gemini-3.1-flash-tts-preview", "gemini-2.5-flash-preview-tts"]
+    /// Quickest first — measured on this key, the 2.5 model answered in about
+    /// 2.5 s while the 3.1 preview sometimes stalled past eight. The next is
+    /// tried when one is gone, refuses or times out.
+    public static let models = ["gemini-2.5-flash-preview-tts", "gemini-3.1-flash-tts-preview"]
 
     /// What comes back: 16-bit mono PCM at 24 kHz.
     public static let sampleRate = 24_000
