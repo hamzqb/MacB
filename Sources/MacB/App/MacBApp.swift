@@ -276,7 +276,7 @@ private final class Flag: @unchecked Sendable {
     private lazy var jarvis = JarvisSession(
         keys: aiKey, memory: jarvisMemory, cost: aiCost,
         voice: { [weak self] in JarvisVoice(rawValue: self?.preferences.jarvisVoice ?? "") ?? .marin },
-        persona: { [weak self] in JarvisPersona(rawValue: self?.preferences.jarvisPersona ?? "") ?? .mirror },
+        persona: { [weak self] in JarvisPersona(rawValue: self?.preferences.jarvisPersona ?? "") ?? JarvisPersona.defaultPersona },
         scenarioNames: { [weak self] in self?.scenarios.scenarios.map(\.name) ?? [] },
         engineChoice: { [weak self] in
             JarvisEngineChoice(rawValue: self?.preferences.jarvisEngine ?? "") ?? .automatic

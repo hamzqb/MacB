@@ -29,16 +29,20 @@ struct SettingsCard<Content: View>: View {
             VStack(alignment: .leading, spacing: 14) { content }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(MacBDesign.Space.loose)
-                .background(MacBDesign.cardFill,
-                            in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
+                .background(
+                    LinearGradient(colors: [MacBDesign.cardFill.opacity(1.35), MacBDesign.cardFill.opacity(0.72)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
+                )
                 // A light fall from the top edge, the same idea as the island
                 // cards, so the two halves of MacB read as one product.
                 .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
-                    .fill(LinearGradient(colors: [.white.opacity(0.05), .clear],
+                    .fill(LinearGradient(colors: [.white.opacity(0.065), .clear],
                                          startPoint: .top, endPoint: .center))
                     .allowsHitTesting(false))
                 .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
                     .strokeBorder(MacBDesign.cardStroke))
+                .shadow(color: Color.black.opacity(0.035), radius: 14, y: 7)
         }
     }
 }

@@ -110,6 +110,10 @@ enum JarvisToolOutcome {
     private var hasReadOutsideContent = false
     /// Set once the user's own private material has.
     private var hasReadPrivateContent = false
+    /// Read-only tools the user has already allowed in this conversation.
+    /// This stops “mail again?” loops without letting outside text perform
+    /// actions: writing tools never enter this set and the set dies with stop().
+    private var allowedReadTools: Set<JarvisTool> = []
 
     /// A conversation nobody speaks in closes after this long.
     ///
@@ -130,7 +134,7 @@ enum JarvisToolOutcome {
 
     init(keys: AIKeyStore, memory: JarvisMemoryStore, cost: AICostMeter? = nil,
          voice: @escaping () -> JarvisVoice,
-         persona: @escaping () -> JarvisPersona = { .mirror },
+         persona: @escaping () -> JarvisPersona = { JarvisPersona.defaultPersona },
          scenarioNames: @escaping () -> [String] = { [] },
          engineChoice: @escaping () -> JarvisEngineChoice = { .automatic },
          freeEngine: FreeVoiceEngine? = nil,
@@ -255,6 +259,9 @@ enum JarvisToolOutcome {
         speaker.stop()
         freeMessages = []
         freeObservers.removeAll()
+        allowedReadTools.removeAll()
+        hasReadOutsideContent = false
+        hasReadPrivateContent = false
         freeIsEnding = false
         stopAudio()
         pendingAudio = []
@@ -607,8 +614,7 @@ enum JarvisToolOutcome {
             }
             // The same gate as the live engine, and for the same reason: a free
             // model is not a more trusted one.
-            if tool.needsConfirmation(afterReadingOutsideContent: hasReadOutsideContent,
-                                      privateContent: hasReadPrivateContent) {
+            if needsUserApproval(for: tool) {
                 let allowed = await ask(tool, text: toolbox.confirmationText(for: tool, call: call))
                 guard generation == current else { return false }
                 guard allowed else {
@@ -618,6 +624,7 @@ enum JarvisToolOutcome {
                                                        "note": "The user declined. Do not retry unless they ask."])))
                     continue
                 }
+                rememberApprovalIfReadOnly(tool)
             }
             activity = tool.activity
             if tool.readsOutsideContent { hasReadOutsideContent = true }
@@ -681,8 +688,7 @@ enum JarvisToolOutcome {
                                                    output: JarvisProtocol.result(["ok": false, "error": "unknown tool"])))
                 continue
             }
-            if tool.needsConfirmation(afterReadingOutsideContent: hasReadOutsideContent,
-                                      privateContent: hasReadPrivateContent) {
+            if needsUserApproval(for: tool) {
                 let allowed = await ask(tool, text: toolbox.confirmationText(for: tool, call: call))
                 guard generation == current else { return }
                 guard allowed else {
@@ -690,6 +696,7 @@ enum JarvisToolOutcome {
                         ["ok": false, "declined": true, "note": "The user declined. Do not retry unless they ask."])))
                     continue
                 }
+                rememberApprovalIfReadOnly(tool)
             }
             activity = tool.activity
             // Marked before the tool runs: whatever it brings back is already
@@ -725,6 +732,22 @@ enum JarvisToolOutcome {
         for (jpeg, question) in images { send(JarvisProtocol.image(jpeg: jpeg, question: question)) }
         send(JarvisProtocol.createResponse)
         touch()
+    }
+
+
+    private func needsUserApproval(for tool: JarvisTool) -> Bool {
+        if allowedReadTools.contains(tool) { return false }
+        return tool.needsConfirmation(afterReadingOutsideContent: hasReadOutsideContent,
+                                      privateContent: hasReadPrivateContent)
+    }
+
+    private func rememberApprovalIfReadOnly(_ tool: JarvisTool) {
+        switch tool {
+        case .readMail, .calendarEvents:
+            allowedReadTools.insert(tool)
+        default:
+            break
+        }
     }
 
     /// Asks in the panel. One question at a time: a second one waits for the

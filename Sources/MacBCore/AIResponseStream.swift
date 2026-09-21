@@ -126,13 +126,7 @@ public enum AIResponseStream {
             "stream": true,
             "store": false,
             "tools": [["type": "web_search", "search_context_size": "medium"]],
-            "instructions": """
-                You are the assistant inside MacB, a small macOS utility. Answer in the \
-                language the question is written in. Be direct and brief: the answer is read \
-                in a small floating panel, so lead with the answer, then only the detail that \
-                matters. Use web search whenever the answer depends on anything recent or \
-                checkable, and cite what you used. Plain text with light Markdown only.
-                """
+            "instructions": MacBAssistantTone.textPanelInstructions(canBrowse: true)
         ]
     }
 

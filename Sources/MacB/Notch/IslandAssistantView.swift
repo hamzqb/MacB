@@ -140,28 +140,52 @@ struct IslandAssistantView: View {
     // MARK: - Confirmation
 
     private func confirmationCard(_ confirmation: JarvisSession.Confirmation) -> some View {
-        HStack(spacing: MacBDesign.Space.snug) {
-            Image(systemName: Self.symbol(for: confirmation.tool))
-                .font(.system(size: 11))
-                .foregroundStyle(MacBDesign.IslandToken.accent)
-            Text(confirmation.text)
-                .font(.system(size: MacBDesign.TypeScale.micro))
-                .lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 4)
-            // No Return shortcut on purpose: a Return meant for the text field
-            // must never become a yes to sending the screen.
-            Button("Hayır") { session.answerConfirmation(false) }
-                .buttonStyle(IslandCapsuleButtonStyle())
-            Button("İzin ver") { session.answerConfirmation(true) }
-                .buttonStyle(IslandCapsuleButtonStyle(isPrimary: true))
+        VStack(alignment: .leading, spacing: MacBDesign.Space.close) {
+            HStack(alignment: .top, spacing: MacBDesign.Space.close) {
+                ZStack {
+                    Circle().fill(MacBDesign.IslandToken.accent.opacity(0.18))
+                    Image(systemName: Self.symbol(for: confirmation.tool))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(MacBDesign.IslandToken.accent)
+                }
+                .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                    Text(Self.title(for: confirmation.tool))
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                        .foregroundStyle(MacBDesign.IslandToken.Ink.primary)
+                    Text(confirmation.text)
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+                        .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: MacBDesign.Space.snug) {
+                Spacer(minLength: 0)
+                Button("Hayır") { session.answerConfirmation(false) }
+                    .buttonStyle(IslandCapsuleButtonStyle())
+                // No Return shortcut on purpose: a Return meant for the text field
+                // must never become a yes to sending the screen.
+                Button("İzin ver") { session.answerConfirmation(true) }
+                    .buttonStyle(IslandCapsuleButtonStyle(isPrimary: true))
+            }
         }
         .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
         .buttonStyle(.plain)
-        .padding(.horizontal, MacBDesign.Space.snug)
-        .padding(.vertical, 4)
-        .frame(maxWidth: .infinity)
-        .background(MacBDesign.IslandToken.Fill.base, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal, MacBDesign.Space.comfortable)
+        .padding(.vertical, MacBDesign.Space.regular)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(LinearGradient(colors: [MacBDesign.IslandToken.Fill.raised,
+                                              MacBDesign.IslandToken.Fill.low],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+        )
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .strokeBorder(MacBDesign.IslandToken.Fill.strong.opacity(0.7), lineWidth: 0.7))
+        .shadow(color: .black.opacity(0.28), radius: 12, y: 5)
     }
 
     // MARK: - Typing
@@ -198,6 +222,20 @@ struct IslandAssistantView: View {
     private func send() {
         session.say(typed)
         typed = ""
+    }
+
+    private static func title(for tool: JarvisTool) -> String {
+        switch tool {
+        case .readMail: return "Maillerine bakayım mı?"
+        case .calendarEvents: return "Takvimine bakayım mı?"
+        case .lookAtScreen: return "Ekrana bakayım mı?"
+        case .readScreenText: return "Ekrandaki yazıyı okuyayım mı?"
+        case .addReminder: return "Hatırlatıcı ekleyeyim mi?"
+        case .addCalendarEvent: return "Takvime ekleyeyim mi?"
+        case .powerAction: return "Mac için bu işlemi yapayım mı?"
+        case .remember: return "Bunu hafızaya alayım mı?"
+        default: return "Buna izin veriyor musun?"
+        }
     }
 
     private static func symbol(for tool: JarvisTool) -> String {

@@ -321,6 +321,8 @@ public enum JarvisVoice: String, CaseIterable, Sendable, Identifiable {
 
 /// How MacB talks. The words it says are the model's; this is the manner.
 public enum JarvisPersona: String, CaseIterable, Sendable, Identifiable {
+    /// The default MacB character: warm, fast, lightly funny and familiar.
+    case buddy
     /// No voice of its own: it takes the user's.
     case mirror
     case warm
@@ -328,10 +330,13 @@ public enum JarvisPersona: String, CaseIterable, Sendable, Identifiable {
     case witty
     case formal
 
+    public static let defaultPersona: JarvisPersona = .buddy
+
     public var id: String { rawValue }
 
     public var title: String {
         switch self {
+        case .buddy: return "Kanka"
         case .mirror: return "Senin gibi"
         case .warm: return "Sıcak ve dost"
         case .brief: return "Kısa ve net"
@@ -342,6 +347,8 @@ public enum JarvisPersona: String, CaseIterable, Sendable, Identifiable {
 
     public var note: String {
         switch self {
+        case .buddy:
+            return "MacB'nin doğal hali: sıcak, hızlı, hafif esprili. Robot gibi değil; yanında duran kanka gibi konuşur."
         case .mirror:
             return "Sen nasıl konuşuyorsan öyle karşılık verir: kısa konuşursan kısa, "
                 + "\u{201C}kanka\u{201D} dersen \u{201C}kanka\u{201D}, resmî olursan resmî."
@@ -356,6 +363,17 @@ public enum JarvisPersona: String, CaseIterable, Sendable, Identifiable {
     /// what MacB is allowed to do, only how it sounds doing it.
     public var instruction: String {
         switch self {
+        case .buddy:
+            return """
+                TONE. You are the user's Mac buddy: warm, quick, practical and lightly funny. Speak like a real Turkish friend, not a service desk.
+                - Default address is familiar Turkish: "sen". You may say "kanka", "bak", "şöyle", "bence", "tamam" when it sounds natural, but not in every sentence.
+                - Keep the rhythm alive: short spoken sentences, small human reactions, no corporate politeness.
+                - Tiny jokes are allowed when they do not slow the job down. Never perform comedy; the work comes first.
+                - If something is broken, say the problem plainly: "burada sıkıntı şu" or "bunu şöyle çözeriz".
+                - If the user is annoyed, become calmer and more useful. Do not tease them while they are frustrated.
+                - Design advice should sound tasteful and opinionated: clean, Apple-like, calm, premium, with exact fixes.
+                - Never fake closeness by overusing slang. One natural "kanka" is enough when the answer is short.
+                """
         case .mirror:
             return """
                 TONE. You have no voice of your own. You talk the way the person in front of you talks, and \
@@ -470,7 +488,7 @@ public enum JarvisProtocol {
     /// carry the date (the model has no clock of its own).
     public static func sessionUpdate(voice: JarvisVoice, now: Date, timeZone: TimeZone = .current,
                                      userName: String? = nil, memory: [String] = [],
-                                     persona: JarvisPersona = .mirror,
+                                     persona: JarvisPersona = JarvisPersona.defaultPersona,
                                      scenarios: [String] = []) -> [String: Any] {
         let instructions = self.instructions(now: now, timeZone: timeZone, userName: userName,
                                              memory: memory, persona: persona, scenarios: scenarios)
@@ -504,7 +522,7 @@ public enum JarvisProtocol {
     /// character when the bill runs out is two assistants, not one.
     public static func instructions(now: Date, timeZone: TimeZone = .current,
                                     userName: String? = nil, memory: [String] = [],
-                                    persona: JarvisPersona = .mirror,
+                                    persona: JarvisPersona = JarvisPersona.defaultPersona,
                                     scenarios: [String] = []) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "tr_TR")

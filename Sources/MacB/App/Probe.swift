@@ -145,6 +145,7 @@ import Security
                 print(fitting.height <= reserved ? "ok: sığıyor" : "MISS: taşıyor")
                 print("with input: \(Int(IslandGeometry.assistantHeight(showsInput: true, showsCaptions: false, hasConfirmation: false)))")
                 print("with captions: \(Int(IslandGeometry.assistantHeight(showsInput: false, showsCaptions: true, hasConfirmation: false)))")
+                print("confirmation width: \(IslandGeometry.assistantConfirmationWidth)")
                 print("with confirmation: \(Int(IslandGeometry.assistantHeight(showsInput: true, showsCaptions: true, hasConfirmation: true)))")
             }
         }
@@ -261,6 +262,16 @@ import Security
                 } catch {
                     print("hata: \(error.localizedDescription)")
                 }
+            }
+        }
+        if arguments.contains("--mail-probe") {
+            return {
+                let summary = await MailService().refresh(force: true)
+                print(await MailService.probe())
+                print("parsed_unread=\(summary.unread)")
+                print("parsed_headers=\(summary.headers.count)")
+                print("date_fallbacks=not_printed")
+                if let note = summary.note { print("note=\(note)") }
             }
         }
         if arguments.contains("--verify-keys") {

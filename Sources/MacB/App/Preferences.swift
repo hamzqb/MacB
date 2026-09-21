@@ -312,7 +312,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
                                     "jarvisModel": JarvisProtocol.defaultModel,
                                     "jarvisEngine": JarvisEngineChoice.automatic.rawValue,
                                     "jarvisHotKeyEnabled": true,
-                                    "jarvisPersona": JarvisPersona.mirror.rawValue,
+                                    "jarvisPersona": JarvisPersona.defaultPersona.rawValue,
                                     "briefingEnabled": false, "briefingHour": 8, "briefingSpeaks": true,
                                     "assistantCaptions": false,
                                     "keepAwakeMinutes": 60,
@@ -356,7 +356,16 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         mailEnabled = defaults.bool(forKey: "mailEnabled")
         importantSenders = defaults.stringArray(forKey: "importantSenders") ?? []
         jarvisHotKeyEnabled = defaults.bool(forKey: "jarvisHotKeyEnabled")
-        jarvisPersona = defaults.string(forKey: "jarvisPersona") ?? JarvisPersona.mirror.rawValue
+        let personaMigrationKey = "jarvisPersonaKankaDefaultMigrated"
+        let storedPersona = defaults.string(forKey: "jarvisPersona")
+        if storedPersona == nil || (!defaults.bool(forKey: personaMigrationKey) && storedPersona == JarvisPersona.mirror.rawValue) {
+            jarvisPersona = JarvisPersona.defaultPersona.rawValue
+            defaults.set(JarvisPersona.defaultPersona.rawValue, forKey: "jarvisPersona")
+            defaults.set(true, forKey: personaMigrationKey)
+        } else {
+            jarvisPersona = storedPersona ?? JarvisPersona.defaultPersona.rawValue
+            defaults.set(true, forKey: personaMigrationKey)
+        }
         briefingEnabled = defaults.bool(forKey: "briefingEnabled")
         briefingHour = defaults.integer(forKey: "briefingHour")
         briefingSpeaks = defaults.bool(forKey: "briefingSpeaks")

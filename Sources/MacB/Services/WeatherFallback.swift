@@ -60,6 +60,20 @@ enum WeatherFallback {
          kSecAttrAccount as String: account]
     }
 
+
+    static func current(latitude: Double, longitude: Double, place: String, session: URLSession) async -> WeatherSnapshot? {
+        guard let key = read() else { return nil }
+        var components = URLComponents(string: "https://api.openweathermap.org/data/2.5/weather")
+        components?.queryItems = [
+            URLQueryItem(name: "lat", value: String(latitude)),
+            URLQueryItem(name: "lon", value: String(longitude)),
+            URLQueryItem(name: "units", value: "metric"),
+            URLQueryItem(name: "lang", value: "tr"),
+            URLQueryItem(name: "appid", value: key)
+        ]
+        return await current(components: components, fallbackPlace: place, session: session)
+    }
+
     /// The weather now, for a place name. `nil` when there is no key, so the
     /// caller can keep Open-Meteo's own error rather than invent one.
     static func current(place: String, session: URLSession) async -> WeatherSnapshot? {
@@ -71,6 +85,11 @@ enum WeatherFallback {
             URLQueryItem(name: "lang", value: "tr"),
             URLQueryItem(name: "appid", value: key)
         ]
+        return await current(components: components, fallbackPlace: place, session: session)
+    }
+
+
+    private static func current(components: URLComponents?, fallbackPlace: String, session: URLSession) async -> WeatherSnapshot? {
         guard let url = components?.url,
               let (data, response) = try? await session.data(from: url),
               (response as? HTTPURLResponse)?.statusCode == 200,
@@ -81,7 +100,7 @@ enum WeatherFallback {
         let icon = weather["icon"] as? String ?? ""
         let isDay = icon.hasSuffix("d")
         return WeatherSnapshot(
-            place: object["name"] as? String ?? place,
+            place: object["name"] as? String ?? fallbackPlace,
             temperature: Int(temperature.rounded()),
             feelsLike: Int((main["feels_like"] as? Double ?? temperature).rounded()),
             condition: (weather["description"] as? String ?? "").capitalized(with: Locale(identifier: "tr_TR")),

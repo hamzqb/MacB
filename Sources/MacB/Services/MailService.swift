@@ -82,21 +82,52 @@ import MacBCore
     /// nothing in a subject — a quote, a newline, a separator — can change the
     /// shape of what comes back. The fields are joined with a delimiter no
     /// subject line contains and split back out here.
-    private static let script = """
+    nonisolated private static let script = """
         set sep to (ASCII character 31)
         set rowSep to (ASCII character 30)
         set out to ""
-        tell application "Mail"
-            set found to {}
-            try
-                set found to (messages of inbox whose read status is false)
-            end try
-            repeat with m in found
+        on addUnreadFrom(boxName, messagesList, sep, rowSep, currentOut)
+            repeat with m in messagesList
                 try
-                    set out to out & (sender of m) & sep & (subject of m) & sep & ¬
-                        ((date received of m) as string) & sep & ((flagged status of m) as string) & rowSep
+                    set currentOut to currentOut & (sender of m) & sep & (subject of m) & sep & ¬
+                        ((date received of m) as string) & sep & ((flagged status of m) as string) & sep & boxName & rowSep
                 end try
             end repeat
+            return currentOut
+        end addUnreadFrom
+        tell application "Mail"
+            try
+                set out to my addUnreadFrom("Inbox", (messages of inbox whose read status is false), sep, rowSep, out)
+            end try
+            repeat with acc in accounts
+                try
+                    set accountName to name of acc
+                    set accountInbox to mailbox "INBOX" of acc
+                    set out to my addUnreadFrom(accountName, (messages of accountInbox whose read status is false), sep, rowSep, out)
+                end try
+            end repeat
+        end tell
+        return out
+        """
+
+    nonisolated private static let probeScript = """
+        set out to ""
+        tell application "Mail"
+            set accountCount to 0
+            set mailboxCount to 0
+            set unreadInbox to 0
+            try
+                set accountCount to count of accounts
+            end try
+            try
+                set unreadInbox to count of (messages of inbox whose read status is false)
+            end try
+            repeat with acc in accounts
+                try
+                    set mailboxCount to mailboxCount + (count of mailboxes of acc)
+                end try
+            end repeat
+            set out to "accounts=" & accountCount & return & "mailboxes=" & mailboxCount & return & "unified_unread=" & unreadInbox
         end tell
         return out
         """
@@ -119,15 +150,29 @@ import MacBCore
         }
     }
 
+    static func probe() async -> String {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var error: NSDictionary?
+                let descriptor = NSAppleScript(source: probeScript)?.executeAndReturnError(&error)
+                if let error {
+                    continuation.resume(returning: "error=\(Self.message(for: error))")
+                } else {
+                    continuation.resume(returning: descriptor?.stringValue ?? "")
+                }
+            }
+        }
+    }
+
     /// Turns the script's output back into headers. The reading of it is in
     /// `MailParsing`, where it can be proved against strings.
-    static func parse(_ raw: String) -> Summary {
+    nonisolated static func parse(_ raw: String) -> Summary {
         let headers = MailParsing.headers(raw)
         return Summary(unread: headers.count,
                        headers: Array(headers.prefix(MailImportance.maximumHeaders)))
     }
 
-    private static func message(for error: NSDictionary) -> String {
+    nonisolated private static func message(for error: NSDictionary) -> String {
         let code = (error[NSAppleScript.errorNumber] as? Int) ?? 0
         switch code {
         case -1743, -1744:

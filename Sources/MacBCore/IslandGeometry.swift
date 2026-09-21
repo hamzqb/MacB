@@ -90,14 +90,20 @@ public enum IslandGeometry {
         return base
             + (showsInput ? 30 : 0)
             + (showsCaptions ? captionHeight : 0)
-            + (hasConfirmation ? 44 : 0)
+            + (hasConfirmation ? 88 : 0)
     }
 
     /// Two lines of subtitles, for anyone who wants to read along.
     public static let captionHeight: CGFloat = 34
 
-    /// Narrow: it holds an orb and a couple of words, not a document.
+    /// Narrow at rest, wider when it asks for permission so the question can
+    /// breathe instead of becoming a legal sentence squeezed into a badge.
     public static let assistantWidth: CGFloat = 300
+    public static let assistantConfirmationWidth: CGFloat = 392
+
+    public static func assistantWidth(hasConfirmation: Bool) -> CGFloat {
+        hasConfirmation ? assistantConfirmationWidth : assistantWidth
+    }
 
     /// The morning briefing: a greeting, a row of chips when there is anything
     /// worth a chip, and the two buttons under them.
@@ -171,11 +177,12 @@ public enum IslandGeometry {
         return sectionWidth(max(clipboardFilterRowWidth, gallery), screenWidth: screenWidth)
     }
 
-    /// The empty state is a card of its own, not a stray line, so both states
-    /// reserve the same height and the panel does not jump between filters.
+    /// Filters, search and one gallery row. The section used to count only the
+    /// filters and cards, so the search field ate the bottom of the cards.
     public static func clipboardHeight(isEmpty: Bool) -> CGFloat {
         _ = isEmpty
-        return filterRowHeight + 10 + clipboardCardHeight
+        let searchHeight: CGFloat = 26
+        return filterRowHeight + gap + searchHeight + gap + clipboardCardHeight + 2
     }
 
     /// Quick access is a single scrolling row of pinned tiles, so its height is

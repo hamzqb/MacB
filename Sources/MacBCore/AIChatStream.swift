@@ -62,14 +62,7 @@ public enum AIChatStream {
     /// Told to say when it does not know, because this is the path with no web
     /// search behind it: a confident wrong answer is worse here than anywhere
     /// else in MacB.
-    static let instructions = """
-        You are the assistant inside MacB, a small macOS utility. Answer in the \
-        language the question is written in. Be direct and brief: the answer is read \
-        in a small floating panel, so lead with the answer, then only the detail that \
-        matters. You cannot browse the web — if the answer depends on something recent \
-        or checkable, say plainly that you cannot check it. Plain text with light \
-        Markdown only.
-        """
+    static let instructions = MacBAssistantTone.textPanelInstructions(canBrowse: false)
 
     /// A whole conversation, not streamed, with tools the model may call.
     ///

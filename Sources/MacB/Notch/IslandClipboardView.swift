@@ -127,7 +127,6 @@ struct IslandClipboardView: View {
                     }
                     .padding(.bottom, MacBDesign.Space.hair)
                 }
-                .scrollClipDisabled()
             }
         }
     }
@@ -176,7 +175,7 @@ struct IslandClipboardView: View {
             }
             .padding(.trailing, MacBDesign.Space.hair)
         }
-        .scrollClipDisabled()
+        .layoutPriority(1)
     }
 
     private func pill(_ value: ClipboardFilter) -> some View {

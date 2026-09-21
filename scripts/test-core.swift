@@ -2037,7 +2037,8 @@ struct CoreTestRunner {
                                "\(persona) dropped the prompt-injection rule")
                     try expect(instructions.contains("cannot delete files"), "\(persona) dropped what it may not do")
                 }
-                try expect(JarvisPersona.allCases.first == .mirror, "Matching the user is no longer the default")
+                try expect(JarvisPersona.defaultPersona == .buddy, "Kanka is no longer the default")
+                try expect(JarvisPersona.allCases.first == .buddy, "Kanka should be the first character in settings")
                 let mirror = JarvisProtocol.sessionUpdate(voice: .marin, now: now, persona: .mirror)
                 let mirrored = ((mirror["session"] as? [String: Any])?["instructions"] as? String) ?? ""
                 try expect(mirrored.contains("Length above all"), "The mirror lost the length rule")

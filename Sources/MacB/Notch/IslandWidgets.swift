@@ -354,6 +354,10 @@ struct WidgetCard<Content: View>: View {
             .padding(.horizontal, span <= 1 ? 9 : 12)
             .padding(.vertical, MacBDesign.Space.regular)
             .background(cardSurface)
+            .clipShape(RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
+                .strokeBorder(MacBDesign.IslandToken.Fill.raised.opacity(isActive ? 0.9 : 0.45), lineWidth: 0.7))
+            .shadow(color: .black.opacity(isActive ? 0.28 : 0.16), radius: isActive ? 12 : 7, y: isActive ? 5 : 3)
     }
 
     /// Real glass where the system has it, a flat fill where it does not.
@@ -413,7 +417,7 @@ struct MediaWidget: View {
 
     @ViewBuilder private func content(width: CGFloat) -> some View {
         if !isLive { idle }
-        else if width < 210 { compact }
+        else if width < 260 { compact }
         else if style == .record { record }
         else { full }
     }
@@ -472,10 +476,10 @@ struct MediaWidget: View {
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 2)
-            transport(glyph: 10, diameter: 24, spacing: MacBDesign.Space.regular)
+            transport(glyph: 9, diameter: 22, spacing: MacBDesign.Space.close)
         }
         .padding(.horizontal, MacBDesign.Space.regular)
-        .padding(.vertical, MacBDesign.Space.regular)
+        .padding(.vertical, MacBDesign.Space.tight)
     }
 
     private var full: some View {
@@ -499,11 +503,12 @@ struct MediaWidget: View {
             }
             Spacer(minLength: 4)
             if media.duration > 0 { progress }
-            transport(glyph: 12, diameter: 30, spacing: MacBDesign.Space.section)
-                .padding(.top, media.duration > 0 ? 5 : 0)
+            transport(glyph: 11, diameter: 28,
+                      spacing: style == .artwork ? MacBDesign.Space.regular : MacBDesign.Space.section)
+                .padding(.top, media.duration > 0 ? 4 : 0)
         }
-        .padding(.horizontal, MacBDesign.Space.comfortable)
-        .padding(.vertical, MacBDesign.Space.regular)
+        .padding(.horizontal, MacBDesign.Space.regular)
+        .padding(.vertical, MacBDesign.Space.tight)
     }
 
     private var record: some View {
@@ -526,8 +531,7 @@ struct MediaWidget: View {
     }
 
     private var idle: some View {
-        WidgetEmptyState(symbol: "music.note", title: "Çalan bir şey yok",
-                         hint: "Spotify, Müzik veya tarayıcı")
+        WidgetEmptyState(symbol: "music.note", title: "Çalan bir şey yok")
             .padding(MacBDesign.Space.regular)
     }
 

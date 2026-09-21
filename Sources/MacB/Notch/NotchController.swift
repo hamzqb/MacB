@@ -768,7 +768,9 @@ struct IslandToast: Equatable {
         case .timer:
             return IslandGeometry.sectionWidth(620, screenWidth: screenWidth)
         case .assistant:
-            return IslandGeometry.sectionWidth(IslandGeometry.assistantWidth, screenWidth: screenWidth)
+            return IslandGeometry.sectionWidth(
+                IslandGeometry.assistantWidth(hasConfirmation: assistant.confirmation != nil),
+                screenWidth: screenWidth)
         case .briefing:
             return IslandGeometry.sectionWidth(IslandGeometry.briefingWidth, screenWidth: screenWidth)
         case .agent:
@@ -925,8 +927,10 @@ struct IslandToast: Equatable {
         panel.ignoresMouseEvents = target.phase == .collapsed && collapsedIndicatorWidth() == 0
             && presentation.cameraHeight == 0
         media.setPanelVisible(state.isOpen && (state.content == .home || state.phase == .peek))
-        systemMonitor.setFastSampling(state.isOpen && state.content == .home)
-        weather.setPanelVisible(state.isOpen && state.content == .home && widgets.isActive(.weather))
+        let homePanelVisible = state.isOpen && state.content == .home
+        systemMonitor.setFastSampling(homePanelVisible)
+        processes.setFastSampling(homePanelVisible && widgets.isActive(.topProcesses))
+        weather.setPanelVisible(homePanelVisible && widgets.isActive(.weather))
         guard target != presentation.layout || immediate else { return }
         let reducedMotion = !preferences.animationsEnabled
             || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
@@ -945,7 +949,9 @@ struct IslandToast: Equatable {
         }
         presentation.isLeaving = false
         animationTimer?.invalidate(); animationTimer = nil
-        presentation.previousLayout = presentation.layout
+        let previousLayout = presentation.layout
+        let crossfadesContent = previousLayout.phase != target.phase || previousLayout.content != target.content
+        presentation.previousLayout = previousLayout
         presentation.layout = target
         let startWidth = presentation.width, startHeight = presentation.height, startRadius = presentation.radius
         let reduced = reducedMotion
@@ -954,7 +960,7 @@ struct IslandToast: Equatable {
             presentation.width = startWidth + (target.width - startWidth) * t
             presentation.height = startHeight + (target.height - startHeight) * t
             presentation.radius = startRadius + (target.radius - startRadius) * t
-            presentation.transition = fade
+            presentation.transition = crossfadesContent ? fade : 1
             let box = NSRect(x: screen.frame.midX - presentation.width / 2,
                              y: screen.frame.maxY - presentation.height,
                              width: presentation.width, height: presentation.height)
@@ -965,12 +971,14 @@ struct IslandToast: Equatable {
         if immediate { apply(1, fade: 1); return }
         let duration = reduced ? 0.10 : (target.phase == .collapsed ? MacBDesign.closeDuration : MacBDesign.openDuration)
         let startTime = ProcessInfo.processInfo.systemUptime
-        apply(reduced ? 1 : 0, fade: 0)
+        apply(reduced ? 1 : 0, fade: crossfadesContent ? 0 : 1)
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
             MainActor.assumeIsolated {
                 guard let self else { timer.invalidate(); return }
                 let fraction = min(1, (ProcessInfo.processInfo.systemUptime - startTime) / duration)
-                apply(reduced ? 1 : MorphTiming.progress(fraction), fade: fraction)
+                let shaped = reduced ? 1 : MorphTiming.progress(fraction)
+                let fade = crossfadesContent ? max(0, min(1, (fraction - 0.18) / 0.62)) : 1
+                apply(shaped, fade: MorphTiming.progress(fade))
                 if fraction >= 1 { timer.invalidate(); self.animationTimer = nil }
             }
         }

@@ -52,6 +52,10 @@ import SwiftUI
     /// which point the ring waits for a second click instead of a release.
     private var isSticky = false
     private var escapeMonitor: Any?
+    /// Mouse tracking is needed only while the ring is visible. Keeping it out
+    /// of the always-on event tap prevents every pointer move on the Mac from
+    /// passing through MacB and WindowServer.
+    private var moveMonitor: Any?
 
     /// How long a press may last and still count as a click rather than a hold.
     private static let clickWindow: TimeInterval = 0.4
@@ -132,7 +136,6 @@ import SwiftUI
         let mask = (1 << CGEventType.rightMouseDown.rawValue)
             | (1 << CGEventType.rightMouseUp.rawValue)
             | (1 << CGEventType.rightMouseDragged.rawValue)
-            | (1 << CGEventType.mouseMoved.rawValue)
             | (1 << CGEventType.leftMouseDown.rawValue)
         let context = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap,
@@ -253,6 +256,7 @@ import SwiftUI
         window.setFrame(frame, display: false)
         presence = 0
         render()
+        listenForPointerMove()
         window.orderFrontRegardless()
         // One frame later, so the ring is seen to arrive rather than appearing
         // already there.
@@ -319,6 +323,18 @@ import SwiftUI
         presence = 0
         if let escapeMonitor { NSEvent.removeMonitor(escapeMonitor) }
         escapeMonitor = nil
+        if let moveMonitor { NSEvent.removeMonitor(moveMonitor) }
+        moveMonitor = nil
+    }
+
+    /// The always-on event tap deliberately ignores plain mouse movement.
+    /// While the ring is visible, this cheap monitor is enough to update the
+    /// highlighted slice and it disappears with the ring.
+    private func listenForPointerMove() {
+        guard moveMonitor == nil else { return }
+        moveMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved]) { [weak self] _ in
+            Task { @MainActor in self?.pointerMoved(to: NSEvent.mouseLocation) }
+        }
     }
 
     /// Escape closes a ring that is waiting for a second click.
@@ -367,11 +383,6 @@ private let radialMenuCallback: CGEventTapCallBack = { _, type, event, userInfo 
             guard controller.wantsPointerEvents else { return passthrough }
             controller.released(at: location)
             return nil
-        case .mouseMoved:
-            // Never swallowed: the cursor has to keep moving normally, the ring
-            // is only reading where it went.
-            if controller.wantsPointerEvents { controller.pointerMoved(to: location) }
-            return passthrough
         case .leftMouseDown:
             guard controller.wantsClicks else { return passthrough }
             controller.clicked(at: location)

@@ -55,7 +55,10 @@ private struct DockHit {
     }
     func start() {
         guard monitors.isEmpty else { return }
-        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .leftMouseUp, .leftMouseDown]
+        // Hover is sampled by the low-frequency timer below. Listening to every
+        // mouse move globally makes WindowServer do work even when the Dock
+        // preview is not being used.
+        let mask: NSEvent.EventTypeMask = [.leftMouseDragged, .leftMouseUp, .leftMouseDown]
         if let monitor = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] event in
             Task { @MainActor in self?.handle(event) }
         }) { monitors.append(monitor) }

@@ -10,8 +10,9 @@ struct WeatherSnapshot: Equatable {
     var isDay: Bool
 }
 
-/// Weather from Open-Meteo. No account, no API key, and no location permission:
-/// the place is a name the user types, resolved through the same service.
+/// Weather from Open-Meteo. It prefers the city the user typed. When that is
+/// empty, it asks macOS for one approximate location fix and uses coordinates
+/// directly, with no tracking and no disk cache.
 ///
 /// This is MacB's only outbound request besides Spotify artwork, so it stays off
 /// until the user enables it and never runs while the panel is hidden.
@@ -25,9 +26,19 @@ struct WeatherSnapshot: Equatable {
     private var lastFetch: Date?
     private var isVisible = false
     private var refreshTimer: Timer?
+    private let locations = LocationService()
 
     /// Open-Meteo asks for at most one call every few minutes for a single location.
     private let minimumInterval: TimeInterval = 900
+
+    @Published var usesCurrentLocation: Bool {
+        didSet {
+            UserDefaults.standard.set(usesCurrentLocation, forKey: "weatherUsesCurrentLocation")
+            snapshot = nil
+            lastFetch = nil
+            if isVisible { refresh(force: true) }
+        }
+    }
 
     var placeQuery: String {
         didSet {
@@ -42,6 +53,7 @@ struct WeatherSnapshot: Equatable {
     init(session: URLSession = .shared) {
         self.session = session
         placeQuery = UserDefaults.standard.string(forKey: "weatherPlace") ?? ""
+        usesCurrentLocation = UserDefaults.standard.object(forKey: "weatherUsesCurrentLocation") as? Bool ?? true
     }
 
     func setPanelVisible(_ visible: Bool) {
@@ -64,8 +76,8 @@ struct WeatherSnapshot: Equatable {
 
     func refresh(force: Bool = false) {
         let place = placeQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !place.isEmpty else {
-            errorMessage = nil
+        guard !place.isEmpty || usesCurrentLocation else {
+            errorMessage = "Şehir yaz veya konumu aç."
             return
         }
         if !force, let lastFetch, Date().timeIntervalSince(lastFetch) < minimumInterval { return }
@@ -73,8 +85,15 @@ struct WeatherSnapshot: Equatable {
         isLoading = true
         task = Task { [weak self] in
             guard let self else { return }
+            defer { if !Task.isCancelled { isLoading = false } }
             do {
-                let location = try await Self.geocode(place, session: session)
+                let location: Location
+                if place.isEmpty {
+                    let current = try await locations.requestCurrentLocation()
+                    location = Location(name: current.name, latitude: current.latitude, longitude: current.longitude)
+                } else {
+                    location = try await Self.geocode(place, session: session)
+                }
                 let current = try await Self.currentWeather(location, session: session)
                 guard !Task.isCancelled else { return }
                 snapshot = current
@@ -84,18 +103,21 @@ struct WeatherSnapshot: Equatable {
                 return
             } catch {
                 guard !Task.isCancelled else { return }
-                // Open-Meteo did not answer. Ask the second source, if there is
-                // one, before telling the user there is no weather.
-                if let fallback = await WeatherFallback.current(place: place, session: session) {
+                if !place.isEmpty, let fallback = await WeatherFallback.current(place: place, session: session) {
+                    guard !Task.isCancelled else { return }
+                    snapshot = fallback
+                    errorMessage = nil
+                    lastFetch = Date()
+                } else if place.isEmpty, usesCurrentLocation, let current = try? await locations.requestCurrentLocation(),
+                          let fallback = await WeatherFallback.current(latitude: current.latitude, longitude: current.longitude, place: current.name, session: session) {
                     guard !Task.isCancelled else { return }
                     snapshot = fallback
                     errorMessage = nil
                     lastFetch = Date()
                 } else {
-                    errorMessage = "Hava durumu alınamadı."
+                    errorMessage = (error as? LocalizedError)?.errorDescription ?? "Hava durumu alınamadı."
                 }
             }
-            isLoading = false
         }
     }
 

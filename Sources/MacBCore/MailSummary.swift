@@ -131,14 +131,20 @@ public enum MailParsing {
         let rows = raw.components(separatedBy: record)
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         var headers: [MailHeader] = []
+        var seen: Set<String> = []
         for row in rows {
             let fields = row.components(separatedBy: field)
             guard fields.count >= 4 else { continue }
-            headers.append(MailHeader(sender: fields[0],
-                                      subject: clip(fields[1]),
-                                      date: date(fields[2]),
-                                      isFlagged: fields[3].lowercased().contains("true"),
-                                      isUnread: true))
+            let header = MailHeader(sender: fields[0],
+                                    subject: clip(fields[1]),
+                                    date: date(fields[2]),
+                                    isFlagged: fields[3].lowercased().contains("true"),
+                                    isUnread: true,
+                                    mailbox: fields.count >= 5 ? fields[4] : "")
+            let key = ScenarioMatching.normalise(header.sender + "|" + header.subject + "|" + fields[2])
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            headers.append(header)
         }
         return headers.sorted { $0.date > $1.date }
     }

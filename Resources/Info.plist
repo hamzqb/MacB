@@ -22,5 +22,6 @@
     <key>NSRemindersFullAccessUsageDescription</key><string>Jarvis'e sorduğunda hatırlatıcılarını okur; yenisini eklemeden önce her seferinde onayını ister.</string>
     <key>NSSpeechRecognitionUsageDescription</key><string>MacB, söylediğini yazıya çevirmek için macOS'un cihaz üstü konuşma tanımasını kullanır. Ses Mac'ten çıkmaz.</string>
     <key>NSScreenCaptureUsageDescription</key><string>MacB, yalnız açık pencere önizlemeleri için görüntü alır. Görüntüler diske kaydedilmez veya paylaşılmaz.</string>
+    <key>NSLocationUsageDescription</key><string>MacB, hava durumu kartında şehir yazmadığında yaklaşık konumunu bir kez kullanır. Konum takip edilmez, kaydedilmez veya paylaşılmaz.</string>
 </dict>
 </plist>

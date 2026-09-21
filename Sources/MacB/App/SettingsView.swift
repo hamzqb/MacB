@@ -4,7 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private enum SettingsPage: String, CaseIterable, Identifiable {
-    case general = "Genel", windows = "Pencereler", widgets = "Widget'lar", tools = "Araçlar", automation = "Otomasyon", appearance = "Görünüm", privacy = "Gizlilik", permissions = "İzinler"
+    case general = "Genel", windows = "Pencereler", widgets = "Widget'lar", tools = "Araçlar", automation = "Otomasyon", appearance = "Görünüm", privacy = "Gizlilik", permissions = "İzinler", doctor = "Doğrulama"
     var id: String { rawValue }
     var icon: String {
         switch self {
@@ -16,6 +16,7 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .appearance: return "circle.lefthalf.filled"
         case .privacy: return "faceid"
         case .permissions: return "hand.raised"
+        case .doctor: return "stethoscope"
         }
     }
     var subtitle: String {
@@ -28,6 +29,40 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .appearance: return "Küçük ayrıntılar, daha sakin bir masaüstü."
         case .privacy: return "Özel alanlarını neyin açacağına sen karar ver."
         case .permissions: return "Hangi özelliklerin erişimi olacağı senin elinde."
+        case .doctor: return "MacB'nin çalışan damarlarını tek ekranda kontrol et."
+        }
+    }
+}
+
+private enum ToolsArea: String, CaseIterable, Identifiable {
+    case assistant, daily, system, cleanup
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .assistant: return "Kanka AI"
+        case .daily: return "Günlük"
+        case .system: return "Sistem"
+        case .cleanup: return "Temizlik"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .assistant: return "Anahtar, ses, metin"
+        case .daily: return "Mail, brifing, senaryo"
+        case .system: return "Mac araçları"
+        case .cleanup: return "Silme ve bakım"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .assistant: return "sparkles"
+        case .daily: return "sun.horizon"
+        case .system: return "macwindow"
+        case .cleanup: return "trash"
         }
     }
 }
@@ -83,6 +118,8 @@ struct SettingsView: View {
     @State private var showRemovalConfirmation = false
     @State private var showCacheConfirmation = false
     @State private var processSort: ProcessSort = .memory
+    @State private var selectedAIKeyProvider: AIProvider = .gemini
+    @State private var selectedToolsArea: ToolsArea = .assistant
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -110,6 +147,7 @@ struct SettingsView: View {
                     case .appearance: appearancePage
                     case .privacy: PrivacySettingsView(faceUnlock: faceUnlock)
                     case .permissions: permissionsPage
+                    case .doctor: doctorPage
                     }
                     Spacer(minLength: 0)
                 }
@@ -243,8 +281,56 @@ struct SettingsView: View {
         }
     }
 
+    private var toolsAreaPicker: some View {
+        HStack(spacing: MacBDesign.Space.snug) {
+            ForEach(ToolsArea.allCases) { area in
+                toolsAreaButton(area)
+            }
+        }
+    }
+
+    private func toolsAreaButton(_ area: ToolsArea) -> some View {
+        let selected = selectedToolsArea == area
+        return Button {
+            selectedToolsArea = area
+        } label: {
+            HStack(spacing: MacBDesign.Space.close) {
+                Image(systemName: area.symbol)
+                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                    .foregroundStyle(selected ? MacBDesign.accent : MacBDesign.muted)
+                    .frame(width: 24, height: 24)
+                    .background(selected ? MacBDesign.accent.opacity(0.14) : Color.primary.opacity(0.045),
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(area.title)
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(area.detail)
+                        .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+                        .foregroundStyle(MacBDesign.muted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, MacBDesign.Space.regular)
+            .padding(.vertical, MacBDesign.Space.snug)
+            .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+            .background(selected ? MacBDesign.accent.opacity(0.105) : Color.primary.opacity(0.028),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(selected ? MacBDesign.accent.opacity(0.45) : MacBDesign.cardStroke,
+                              lineWidth: selected ? 1.1 : 0.5))
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected] : [])
+        .accessibilityLabel("Araç kategorisi: \(area.title)")
+    }
+
     private var toolsPage: some View {
         VStack(alignment: .leading, spacing: 22) {
+            toolsAreaPicker
+            if selectedToolsArea == .assistant {
             section("Claude ve Codex", "sparkles") {
                 if aiActivity.statuses.isEmpty {
                     message("Açık masaüstü veya terminal oturumu bulunmadı.")
@@ -266,32 +352,21 @@ struct SettingsView: View {
                     }
                 }
             }
-            section("Yapay zekâ anahtarları", "key.horizontal") {
-                intro("Halkadaki Yapay zekâ dilimi, menüdeki \u{201C}Yapay zekâya sor\u{201D} ve seçili metin işleri bu anahtarlarla çalışır. Her anahtar Keychain'e yazılır — plist'e, dosyaya ya da koda değil — ve bir daha ekranda gösterilmez. Bir anahtar yalnız ait olduğu servise gider; giden tek şey sorduğun soru.")
-                HStack(spacing: MacBDesign.Space.regular) {
-                    Text("Soruları cevaplayan")
-                        .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
-                    Spacer(minLength: 8)
-                    Picker("Sağlayıcı", selection: $preferences.aiProvider) {
-                        Text("Otomatik (ücretsiz olan)").tag("")
-                        ForEach(AIProvider.textOrder) { provider in
-                            Text(provider.title).tag(provider.rawValue)
-                        }
-                    }
-                    .labelsHidden().fixedSize()
-                }
-                if let active = assistant.provider {
-                    message("Şu an \(active.title) cevaplıyor." + (active.canSearchWeb ? "" : " Bu sağlayıcıda web araması yok, cevaplar kaynaksız gelir."))
-                } else {
-                    message("Hiç anahtar yok. Aşağıdan birini gir — Groq ücretsiz ve hızlı.", warning: true)
-                }
-                ForEach(AIProvider.textOrder) { provider in
-                    rowDivider
-                    providerRow(provider)
-                }
-                if let error = aiKey.errorMessage { message(error, warning: true) }
-                message("Anahtarını bir yere yapıştırdıysan (sohbet, not, ekran görüntüsü) onu iptal et ve yenisini üret. Sızmış bir anahtar senin faturana çalışır.", warning: true)
             }
+            if selectedToolsArea == .assistant {
+            section("Yapay zekâ anahtarları", "key.horizontal") {
+                intro("Halkadaki Yapay zekâ dilimi, menüdeki “Yapay zekâya sor” ve seçili metin işleri bu anahtarlarla çalışır. Anahtarlar Keychain'e yazılır, ekranda tekrar gösterilmez ve yalnız ait olduğu servise gider.")
+                aiProviderHeader
+                aiProviderStrip
+                rowDivider
+                providerRow(selectedAIKeyProvider)
+                    .id(selectedAIKeyProvider.rawValue)
+                if let error = aiKey.errorMessage { message(error, warning: true) }
+                message("Anahtarını bir yere yapıştırdıysan onu iptal et ve yenisini üret. Sızmış bir anahtar senin faturana çalışır.", warning: true)
+            }
+            .onAppear(perform: chooseUsefulAIProvider)
+            }
+            if selectedToolsArea == .daily {
             section("Sesli senaryolar", "wand.and.stars") {
                 intro("Birkaç işi tek isme bağla: \u{201C}toplantı moduna geç\u{201D} dediğinde pencereler düzene girsin, Mac uyanık kalsın, müzik dursun. Adımları burada sen yazarsın; MacB yalnız var olan bir senaryoyu çalıştırabilir, yenisini yazamaz.")
                 HStack(spacing: MacBDesign.Space.regular) {
@@ -312,11 +387,15 @@ struct SettingsView: View {
                 }
                 message("Kısayol adımı, Kısayollar uygulamasındaki kendi kısayolunu çalıştırır. MacB'nin kendi başına yapamadığı bir şeyi böyle ekleyebilirsin.")
             }
+            }
+            if selectedToolsArea == .system {
             section("Dock ve ⌘Tab", "dock.rectangle") {
                 settingToggle("Dock'ta ve ⌘Tab'da görün",
                               detail: "Kapalıyken MacB yalnız island'da ve menü çubuğunda durur; ⌘Tab listesinde çıkmaz.",
                               isOn: $preferences.showInDock)
             }
+            }
+            if selectedToolsArea == .daily {
             section("Günaydın brifingi", "sun.horizon") {
                 settingToggle("Brifingi göster",
                               detail: "Sabah Mac uyandığında island'da selam, hava, bugünkü ilk iş ve pil. Günde bir kez.",
@@ -364,6 +443,8 @@ struct SettingsView: View {
                 }
                 message("Her şey bu Mac'ten okunur, hiçbir yere gitmez, anahtar gerekmez. Takvim ve hatırlatıcılar yalnız izin verdiysen okunur.")
             }
+            }
+            if selectedToolsArea == .daily {
             section("Mail", "envelope") {
                 settingToggle("Mail'e bakabilsin",
                               detail: "Brifing ve MacB, Apple Mail'de okunmamış maillerin kimden ve ne konuda olduğunu görebilir.",
@@ -402,6 +483,8 @@ struct SettingsView: View {
                     message("\(mail.summary.unread) okunmamış mail · \(mail.important.count) önemli")
                 }
             }
+            }
+            if selectedToolsArea == .assistant {
             section("Maliyet", "turkishlirasign.circle") {
                 HStack(spacing: MacBDesign.Space.comfortable) {
                     costBox("Bugün", aiCost.todayText, "\(aiCost.today.requests) istek")
@@ -426,6 +509,8 @@ struct SettingsView: View {
                         warning: aiCost.isOverDailyLimit)
                 message("Yalnız OpenAI'ye ödenen tahmini tutar sayılır; ücretsiz sağlayıcılar sıfır yazar. Sadece sayılar tutulur, hangi soruyu sorduğun değil. Kesin rakam OpenAI'nin panosundadır.")
             }
+            }
+            if selectedToolsArea == .assistant {
             section("Sesli asistan", "person.wave.2") {
                 intro("MacB (okunuşu \u{201C}Mek bi\u{201D}) canlı sesli asistanın: konuşursun, konuşarak cevap verir, lafını bölebilirsin. İnternette araştırır, uygulama açar, müziği ve sesi yönetir, zamanlayıcı kurar, takvimine bakar, istersen ekranına bakıp okur.")
                 settingToggle("\(JarvisHotKey.displayKeys) ile aç", detail: "Halkadaki \u{201C}MacB ile konuş\u{201D} dilimi ve menüdeki aynı adlı komut her zaman çalışır.",
@@ -449,7 +534,7 @@ struct SettingsView: View {
                     }
                     .labelsHidden().fixedSize()
                 }
-                message((JarvisPersona(rawValue: preferences.jarvisPersona) ?? .mirror).note)
+                message((JarvisPersona(rawValue: preferences.jarvisPersona) ?? JarvisPersona.defaultPersona).note)
                 HStack(spacing: MacBDesign.Space.regular) {
                     Text("Motor").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     Spacer(minLength: 8)
@@ -502,6 +587,8 @@ struct SettingsView: View {
                     }
                 }
             }
+            }
+            if selectedToolsArea == .assistant {
             section("Seçili metin ve ses", "text.line.3.summary") {
                 intro("Halkaya Seçimi özetle, Seçimi düzelt, Seçimi çevir ve Sesle sor dilimlerini ekleyebilirsin. Sonuç panele gelir ve panoya kopyalanır; uygulama izin veriyorsa seçimin yerine de konabilir.")
                 HStack(spacing: MacBDesign.Space.regular) {
@@ -523,6 +610,8 @@ struct SettingsView: View {
                     .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            }
+            if selectedToolsArea == .daily {
             section("Uyanık tut", "cup.and.heat.waves") {
                 HStack(spacing: MacBDesign.Space.regular) {
                     VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
@@ -547,6 +636,8 @@ struct SettingsView: View {
                     .labelsHidden().fixedSize()
                 }
             }
+            }
+            if selectedToolsArea == .system {
             section("Sistem", "gauge.with.dots.needle.67percent") {
                 HStack(spacing: MacBDesign.Space.regular) {
                     systemMetric("CPU", "\(Int(systemMonitor.snapshot.cpuUsage))%",
@@ -561,6 +652,8 @@ struct SettingsView: View {
                 Label(thermalText, systemImage: "thermometer.medium")
                     .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
             }
+            }
+            if selectedToolsArea == .system {
             section("Klavye temizleme", "keyboard") {
                 Text("Klavye girişini geçici olarak durdurur. Fare çalışır; üç kez Esc acil çıkıştır.")
                     .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
@@ -576,6 +669,8 @@ struct SettingsView: View {
                 }
                 if let error = keyboardCleaning.errorMessage { message(error, warning: true) }
             }
+            }
+            if selectedToolsArea == .system {
             section("Arşiv", "doc.zipper") {
                 Text("Dosyaları MacB içinde ZIP olarak sıkıştır veya güvenli biçimde çıkar.")
                     .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
@@ -584,6 +679,8 @@ struct SettingsView: View {
                     Button("ZIP çıkar…", action: utilities.extractArchive)
                 }
             }
+            }
+            if selectedToolsArea == .cleanup {
             section("Uygulama kaldırma", "trash") {
                 Color.clear.frame(height: 0).id(Self.removalAnchor)
                 intro("Uygulamayı, yardımcılarını ve kullanıcı kalıntılarını arar. Hiçbir şey silinmez, hepsi Çöp Sepeti'ne taşınır.")
@@ -609,6 +706,8 @@ struct SettingsView: View {
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
+            }
+            if selectedToolsArea == .cleanup {
             section("Kaynak kullanımı", "chart.bar.xaxis") {
                 intro("Belleği ve işlemciyi en çok kim kullanıyor. Yardımcı süreçler kendi uygulamalarının altında toplanır.")
                 Picker("", selection: $processSort) {
@@ -630,6 +729,8 @@ struct SettingsView: View {
                         .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                 }
             }
+            }
+            if selectedToolsArea == .cleanup {
             section("Önbellek temizliği", "sparkles.rectangle.stack") {
                 Color.clear.frame(height: 0).id(Self.cacheAnchor)
                 intro("Uygulamaların yeniden oluşturabildiği geçici klasörleri arar. Belgeler, ayarlar ve uygulama verileri hiç taranmaz.")
@@ -647,10 +748,13 @@ struct SettingsView: View {
                     .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12))
                 }
             }
+            }
+            if selectedToolsArea == .system {
             section("MacWhisper", "waveform") {
                 Text(utilities.macWhisperInstalled ? "Ses veya video dosyasını MacWhisper’a gönder." : "MacWhisper kurulu değil.")
                     .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                 Button("Dosya gönder…", action: utilities.sendAudioToMacWhisper).disabled(!utilities.macWhisperInstalled)
+            }
             }
             if utilities.isWorking { ProgressView().controlSize(.small) }
             if let status = utilities.statusMessage { message(status, warning: false) }
@@ -869,21 +973,30 @@ struct SettingsView: View {
                     ForEach(WeatherWidgetStyle.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                settingToggle("Şehir yoksa konumumu kullan",
+                              detail: "MacB yalnız bir kez yaklaşık konum ister; takip etmez ve koordinatı diske yazmaz.",
+                              isOn: $weather.usesCurrentLocation)
                 HStack(spacing: MacBDesign.Space.regular) {
-                    TextField("Şehir", text: Binding(
+                    TextField(weather.usesCurrentLocation ? "Boş bırak: konumdan bul" : "Şehir", text: Binding(
                         get: { weather.placeQuery },
                         set: { weather.placeQuery = $0 }
                     ))
                     .textFieldStyle(.roundedBorder)
-                    .frame(maxWidth: 240)
+                    .frame(maxWidth: 260)
                     .accessibilityLabel("Hava durumu şehri")
                     if weather.isLoading { ProgressView().controlSize(.small) }
+                    Button("Şimdi dene") { weather.refresh(force: true) }
                     Spacer()
                 }
-                Text("Şehir adı Open-Meteo üzerinden çözülür. Konum izni istenmez, sorgu yalnızca panel açıkken ve en fazla 15 dakikada bir yapılır.")
+                Text("Şehir yazarsan Open-Meteo şehir adıyla çalışır. Boş bırakırsan konum izniyle lat/lon üzerinden hızlı bakar.")
                     .font(.system(size: MacBDesign.TypeScale.caption))
                     .foregroundStyle(MacBDesign.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                if let snapshot = weather.snapshot {
+                    Label("\(snapshot.place) · \(snapshot.temperature)° · \(snapshot.condition)", systemImage: snapshot.symbol)
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
+                        .foregroundStyle(MacBDesign.accent)
+                }
                 if let error = weather.errorMessage {
                     Text(error).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(.orange)
                 }
@@ -1474,11 +1587,183 @@ struct SettingsView: View {
             rowDivider
             permissionRow("Kamera", detail: "Canlı önizleme yalnız sen kamera düğmesine bastığında çalışır.",
                           granted: camera.isAuthorized, actionTitle: "İzin ver", action: camera.requestAuthorization)
+            rowDivider
+            permissionRow("Konum", detail: "Hava durumu kartında şehir yazmadığında yaklaşık konumu bir kez almak için.",
+                          granted: permissions.location, actionTitle: "İzin ver", action: permissions.requestLocation)
             if let error = camera.errorMessage { message(error, warning: true) }
             Text("Bir izin kapalıyken diğer özellikler çalışmaya devam eder. macOS yeniden başlatma isterse MacB’yi kapatıp aç.")
                 .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MacBDesign.Space.tight)
+        }
+    }
+
+    private var doctorPage: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            section("Sistem sağlığı", "stethoscope") {
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: MacBDesign.Space.regular) {
+                    doctorTile("Pencere kontrolü", permissions.accessibility ? "Hazır" : "İzin bekliyor", "rectangle.3.group", good: permissions.accessibility)
+                    doctorTile("Önizlemeler", permissions.screenCapture ? "Hazır" : "Ekran kaydı yok", "rectangle.on.rectangle", good: permissions.screenCapture)
+                    doctorTile("Medya", mediaPermissionGranted ? "Tek kart hazır" : "Kaynak izni bekliyor", "music.note", good: mediaPermissionGranted)
+                    doctorTile("Konumlu hava", permissions.location || !weather.placeQuery.isEmpty ? "Hazır" : "Konum veya şehir yok", "cloud.sun", good: permissions.location || !weather.placeQuery.isEmpty)
+                }
+                HStack(spacing: MacBDesign.Space.regular) {
+                    Button("İzinleri yenile") { permissions.refresh() }
+                    Button("Medyayı hazırla", action: prepareMediaAccess)
+                    Button("Havayı dene") { weather.refresh(force: true) }
+                }
+            }
+            section("Canlı servisler", "waveform.path.ecg") {
+                statusLine("Hava", weatherStatus, symbol: weather.snapshot?.symbol ?? "cloud")
+                rowDivider
+                statusLine("Mail", mailStatus, symbol: "envelope")
+                rowDivider
+                statusLine("Güncelleme", updateTitle + " — " + updateDetail, symbol: "arrow.triangle.2.circlepath")
+                rowDivider
+                statusLine("Yüz kilidi", faceUnlock.settings.isEnabled ? "Ürün içi özel alanlar için açık." : "Kapalı veya kayıt bekliyor.", symbol: "faceid")
+            }
+            section("Güvenli probe'lar", "terminal") {
+                Text("Terminalden çalıştır: --mail-probe özel konu/sender basmadan Mail sayımlarını verir; --measure-assistant izin kartının sığıp sığmadığını ölçer.")
+                    .font(.system(size: MacBDesign.TypeScale.caption))
+                    .foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var weatherStatus: String {
+        if weather.isLoading { return "Kontrol ediliyor…" }
+        if let snapshot = weather.snapshot { return "\(snapshot.place), \(snapshot.temperature)°, \(snapshot.condition)" }
+        return weather.errorMessage ?? "Henüz veri yok."
+    }
+
+    private var mailStatus: String {
+        if mail.isReading { return "Mail okunuyor…" }
+        if mail.summary.isUnavailable { return mail.summary.note ?? "Mail kullanılamıyor." }
+        return mail.summary.unread == 0 ? "Okunmamış önemli mail görünmüyor." : "\(mail.summary.unread) okunmamış mail görüldü."
+    }
+
+    private func doctorTile(_ title: String, _ detail: String, _ symbol: String, good: Bool) -> some View {
+        VStack(alignment: .leading, spacing: MacBDesign.Space.close) {
+            HStack {
+                Image(systemName: symbol)
+                    .font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
+                    .foregroundStyle(good ? MacBDesign.accent : Color.orange)
+                Spacer()
+                Circle().fill(good ? Color.green : Color.orange).frame(width: 7, height: 7)
+            }
+            Text(title).font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
+            Text(detail).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+        }
+        .padding(MacBDesign.Space.comfortable)
+        .background(LinearGradient(colors: [Color.primary.opacity(0.055), Color.primary.opacity(0.025)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.primary.opacity(0.06)))
+    }
+
+    private func statusLine(_ title: String, _ detail: String, symbol: String) -> some View {
+        HStack(alignment: .top, spacing: MacBDesign.Space.regular) {
+            Image(systemName: symbol).foregroundStyle(MacBDesign.accent).frame(width: 22)
+            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                Text(title).font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
+                Text(detail).font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// The AI key card used to build every provider's text field, model menu and
+    /// buttons at once. On the tools page that meant five secure fields and five
+    /// pickers were measured every time SwiftUI laid out the scroll view. The
+    /// strip keeps the overview visible, and the detail panel mounts only one
+    /// provider, which makes the page feel calm instead of heavy.
+    private var aiProviderHeader: some View {
+        HStack(alignment: .center, spacing: MacBDesign.Space.regular) {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
+                Text("Soruları cevaplayan")
+                    .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                Text(aiProviderStatusText)
+                    .font(.system(size: MacBDesign.TypeScale.caption))
+                    .foregroundStyle(MacBDesign.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Picker("Sağlayıcı", selection: $preferences.aiProvider) {
+                Text("Otomatik").tag("")
+                ForEach(AIProvider.textOrder) { provider in
+                    Text(provider.title).tag(provider.rawValue)
+                }
+            }
+            .labelsHidden()
+            .fixedSize()
+        }
+        .padding(12)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var aiProviderStatusText: String {
+        if let active = assistant.provider {
+            return "Şu an \(active.title) cevaplıyor" + (active.canSearchWeb ? "." : "; web araması yok.")
+        }
+        return "Henüz anahtar yok. Ücretsiz ve güçlü başlangıç için Gemini iyi seçim."
+    }
+
+    private var aiProviderStrip: some View {
+        HStack(spacing: MacBDesign.Space.snug) {
+            ForEach(AIProvider.textOrder) { provider in
+                aiProviderPill(provider)
+            }
+        }
+    }
+
+    private func aiProviderPill(_ provider: AIProvider) -> some View {
+        let selected = provider == selectedAIKeyProvider
+        let hasKey = aiKey.has(provider)
+        return Button {
+            selectedAIKeyProvider = provider
+        } label: {
+            VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
+                HStack(spacing: MacBDesign.Space.tight) {
+                    Image(systemName: hasKey ? "checkmark.seal.fill" : provider.isFree ? "sparkles" : "creditcard")
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                        .foregroundStyle(hasKey ? MacBDesign.accent : MacBDesign.muted)
+                    Spacer(minLength: 0)
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
+                            .foregroundStyle(MacBDesign.accent)
+                    }
+                }
+                Text(provider.title)
+                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                    .lineLimit(1)
+                Text(hasKey ? "Hazır" : (provider.isFree ? "Ücretsiz" : "Ses + web"))
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
+                    .foregroundStyle(MacBDesign.muted)
+                    .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+            .padding(.horizontal, MacBDesign.Space.regular)
+            .padding(.vertical, MacBDesign.Space.snug)
+            .background(selected ? MacBDesign.accent.opacity(0.12) : Color.primary.opacity(0.032),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(selected ? MacBDesign.accent.opacity(0.55) : MacBDesign.cardStroke,
+                              lineWidth: selected ? 1.2 : 0.5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(provider.title) sağlayıcısını düzenle")
+    }
+
+    private func chooseUsefulAIProvider() {
+        if aiKey.has(selectedAIKeyProvider) { return }
+        if let selected = AIProvider(rawValue: preferences.aiProvider), aiKey.has(selected) {
+            selectedAIKeyProvider = selected
+        } else if let active = assistant.provider {
+            selectedAIKeyProvider = active
+        } else if let stored = AIProvider.textOrder.first(where: { aiKey.has($0) }) {
+            selectedAIKeyProvider = stored
         }
     }
 

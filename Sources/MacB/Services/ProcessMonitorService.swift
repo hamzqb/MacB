@@ -15,6 +15,7 @@ import MacBCore
     @Published private(set) var lastUpdate = Date.distantPast
 
     private var timer: Timer?
+    private var interval: TimeInterval = 30
     private var previousCPU: [Int32: UInt64] = [:]
     private var previousSampleDate: Date?
     private var isSampling = false
@@ -22,13 +23,29 @@ import MacBCore
     func start() {
         guard timer == nil else { return }
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 6, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
-        timer?.tolerance = 1.5
+        schedule()
     }
 
     func stop() { timer?.invalidate(); timer = nil }
+
+    /// Process walking is the most expensive read-only monitor MacB has. Keep it
+    /// calm while the list is not on screen, then make it feel live when the
+    /// island actually shows the resource card.
+    func setFastSampling(_ fast: Bool) {
+        let wanted: TimeInterval = fast ? 6 : 30
+        guard wanted != interval else { return }
+        interval = wanted
+        guard timer != nil else { return }
+        schedule()
+    }
+
+    private func schedule() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
+        }
+        timer?.tolerance = interval / 4
+    }
 
     func refresh() {
         guard !isSampling else { return }

@@ -1,11 +1,14 @@
 import AppKit
 import ApplicationServices
 import Combine
+import CoreLocation
 
 @MainActor final class PermissionStore: ObservableObject {
     @Published private(set) var accessibility = false
     @Published private(set) var screenCapture = false
     @Published private(set) var inputMonitoring = false
+    @Published private(set) var location = false
+    private let locationManager = CLLocationManager()
     private var timer: Timer?
     private var observers: [NSObjectProtocol] = []
     private var refreshTask: Task<Void, Never>?
@@ -15,6 +18,10 @@ import Combine
         accessibility = AXIsProcessTrusted()
         screenCapture = CGPreflightScreenCaptureAccess()
         inputMonitoring = CGPreflightListenEventAccess()
+        switch locationManager.authorizationStatus {
+        case .authorizedAlways, .authorizedWhenInUse: location = true
+        default: location = false
+        }
     }
     func startObserving() {
         refresh()
@@ -53,6 +60,12 @@ import Combine
         _ = CGRequestListenEventAccess()
         refresh()
         if !inputMonitoring { openPrivacy("Privacy_ListenEvent") }
+        refreshAfterSystemSettings()
+    }
+    func requestLocation() {
+        locationManager.requestWhenInUseAuthorization()
+        refresh()
+        if !location { openPrivacy("Privacy_LocationServices") }
         refreshAfterSystemSettings()
     }
     func openPrivacy(_ section: String) {

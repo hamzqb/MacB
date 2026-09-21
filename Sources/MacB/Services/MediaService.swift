@@ -43,7 +43,18 @@ final class MediaService: ObservableObject {
     let spotify: SpotifyService
     let appleMusic: AppleMusicService
     let browser: BrowserMediaService
+    private struct LastPlayable {
+        var source: MediaSource
+        var title: String
+        var artist: String
+        var artwork: NSImage?
+        var position: Double
+        var duration: Double
+        var date: Date
+    }
+
     private var subscriptions: Set<AnyCancellable> = []
+    private var lastPlayable: LastPlayable?
 
     init(spotify: SpotifyService, appleMusic: AppleMusicService, browser: BrowserMediaService) {
         self.spotify = spotify
@@ -167,7 +178,26 @@ final class MediaService: ObservableObject {
             position = browser.position
             duration = browser.duration
         }
+        restoreLastPlayableIfNeeded()
+        rememberPlayableIfPossible()
         updateTint(previous: previousArtwork)
+    }
+
+
+    private func rememberPlayableIfPossible() {
+        guard source != .none, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        lastPlayable = LastPlayable(source: source, title: title, artist: artist, artwork: artwork,
+                                    position: position, duration: duration, date: Date())
+    }
+
+    private func restoreLastPlayableIfNeeded() {
+        guard let last = lastPlayable, Date().timeIntervalSince(last.date) < 60 * 60 else { return }
+        guard source == last.source else { return }
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { title = last.title }
+        if artist.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { artist = last.artist }
+        if artwork == nil { artwork = last.artwork }
+        if duration <= 0 { duration = last.duration }
+        if position <= 0 { position = last.position }
     }
 
     /// Reads the cover's colour once per cover, not once per poll: the services
@@ -194,6 +224,14 @@ final class MediaService: ObservableObject {
         if spotify.isRunning && !spotify.trackTitle.isEmpty { return .spotify }
         if appleMusic.isRunning && !appleMusic.trackTitle.isEmpty { return .appleMusic }
         if browser.isRunning && !browser.title.isEmpty { return .browser }
+        if let last = lastPlayable, Date().timeIntervalSince(last.date) < 60 * 60 {
+            switch last.source {
+            case .spotify where spotify.isRunning: return .spotify
+            case .appleMusic where appleMusic.isRunning: return .appleMusic
+            case .browser where browser.isRunning: return .browser
+            default: break
+            }
+        }
         return .none
     }
 }

@@ -24,6 +24,7 @@ private struct DesktopWindowSection: Identifiable {
     let id: String
     let title: String
     let isCurrent: Bool
+    let order: Int
     let windows: [WindowRecord]
 }
 
@@ -58,16 +59,24 @@ private struct DesktopWindowSection: Identifiable {
         }, by: { $0.0 })
         var result = indexed.keys.sorted().map { index in
             let records = indexed[index, default: []].map(\.1)
-            return DesktopWindowSection(id: "desktop-\(index)", title: "Masaüstü \(index)",
-                isCurrent: records.contains { $0.desktopLocation == .current }, windows: records)
+            let current = records.contains { $0.desktopLocation == .current }
+            return DesktopWindowSection(id: "desktop-\(index)",
+                title: current ? "Bu Masaüstü · \(index)" : "Masaüstü \(index)",
+                isCurrent: current, order: index, windows: records)
         }
-        let unassigned = matchingWindows.filter { $0.desktopIndex == nil }
-        if !unassigned.isEmpty {
+        let currentFallback = matchingWindows.filter { $0.desktopIndex == nil && $0.desktopLocation != .other }
+        if !currentFallback.isEmpty {
             result.append(DesktopWindowSection(id: "desktop-current-fallback", title: "Bu Masaüstü",
-                isCurrent: true, windows: unassigned))
+                isCurrent: true, order: 0, windows: currentFallback))
+        }
+        let otherFallback = matchingWindows.filter { $0.desktopIndex == nil && $0.desktopLocation == .other }
+        if !otherFallback.isEmpty {
+            result.append(DesktopWindowSection(id: "desktop-other-fallback", title: "Diğer Masaüstü",
+                isCurrent: false, order: Int.max - 1, windows: otherFallback))
         }
         return result.sorted {
             if $0.isCurrent != $1.isCurrent { return $0.isCurrent }
+            if $0.order != $1.order { return $0.order < $1.order }
             return $0.id.localizedStandardCompare($1.id) == .orderedAscending
         }
     }
