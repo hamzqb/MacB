@@ -1498,6 +1498,12 @@ struct CoreTestRunner {
                 let output = try require(audio["output"] as? [String: Any], "No output")
                 try expect((input["format"] as? [String: Any])?["rate"] as? Int == 24_000, "Input rate is not 24 kHz")
                 try expect((input["turn_detection"] as? [String: Any])?["interrupt_response"] as? Bool == true, "Interruptions are off")
+                try expect((input["turn_detection"] as? [String: Any])?["eagerness"] as? String == "low",
+                           "The turn ends before a Turkish sentence does")
+                try expect((input["noise_reduction"] as? [String: Any])?["type"] as? String == "near_field",
+                           "No noise reduction on a laptop microphone")
+                try expect((input["transcription"] as? [String: Any])?["language"] as? String == "tr",
+                           "What the user said is not written down in Turkish")
                 try expect(output["voice"] as? String == "cedar", "The chosen voice was not used")
                 let tools = try require(session["tools"] as? [[String: Any]], "No tools")
                 try expect(Set(tools.compactMap { $0["name"] as? String }) == Set(JarvisTool.allCases.map(\.rawValue)), "Tool list drifted")
@@ -1559,31 +1565,60 @@ struct CoreTestRunner {
                     ["type": "message", "content": [["type": "output_text", "text": "a"], ["type": "output_text", "text": "b"]]]]]
                 try expect(AIResponseStream.outputText(inResponse: nested) == "a\nb", "Nested text missed")
             }),
-            ("JarvisTool: small actions run directly, money waits for a yes", {
+            ("JarvisTool: plain asks run directly, outside words cannot act, money always waits", {
+                // Asked plainly, nothing stops for a yes.
                 for tool in JarvisTool.allCases {
-                    try expect(!tool.needsConfirmation(afterReadingOutsideContent: true, privateContent: true),
-                               "\(tool) was gated even though it was not a payment")
+                    try expect(!tool.needsConfirmation(afterReadingOutsideContent: false),
+                               "\(tool) asked although nothing outside had been read")
                 }
+                // After a page, a mail or the screen, whatever reaches out waits.
+                for tool in [JarvisTool.openWebsite, .copyToClipboard, .remember, .addNote, .startBackgroundJob,
+                             .clickControl, .typeText, .pressKeys, .powerAction, .browserAction, .createWatcher] {
+                    try expect(tool.needsConfirmation(afterReadingOutsideContent: true),
+                               "\(tool) could be steered by something MacB read")
+                }
+                for tool in [JarvisTool.readScreenText, .screenControls, .weather, .systemStatus, .media, .setVolume] {
+                    try expect(!tool.needsConfirmation(afterReadingOutsideContent: true, privateContent: true),
+                               "\(tool) asked although it only reads or is harmless")
+                }
+                try expect(!JarvisTool.webSearch.needsConfirmation(afterReadingOutsideContent: true),
+                           "Searching after a public page asked")
+                try expect(JarvisTool.webSearch.needsConfirmation(afterReadingOutsideContent: true, privateContent: true),
+                           "A search could carry private material out")
+                // Money: always, even asked plainly, in the browser or on screen.
                 let payment = JarvisCall(callID: "1", name: JarvisTool.browserAction.rawValue,
                                          arguments: #"{"action":"click","target":"Satın al"}"#)
                 let fillCard = JarvisCall(callID: "2", name: JarvisTool.browserAction.rawValue,
                                           arguments: #"{"action":"fill","target":"Kart numarası","value":"4111111111111111"}"#)
                 let harmless = JarvisCall(callID: "3", name: JarvisTool.browserAction.rawValue,
                                           arguments: #"{"action":"click","target":"Ara"}"#)
-                try expect(JarvisTool.browserAction.needsConfirmation(call: payment,
-                                                                      afterReadingOutsideContent: false),
-                           "Buying something did not wait for a yes")
-                try expect(JarvisTool.browserAction.needsConfirmation(call: fillCard,
-                                                                      afterReadingOutsideContent: false),
-                           "Card entry did not wait for a yes")
-                try expect(!JarvisTool.browserAction.needsConfirmation(call: harmless,
-                                                                       afterReadingOutsideContent: true,
-                                                                       privateContent: true),
-                           "A harmless click needed a yes")
+                let screenPay = JarvisCall(callID: "4", name: JarvisTool.clickControl.rawValue,
+                                           arguments: #"{"target":"Ödemeyi onayla"}"#)
+                let screenCard = JarvisCall(callID: "5", name: JarvisTool.typeText.rawValue,
+                                            arguments: #"{"text":"4111 1111 1111 1111"}"#)
+                let screenSave = JarvisCall(callID: "6", name: JarvisTool.clickControl.rawValue,
+                                            arguments: #"{"target":"Kaydet"}"#)
+                try expect(JarvisTool.browserAction.involvesMoney(payment), "Buying something did not wait for a yes")
+                try expect(JarvisTool.browserAction.involvesMoney(fillCard), "Card entry did not wait for a yes")
+                try expect(!JarvisTool.browserAction.involvesMoney(harmless), "A harmless click counted as money")
+                try expect(JarvisTool.clickControl.involvesMoney(screenPay), "Paying through a native button did not ask")
+                try expect(JarvisTool.typeText.involvesMoney(screenCard), "Typing a card number did not ask")
+                try expect(!JarvisTool.clickControl.involvesMoney(screenSave), "Saving counted as money")
+                try expect(JarvisTool.clickControl.needsConfirmation(call: screenPay, afterReadingOutsideContent: false),
+                           "Money did not ask when asked plainly")
+                try expect(Set(JarvisTool.allCases.filter(\.isScreenControl)) == [.clickControl, .typeText, .pressKeys],
+                           "The screen-control grant covers the wrong tools")
                 try expect(Set(JarvisTool.allCases.filter(\.readsOutsideContent))
                            == [.webSearch, .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .calendarEvents,
-                               .media, .codingAgents, .readMail],
+                               .media, .codingAgents, .readMail, .screenControls],
                            "The outside-content set drifted")
+                for tool in JarvisTool.allCases where tool.isScreenControl || tool == .screenControls {
+                    try expect(AgentPolicy.isForbidden(tool), "A background job could touch the screen with \(tool)")
+                }
+                try expect(!JarvisTool.freeEngineTools.contains(.screenControls)
+                           && JarvisTool.freeEngineTools(readsScreen: true).contains(.screenControls)
+                           && !JarvisTool.freeEngineTools(readsScreen: true).contains(.lookAtScreen),
+                           "The free engine's screen switch is wrong")
                 try expect(JarvisProtocol.event(from: #"{"type":"response.created"}"#) == .responseStarted, "Response start missed")
             }),
             ("JarvisMemory: facts are kept short, once, newest last, and forgotten on request", {
@@ -2118,8 +2153,10 @@ struct CoreTestRunner {
                            "The names did not reach the model")
                 try expect(JarvisProtocol.scenarioInstructions(for: []).isEmpty,
                            "An empty list still said something")
-                try expect(!JarvisTool.runScenario.needsConfirmation(afterReadingOutsideContent: true),
-                           "A scenario needed a yes even though no money is involved")
+                try expect(!JarvisTool.runScenario.needsConfirmation(afterReadingOutsideContent: false),
+                           "A scenario asked for plainly needed a yes")
+                try expect(JarvisTool.runScenario.needsConfirmation(afterReadingOutsideContent: true),
+                           "A page could start one of the user's scenarios")
                 try expect(!JarvisTool.runScenario.needsConfirmation(afterReadingOutsideContent: false),
                            "The user's own scenario needed a second yes")
             }),

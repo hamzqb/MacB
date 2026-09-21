@@ -23,6 +23,10 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     case openWebsite = "open_website"
     case readBrowserPage = "read_browser_page"
     case browserAction = "browser_action"
+    case screenControls = "screen_controls"
+    case clickControl = "click_control"
+    case typeText = "type_text"
+    case pressKeys = "press_keys"
     case media = "media_control"
     case setVolume = "set_volume"
     case startTimer = "start_timer"
@@ -46,12 +50,36 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     case forget = "forget"
     case endConversation = "end_conversation"
 
-    /// Needs a yes in the panel before it runs, every time.
+    /// Needs a yes in the panel before it runs, every time, whatever was read.
     ///
-    /// MacB is meant to feel direct: opening, reading, writing a note or setting
-    /// up a watcher should not stop for a yes. The hard stop is money: payment,
-    /// checkout, card fields or purchase-like browser actions still ask.
+    /// MacB is meant to feel direct: asked plainly, opening, reading, writing a
+    /// note or pressing a button does not stop for a yes. Only money always
+    /// does, and that depends on the arguments — see `needsConfirmation(call:…)`.
     public var needsConfirmation: Bool { false }
+
+    /// Reaches beyond the conversation: opens, sends, stores, schedules,
+    /// presses or types. Free while the conversation holds only what the user
+    /// said; after it has read someone else's words, these wait for a yes,
+    /// because those words may be the ones asking.
+    public var actsOutward: Bool {
+        switch self {
+        case .openApplication, .openWebsite, .copyToClipboard, .addNote, .remember, .forget, .runScenario,
+             .startBackgroundJob, .browserAction, .createWatcher, .addReminder, .addCalendarEvent,
+             .clickControl, .typeText, .pressKeys, .powerAction:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Hands on the keyboard and pointer. One yes covers the rest of the
+    /// conversation, so a task of ten clicks is one question, not ten.
+    public var isScreenControl: Bool {
+        switch self {
+        case .clickControl, .typeText, .pressKeys: return true
+        default: return false
+        }
+    }
 
     /// Brings text written by someone else into the conversation: a web page,
     /// the screen, a selection, a calendar invitation, a track title. An ad
@@ -59,7 +87,7 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     public var readsOutsideContent: Bool {
         switch self {
         case .webSearch, .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .calendarEvents,
-             .media, .codingAgents, .readMail:
+             .media, .codingAgents, .readMail, .screenControls:
             return true
         default: return false
         }
@@ -68,7 +96,8 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// Brings the user's own private material into the conversation.
     public var readsPrivateContent: Bool {
         switch self {
-        case .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .calendarEvents, .readMail: return true
+        case .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .calendarEvents, .readMail,
+             .screenControls: return true
         default: return false
         }
     }
@@ -87,8 +116,31 @@ public enum JarvisTool: String, CaseIterable, Sendable {
 
     public func needsConfirmation(call: JarvisCall?, afterReadingOutsideContent tainted: Bool,
                                   privateContent: Bool = false) -> Bool {
-        if self == .browserAction, let call, Self.isMoneyRelatedBrowserAction(call.argumentObject) { return true }
+        if let call, involvesMoney(call) { return true }
+        guard tainted else { return false }
+        if actsOutward { return true }
+        // Once private material is in the conversation, the query of a search
+        // is a road out of the Mac.
+        if self == .webSearch { return privateContent }
         return false
+    }
+
+    /// A payment, a purchase or a card, in the browser or anywhere on screen.
+    /// Always a yes, every time: no earlier approval in the conversation covers it.
+    public func involvesMoney(_ call: JarvisCall) -> Bool {
+        let arguments = call.argumentObject
+        switch self {
+        case .browserAction:
+            return Self.isMoneyRelatedBrowserAction(arguments)
+        case .clickControl, .typeText:
+            let field = arguments["field"] as? String ?? ""
+            return Self.isMoneyRelatedBrowserAction([
+                "target": (arguments["target"] as? String ?? "") + " " + field,
+                "value": arguments["text"] as? String ?? ""
+            ])
+        default:
+            return false
+        }
     }
 
     public static func isMoneyRelatedBrowserAction(_ arguments: [String: Any]) -> Bool {
@@ -129,6 +181,10 @@ public enum JarvisTool: String, CaseIterable, Sendable {
         case .openWebsite: return "Sayfa açıyor"
         case .readBrowserPage: return "Tarayıcıyı okuyor"
         case .browserAction: return "Tarayıcıda işlem yapıyor"
+        case .screenControls: return "Ekrana bakıyor"
+        case .clickControl: return "Tıklıyor"
+        case .typeText: return "Yazıyor"
+        case .pressKeys: return "Tuşa basıyor"
         case .media: return "Müziği yönetiyor"
         case .setVolume: return "Sesi ayarlıyor"
         case .startTimer: return "Zamanlayıcı kuruyor"
@@ -174,6 +230,14 @@ public enum JarvisTool: String, CaseIterable, Sendable {
             return "Read the active Safari/Chrome/Brave/Edge/Arc tab locally: title, URL, visible text, form fields, buttons and links. No screenshot is sent and no paid vision model is used. Use it when the user says 'this site', 'this page', asks you to inspect a reservation page, or wants a local/free browser agent."
         case .browserAction:
             return "Act in the active browser tab after the user approves: fill a field by label/placeholder/name or click a visible button/link by text. Never use it for passwords, payments, purchases, logins or final submission unless the user explicitly confirms the exact action."
+        case .screenControls:
+            return "List the buttons, fields, checkboxes, links and menu titles in the front app's window, read locally through Accessibility — free, no screenshot. Call it before click_control or type_text when you do not know what a control is called."
+        case .clickControl:
+            return "Press a button, checkbox, link or tab in the front app by its visible name, or pick a menu item with a path like 'Dosya > Kaydet'. Local and free. Use the name as screen_controls lists it. Never use it to confirm a payment, a purchase, deleting something or sending a message unless the user just asked for exactly that."
+        case .typeText:
+            return "Type text where the cursor is in the front app, or into the field named by 'field'. Local. It refuses password fields and password managers — tell the user to type passwords themselves. Use \\n for a new line."
+        case .pressKeys:
+            return "Send a key or shortcut to the front app: 'cmd+s', 'cmd+shift+t', 'return', 'tab', 'escape', arrows, 'f5'. 'times' repeats it (max 20). Local and free."
         case .playMusic:
             return "Play something by name. service picks where: 'youtube' opens the first matching video and it starts playing, 'spotify' opens Spotify on the search, 'apple_music' opens Music on the search. Use it when the user names a song, an artist, a video or a channel. For pausing or skipping what is already playing, use media_control instead."
         case .powerAction:
@@ -256,6 +320,15 @@ public enum JarvisTool: String, CaseIterable, Sendable {
                 "target": string,
                 "value": string
             ], required: ["action", "target"])
+        case .screenControls: return object([:])
+        case .clickControl:
+            return object(["target": string,
+                           "role": ["type": "string", "enum": ["button", "checkbox", "option", "popup", "menu", "field",
+                                                              "link", "segment", "disclosure", "slider"]]],
+                          required: ["target"])
+        case .typeText: return object(["text": string, "field": string], required: ["text"])
+        case .pressKeys:
+            return object(["keys": string, "times": ["type": "integer", "minimum": 1, "maximum": 20]], required: ["keys"])
         case .playMusic:
             return object(["query": string,
                            "service": ["type": "string", "enum": ["youtube", "spotify", "apple_music"]]],
@@ -327,10 +400,17 @@ public enum JarvisTool: String, CaseIterable, Sendable {
     /// wrong one — the failure is not that it cannot do the job, it is that it
     /// confidently does a different one. These are the ones worth having and
     /// cheap to get wrong.
-    public static var freeEngineTools: [JarvisTool] {
+    public static var freeEngineTools: [JarvisTool] { freeEngineTools(readsScreen: false) }
+
+    /// The paid picture of the screen is never on it. What the screen says —
+    /// its text and the names of its controls — is read on the Mac for free,
+    /// but the words then go to a free provider, which may keep them to train
+    /// on. So they are off unless the user turns them on.
+    public static func freeEngineTools(readsScreen: Bool) -> [JarvisTool] {
         allCases.filter { tool in
             switch tool {
-            case .lookAtScreen, .readScreenText: return false
+            case .lookAtScreen: return false
+            case .readScreenText, .screenControls: return readsScreen
             default: return true
             }
         }
@@ -533,6 +613,10 @@ public enum JarvisProtocol {
         return components?.url
     }
 
+    /// Writes down what the user said. The cheapest transcriber; its cost is a
+    /// fraction of a cent per minute next to the conversation itself.
+    public static let inputTranscriptionModel = "gpt-4o-mini-transcribe"
+
     /// The session: audio in and out as 24 kHz PCM, semantic turn detection
     /// so the user can interrupt, the closed tool list, and instructions that
     /// carry the date (the model has no clock of its own).
@@ -551,7 +635,19 @@ public enum JarvisProtocol {
                 "audio": [
                     "input": [
                         "format": ["type": "audio/pcm", "rate": sampleRate],
-                        "turn_detection": ["type": "semantic_vad", "create_response": true, "interrupt_response": true]
+                        // A laptop microphone in a room: the fan, the keyboard
+                        // and the street were reaching the model as speech.
+                        "noise_reduction": ["type": "near_field"],
+                        // What was heard, written down, so the subtitles show
+                        // the user's words and a misunderstanding is visible
+                        // rather than guessed at. The Turkish hint matters: the
+                        // detector otherwise drifts on short phrases.
+                        "transcription": ["model": inputTranscriptionModel, "language": "tr"],
+                        // Low eagerness waits for the end of the thought. Turkish
+                        // puts the verb last, and a pause before it was being
+                        // taken as the end of the turn.
+                        "turn_detection": ["type": "semantic_vad", "eagerness": "low",
+                                           "create_response": true, "interrupt_response": true]
                     ],
                     "output": [
                         "format": ["type": "audio/pcm", "rate": sampleRate],
@@ -585,7 +681,9 @@ public enum JarvisProtocol {
 
             LANGUAGE. Always speak Turkish, however you are addressed, unless the user explicitly asks for \
             another language. Address them as "sen" unless the tone below says otherwise, and never use \
-            "efendim" or any other honorific. Say foreign names and technical terms as they are, inside Turkish sentences.
+            "efendim" or any other honorific. Say foreign names and technical terms as they are, inside Turkish sentences. \
+            The user speaks casual, fast Turkish, often over background noise. If you did not clearly catch what \
+            they asked, say so in a few words and ask them to repeat — never guess and act on a half-heard request.
 
             HOW YOU TALK. You are talking, not writing. Somebody is listening to you, in a room, probably \
             doing something else.

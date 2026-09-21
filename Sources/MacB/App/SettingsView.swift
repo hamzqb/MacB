@@ -549,6 +549,9 @@ struct SettingsView: View {
                     .labelsHidden().fixedSize()
                 }
                 message((JarvisEngineChoice(rawValue: preferences.jarvisEngine) ?? .automatic).note)
+                Toggle("Ücretsiz motor ekranı okuyabilsin", isOn: $preferences.freeEngineReadsScreen)
+                    .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
+                message("Ekrandaki yazı ve düğme adları bu Mac'te okunur, ama cevap için ücretsiz sağlayıcıya (Gemini, Groq) gider; onlar ücretsiz katmanda bu metni eğitimde kullanabilir. Kapalıyken ekranı yalnız canlı motor okur.")
                 HStack(spacing: MacBDesign.Space.regular) {
                     Text("Canlı model").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     Spacer(minLength: 8)

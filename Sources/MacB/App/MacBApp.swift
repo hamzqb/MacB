@@ -288,7 +288,8 @@ private final class Flag: @unchecked Sendable {
         freeEngine: FreeVoiceEngine(
             keys: aiKey,
             model: { [weak self] provider in self?.preferences.model(for: provider) ?? provider.defaultModel },
-            preferred: { [weak self] in AIProvider(rawValue: self?.preferences.aiProvider ?? "") }),
+            preferred: { [weak self] in AIProvider(rawValue: self?.preferences.aiProvider ?? "") },
+            readsScreen: { [weak self] in self?.preferences.freeEngineReadsScreen ?? false }),
         model: { [weak self] in self?.preferences.jarvisModel ?? JarvisProtocol.defaultModel })
     private lazy var jarvisTools = MacBJarvisToolbox(
         keys: aiKey, searchModel: { [weak self] in self?.preferences.aiModel ?? Preferences.defaultAIModel },

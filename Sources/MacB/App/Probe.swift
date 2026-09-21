@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import ApplicationServices
 import SwiftUI
 import MacBCore
 import Security
@@ -236,6 +237,26 @@ import Security
                 store.clearDelivered()
                 try? FileManager.default.removeItem(at: URL(fileURLWithPath: NSTemporaryDirectory())
                     .appendingPathComponent("macb-probe-jobs.json"))
+            }
+        }
+        if arguments.contains("--screen-control-probe") {
+            // Drives whatever window is in front — meant for a throwaway test
+            // window the caller opened — through the same service the
+            // assistant uses: list, type into a named field, press a button.
+            return {
+                let control = ScreenControlService()
+                print("accessibility: \(AXIsProcessTrusted()) locked: \(ScreenControlService.screenIsLocked)")
+                do {
+                    let found = try control.controls()
+                    print("app: \(found.app) controls: \(found.controls.count) menus: \(found.menus.count)")
+                    for item in found.controls.prefix(8) { print("  \(item.role) “\(item.label)”") }
+                    print(try control.type("Merhaba MacB", into: "Ad"))
+                    try await Task.sleep(nanoseconds: 300_000_000)
+                    print(try control.press("Tamam"))
+                    print(try control.press(keys: "cmd+a"))
+                } catch {
+                    print("MISS: \(error.localizedDescription)")
+                }
             }
         }
         if let index = arguments.firstIndex(of: "--search-probe"), arguments.count > index + 1 {

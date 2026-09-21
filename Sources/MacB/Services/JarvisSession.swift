@@ -110,9 +110,10 @@ enum JarvisToolOutcome {
     private var hasReadOutsideContent = false
     /// Set once the user's own private material has.
     private var hasReadPrivateContent = false
-    /// Read-only tools the user has already allowed in this conversation.
-    /// This stops “mail again?” loops without letting outside text perform
-    /// actions: writing tools never enter this set and the set dies with stop().
+    /// Tools the user has already allowed in this conversation: the mail and
+    /// calendar readers, so there is no “mail again?” loop, and screen control
+    /// as a whole, so ten clicks are one question. Nothing else that writes
+    /// enters this set, money is checked before it, and it dies with stop().
     private var allowedReadTools: Set<JarvisTool> = []
 
     /// A conversation nobody speaks in closes after this long.
@@ -563,7 +564,7 @@ enum JarvisToolOutcome {
         for _ in 0..<Self.freeToolRounds {
             guard generation == current, isActive else { return }
             do {
-                let reply = try await engine.answer(messages: freeMessages)
+                let reply = try await engine.answer(messages: freeMessages, tools: engine.conversationTools)
                 guard generation == current, isActive else { return }
                 if let provider = engine.provider {
                     cost?.record(provider: provider, model: "", usage: reply.usage)
@@ -736,6 +737,8 @@ enum JarvisToolOutcome {
 
 
     private func needsUserApproval(for tool: JarvisTool, call: JarvisCall) -> Bool {
+        // Money first: no earlier yes in this conversation covers a payment.
+        if tool.involvesMoney(call) { return true }
         if allowedReadTools.contains(tool) { return false }
         return tool.needsConfirmation(call: call,
                                       afterReadingOutsideContent: hasReadOutsideContent,
@@ -746,6 +749,9 @@ enum JarvisToolOutcome {
         switch tool {
         case .readMail, .calendarEvents:
             allowedReadTools.insert(tool)
+        case .clickControl, .typeText, .pressKeys:
+            // One yes to working on the screen covers this conversation.
+            allowedReadTools.formUnion(JarvisTool.allCases.filter(\.isScreenControl))
         default:
             break
         }

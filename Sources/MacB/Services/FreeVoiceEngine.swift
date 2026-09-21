@@ -49,7 +49,9 @@ import MacBCore
     private let session: URLSession
 
     init(keys: AIKeyStore, model: @escaping (AIProvider) -> String,
-         preferred: @escaping () -> AIProvider? = { nil }, session: URLSession = .shared) {
+         preferred: @escaping () -> AIProvider? = { nil },
+         readsScreen: @escaping () -> Bool = { false }, session: URLSession = .shared) {
+        self.readsScreen = readsScreen
         self.keys = keys
         self.model = model
         self.preferred = preferred
@@ -66,6 +68,12 @@ import MacBCore
     }
 
     var isAvailable: Bool { provider != nil }
+
+    /// Whether the screen's text may go to the free provider. The user's call.
+    let readsScreen: () -> Bool
+
+    /// What a conversation on this engine may use.
+    var conversationTools: [JarvisTool] { JarvisTool.freeEngineTools(readsScreen: readsScreen()) }
 
     func answer(messages: [[String: Any]],
                 tools: [JarvisTool] = JarvisTool.freeEngineTools,

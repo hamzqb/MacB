@@ -264,6 +264,8 @@ struct IslandAssistantPanel: View {
         case .addCalendarEvent: return "Takvime ekleyeyim mi?"
         case .powerAction: return "Mac için bu işlemi yapayım mı?"
         case .remember: return "Bunu hafızaya alayım mı?"
+        case .clickControl, .typeText, .pressKeys: return "Ekranda iş yapayım mı?"
+        case .openWebsite: return "Siteyi açayım mı?"
         default: return "Buna izin veriyor musun?"
         }
     }
@@ -288,6 +290,8 @@ struct IslandAssistantPanel: View {
         case .addNote: return "square.and.pencil"
         case .remember, .forget: return "brain"
         case .webSearch: return "magnifyingglass"
+        case .clickControl, .screenControls: return "cursorarrow.click.2"
+        case .typeText, .pressKeys: return "keyboard"
         default: return "questionmark.circle"
         }
     }

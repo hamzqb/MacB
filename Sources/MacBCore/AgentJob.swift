@@ -150,7 +150,9 @@ public enum AgentPolicy {
     public static func isForbidden(_ tool: JarvisTool) -> Bool {
         switch tool {
         case .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .powerAction, .endConversation,
-             .startBackgroundJob, .backgroundJobs:
+             .startBackgroundJob, .backgroundJobs,
+             // Hands on the keyboard and pointer of a Mac nobody is watching.
+             .screenControls, .clickControl, .typeText, .pressKeys:
             return true
         default:
             return false

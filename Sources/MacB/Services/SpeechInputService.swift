@@ -36,7 +36,9 @@ import Speech
     private var configurationObserver: NSObjectProtocol?
 
     /// How long a pause ends the question.
-    private static let silence: TimeInterval = 1.6
+    /// How long a pause ends the question. Turkish puts the verb last and a
+    /// thinking pause before it is common; 1.6 s was cutting sentences short.
+    private static let silence: TimeInterval = 2.1
     /// A dictation nobody ends still ends.
     private static let longest: TimeInterval = 45
 
@@ -87,16 +89,17 @@ import Speech
             state = .failed("Konuşma tanıma şu an kullanılamıyor.")
             return
         }
-        guard recognizer.supportsOnDeviceRecognition else {
-            state = .failed("Bu dil için cihaz üstü tanıma yok. Sistem Ayarları › Klavye › Dikte'den dili ekleyip indir.")
-            return
-        }
+        // On the Mac when the language is installed for it; otherwise Apple's
+        // own dictation servers, which are free too. Failing outright here
+        // was why the free engine seemed not to hear anything at all.
+        let onDevice = recognizer.supportsOnDeviceRecognition
         // Cancelled while a permission prompt was up.
         guard state == .preparing else { return }
         self.recognizer = recognizer
 
         let request = SFSpeechAudioBufferRecognitionRequest()
-        request.requiresOnDeviceRecognition = true
+        request.requiresOnDeviceRecognition = onDevice
+        request.contextualStrings = ["MacB", "kanka", "mail", "takvim", "hatırlatıcı", "Safari", "Spotify"]
         request.shouldReportPartialResults = true
         request.addsPunctuation = true
         self.request = request

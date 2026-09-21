@@ -147,6 +147,12 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         didSet { defaults.set(jarvisEngine, forKey: "jarvisEngine") }
     }
 
+    /// Lets the free engine read the screen's text and controls. Off: the
+    /// words would go to a free provider that may train on them.
+    @Published var freeEngineReadsScreen: Bool {
+        didSet { defaults.set(freeEngineReadsScreen, forKey: "freeEngineReadsScreen") }
+    }
+
     @Published var jarvisModel: String {
         didSet {
             let trimmed = jarvisModel.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -358,6 +364,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
             jarvisModel = storedJarvisModel
         }
         jarvisEngine = defaults.string(forKey: "jarvisEngine") ?? JarvisEngineChoice.automatic.rawValue
+        freeEngineReadsScreen = defaults.bool(forKey: "freeEngineReadsScreen")
         briefingVoice = defaults.string(forKey: "briefingVoice") ?? ""
         mailEnabled = defaults.bool(forKey: "mailEnabled")
         importantSenders = defaults.stringArray(forKey: "importantSenders") ?? []
