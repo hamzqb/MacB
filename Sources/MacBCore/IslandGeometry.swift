@@ -76,33 +76,56 @@ public enum IslandGeometry {
         return widgetHeight * CGFloat(rows.count) + gap * CGFloat(rows.count - 1)
     }
 
-    /// Full expanded panel height: navigation, body, and padding, with empty bodies collapsing away.
-    /// The voice assistant: the orb and its line, plus room for what has
-    /// been said and for a question waiting to be allowed.
-    /// The assistant is a badge until it is asked to be more.
+    /// The body the voice assistant adds under the navigation row.
     ///
-    /// On its own it is an orb and a word — no keyboard, no subtitles, no
-    /// transcript. Each of those appears because the user asked for it, and the
-    /// island grows by exactly that much.
-    public static func assistantHeight(showsInput: Bool, showsCaptions: Bool,
+    /// On a display with a notch the orb and the status word live in the two
+    /// strips either side of the camera, which the panel covers anyway, so a
+    /// conversation on its own adds nothing at all. Without a notch they need
+    /// one slim row. Typing never adds height: the text field takes the
+    /// navigation row's place instead of stacking under it. Subtitles and a
+    /// question waiting for a yes are the only things that grow the island.
+    public static func assistantHeight(hasEars: Bool, showsDetail: Bool,
                                        hasConfirmation: Bool) -> CGFloat {
-        let base: CGFloat = 44
-        return base
-            + (showsInput ? 30 : 0)
-            + (showsCaptions ? captionHeight : 0)
-            + (hasConfirmation ? 88 : 0)
+        var parts: [CGFloat] = []
+        if !hasEars { parts.append(assistantPresenceHeight) }
+        if showsDetail { parts.append(captionHeight) }
+        if hasConfirmation { parts.append(assistantConfirmationHeight) }
+        guard !parts.isEmpty else { return 0 }
+        return parts.reduce(0, +) + CGFloat(parts.count - 1) * assistantSpacing
     }
 
-    /// Two lines of subtitles, for anyone who wants to read along.
-    public static let captionHeight: CGFloat = 34
+    /// The orb-and-word row, only on displays without a notch to sit beside.
+    public static let assistantPresenceHeight: CGFloat = 24
+    /// Two lines of subtitles at most, for anyone who wants to read along.
+    public static let captionHeight: CGFloat = 30
+    public static let assistantConfirmationHeight: CGFloat = 88
+    public static let assistantSpacing: CGFloat = 6
 
-    /// Narrow at rest, wider when it asks for permission so the question can
-    /// breathe instead of becoming a legal sentence squeezed into a badge.
+    /// Room the status word gets beside the notch. "internette arıyor…" is the
+    /// longest common one; anything longer truncates and shows in full on hover.
+    public static let assistantEarText: CGFloat = 104
+    /// Clearance between an ear's content and the camera housing.
+    public static let assistantEarGap: CGFloat = 12
+
+    /// Without a notch: narrow, a badge.
     public static let assistantWidth: CGFloat = 300
+    /// Wider when it asks for permission so the question can breathe instead of
+    /// becoming a legal sentence squeezed into a badge.
     public static let assistantConfirmationWidth: CGFloat = 392
 
-    public static func assistantWidth(hasConfirmation: Bool) -> CGFloat {
-        hasConfirmation ? assistantConfirmationWidth : assistantWidth
+    /// With a notch the panel has to be wide enough that each strip beside the
+    /// camera holds its content; the navigation row's own floor still applies.
+    public static func assistantWidth(hasConfirmation: Bool, notchWidth: CGFloat = 0) -> CGFloat {
+        let resting = notchWidth > 0
+            ? notchWidth + 2 * (assistantEarText + assistantEarGap + horizontalPadding)
+            : assistantWidth
+        return max(resting, hasConfirmation ? assistantConfirmationWidth : 0)
+    }
+
+    /// Width of one strip beside the camera, edge padding and clearance
+    /// removed: what the orb or the status word actually gets.
+    public static func assistantEarContentWidth(panelWidth: CGFloat, notchWidth: CGFloat) -> CGFloat {
+        max(0, (panelWidth - notchWidth) / 2 - horizontalPadding - assistantEarGap)
     }
 
     /// The morning briefing: a greeting, a row of chips when there is anything

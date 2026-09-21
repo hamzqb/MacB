@@ -248,6 +248,22 @@ struct IslandToast: Equatable {
         media.$isPlaying.removeDuplicates().sink { [weak self] _ in
             DispatchQueue.main.async { self?.render() }
         }.store(in: &subscriptions)
+        // The assistant's body appears for a subtitle, a fault or a question,
+        // and the panel has to follow at once, not on the next pointer move.
+        // Only the few things that change its size: the levels publish thirty
+        // times a second and must not drive a layout pass.
+        Publishers.CombineLatest3(
+            assistant.$confirmation.map { $0?.id },
+            assistant.$state,
+            assistant.$lines.map { $0.last?.text.isEmpty ?? true }
+        )
+        .map { _ in () }
+        .sink { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self, self.state.content == .assistant else { return }
+                self.render()
+            }
+        }.store(in: &subscriptions)
         shelf.$items.map(\.count).removeDuplicates().sink { [weak self] _ in
             DispatchQueue.main.async { self?.render() }
         }.store(in: &subscriptions)
@@ -771,7 +787,8 @@ struct IslandToast: Equatable {
             return IslandGeometry.sectionWidth(620, screenWidth: screenWidth)
         case .assistant:
             return IslandGeometry.sectionWidth(
-                IslandGeometry.assistantWidth(hasConfirmation: assistant.confirmation != nil),
+                IslandGeometry.assistantWidth(hasConfirmation: assistant.confirmation != nil,
+                                              notchWidth: assistantNotchWidth),
                 screenWidth: screenWidth)
         case .briefing:
             return IslandGeometry.sectionWidth(IslandGeometry.briefingWidth, screenWidth: screenWidth)
@@ -802,9 +819,8 @@ struct IslandToast: Equatable {
             return IslandGeometry.timerHeight
         case .assistant:
             return IslandGeometry.assistantHeight(
-                showsInput: assistant.showsInput,
-                showsCaptions: preferences.assistantCaptions
-                    && !(assistant.lines.last?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
+                hasEars: assistantNotchWidth > 0,
+                showsDetail: assistant.islandDetail(captions: preferences.assistantCaptions) != nil,
                 hasConfirmation: assistant.confirmation != nil)
         case .briefing:
             return IslandGeometry.briefingHeight(chipCount: briefing.chips.count)
@@ -832,6 +848,12 @@ struct IslandToast: Equatable {
         if !shelf.items.isEmpty { slots += 1 }
         guard slots > 0 else { return 0 }
         return CGFloat(slots) * 58 + (hardwareNotchWidth() ?? 190)
+    }
+
+    /// The camera housing the assistant's orb and status sit either side of;
+    /// zero on a display without one, where they take a slim row instead.
+    private var assistantNotchWidth: CGFloat {
+        presentation.cameraHeight > 0 ? presentation.cameraWidth : 0
     }
 
     private func hardwareNotchWidth() -> CGFloat? {

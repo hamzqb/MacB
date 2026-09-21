@@ -2,139 +2,191 @@ import AppKit
 import MacBCore
 import SwiftUI
 
-/// The voice assistant in the island: an orb, a word about what it is doing,
-/// and the last thing it said.
+/// What a conversation looks like in the open island, in three pieces.
 ///
-/// Small on purpose. A conversation held out loud does not need a transcript on
-/// screen — the answer is in the air — so this keeps one line of it, the one
-/// being said now, and nothing else. What has to be read rather than heard is a
-/// question waiting to be allowed, and that gets its own card.
-struct IslandAssistantView: View {
+/// `IslandAssistantEars` is the orb and the status word, in the strips either
+/// side of the camera. `IslandAssistantView` is the body under the navigation
+/// row, and it is empty unless there is something to read: a subtitle, a
+/// fault, a question waiting for a yes. `IslandAssistantInput` takes the
+/// navigation row's place while the user types. None of them stacks a row on
+/// top of the island for its own sake.
+extension JarvisSession {
+    /// The status as one or two words.
+    var islandStatus: String {
+        if let activity { return activity + "…" }
+        switch state {
+        case .idle: return "kapalı"
+        case .connecting: return "bağlanıyor…"
+        case .listening: return "dinliyorum"
+        case .thinking: return "düşünüyor…"
+        case .speaking: return "konuşuyor"
+        case .failed: return "bağlanamadı"
+        }
+    }
+
+    /// The one line the body shows, if any. A fault is always shown — it is
+    /// the only way to learn what went wrong — and a subtitle only when asked.
+    func islandDetail(captions: Bool) -> String? {
+        if case .failed(let message) = state { return message }
+        guard captions, let last = lines.last else { return nil }
+        let text = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : text
+    }
+}
+
+/// The orb and a small button row on the left of the camera, the status word
+/// on the right.
+///
+/// Both sit in the strip the panel already covers beside the notch, so they
+/// cost no height and can never run into the camera and settings buttons,
+/// which are in the row below. Tapping either side opens the text field.
+struct IslandAssistantEars: View {
     @ObservedObject var session: JarvisSession
-    /// Whether the island shows what is being said. The user's choice, kept
-    /// between conversations.
     @Binding var captions: Bool
+    /// What each side gets once the edge padding and the camera are cleared.
+    var earWidth: CGFloat
     var close: () -> Void
-    var openSettings: () -> Void
-    @State private var typed = ""
-    @FocusState private var typing: Bool
     @State private var hovering = false
 
     var body: some View {
-        VStack(spacing: MacBDesign.Space.snug) {
-            badge
-            if captions, let line = latestLine {
-                Text(line)
-                    .font(.system(size: MacBDesign.TypeScale.micro))
-                    .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                    .id(line)
-                    .transition(.opacity)
-            }
-            if let confirmation = session.confirmation {
-                confirmationCard(confirmation)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
-            if session.showsInput {
-                inputRow
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
+        HStack(spacing: 0) {
+            IslandAssistantPresence(session: session, captions: $captions, hovering: hovering, close: close)
+                .frame(width: earWidth, alignment: .leading)
+            Spacer(minLength: 0)
+            IslandAssistantStatus(session: session)
+                .frame(width: earWidth, alignment: .trailing)
         }
-        .foregroundStyle(MacBDesign.IslandToken.Ink.primary)
-        .animation(.spring(response: 0.32, dampingFraction: 0.85), value: session.showsInput)
-        .animation(.spring(response: 0.32, dampingFraction: 0.85), value: captions)
-        .animation(.spring(response: 0.34, dampingFraction: 0.86), value: session.confirmation?.text)
-        .animation(.easeInOut(duration: 0.2), value: statusText)
-        .animation(.easeInOut(duration: 0.2), value: latestLine)
-        .onAppear { typed = "" }
-        .onChange(of: session.showsInput) { _, shown in typing = shown }
+        .padding(.horizontal, IslandGeometry.horizontalPadding)
+        .frame(maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { session.showsInput.toggle() }
+        .onHover { hovering = $0 }
+        .motion(MacBDesign.Motion.quick, value: hovering)
+        .accessibilityElement(children: .contain)
+        .accessibilityHint("Yazmak için tıkla")
     }
+}
 
-    // MARK: - The badge
+/// The orb, the free-mode leaf, and the small controls that only appear under
+/// the pointer.
+struct IslandAssistantPresence: View {
+    @ObservedObject var session: JarvisSession
+    @Binding var captions: Bool
+    var hovering: Bool
+    var close: () -> Void
 
-    /// What is there when nothing has been asked for: the orb and a word.
-    ///
-    /// Tapping it opens the line to type into, and closes it again. The two
-    /// small controls only appear under the pointer, so at rest this is a dot
-    /// and a word and nothing else.
-    private var badge: some View {
+    var body: some View {
         HStack(spacing: MacBDesign.Space.snug) {
             JarvisOrb(state: session.state, input: session.inputLevel, output: session.outputLevel)
-                .frame(width: 26, height: 26)
-            JarvisWaveform(state: session.state,
-                           level: session.state == .speaking ? session.outputLevel : session.inputLevel)
-                .frame(width: 26, height: 14)
-            if session.isFreeEngine {
+                .frame(width: 20, height: 20)
+                .accessibilityLabel("MacB, \(session.islandStatus)")
+            if session.isFreeEngine && !hovering {
                 // Free is a mode, not a fault: it gets a mark of its own rather
                 // than an apology in the status line.
                 Image(systemName: "leaf.fill")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(MacBDesign.IslandToken.Ink.faint)
                     .help("Ücretsiz mod: konuşma bu Mac'te çözülür, cevabı ücretsiz sağlayıcı yazar.")
+                    .transition(.opacity)
             }
-            Text(statusText)
-                .font(.system(size: MacBDesign.TypeScale.micro, weight: .medium))
-                .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(statusText)
-                .id(statusText)
-                .transition(.opacity)
-            Spacer(minLength: 2)
-            if hovering || session.showsInput {
-                smallButton(captions ? "captions.bubble.fill" : "captions.bubble",
-                            label: captions ? "Altyazıyı kapat" : "Altyazıyı aç") {
-                    captions.toggle()
+            if hovering {
+                Group {
+                    smallButton(captions ? "captions.bubble.fill" : "captions.bubble",
+                                label: captions ? "Altyazıyı kapat" : "Altyazıyı aç") { captions.toggle() }
+                    if case .failed = session.state {
+                        smallButton("arrow.clockwise", label: "Yeniden bağlan") { session.start() }
+                    }
+                    smallButton("xmark", label: "Konuşmayı bitir", action: close)
                 }
                 .transition(.opacity)
             }
-            if case .failed = session.state {
-                smallButton("arrow.clockwise", label: "Yeniden bağlan") { session.start() }
-            }
-            smallButton("xmark", label: "Konuşmayı bitir", action: close)
         }
-        .padding(.vertical, 1)
-        .contentShape(Rectangle())
-        .onTapGesture { session.showsInput.toggle() }
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.14), value: hovering)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("MacB, \(statusText)")
-        .accessibilityHint("Yazmak için tıkla")
     }
 
     private func smallButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 8, weight: .bold))
-                .frame(width: 16, height: 16)
+                .frame(width: 18, height: 18)
                 .background(MacBDesign.IslandToken.Fill.base, in: Circle())
         }
         .buttonStyle(.plain)
+        .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
         .help(label)
         .accessibilityLabel(label)
     }
+}
 
-    /// The newest thing said, whoever said it.
-    private var latestLine: String? {
-        guard let last = session.lines.last else { return nil }
-        let text = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? nil : text
+/// The status word: one line, trailing, cut short rather than wrapped.
+struct IslandAssistantStatus: View {
+    @ObservedObject var session: JarvisSession
+
+    var body: some View {
+        Text(session.islandStatus)
+            .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
+            .foregroundStyle(statusColor)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .help(session.islandStatus)
+            .id(session.islandStatus)
+            .transition(.opacity)
+            .motion(MacBDesign.Motion.quick, value: session.islandStatus)
     }
 
-    private var statusText: String {
-        if let activity = session.activity { return activity + "…" }
-        switch session.state {
-        case .idle: return "kapalı"
-        case .connecting: return "bağlanıyor…"
-        case .listening: return "dinliyorum"
-        case .thinking: return "düşünüyor…"
-        case .speaking: return "konuşuyor"
-        case .failed(let message): return message
+    private var statusColor: Color {
+        if case .failed = session.state { return JarvisOrb.palette(for: session.state)[0] }
+        return MacBDesign.IslandToken.Ink.secondary
+    }
+}
+
+/// The body under the navigation row. Empty — and zero high — while there is
+/// nothing to read.
+struct IslandAssistantView: View {
+    @ObservedObject var session: JarvisSession
+    /// Whether the island shows what is being said. The user's choice, kept
+    /// between conversations.
+    @Binding var captions: Bool
+    /// False on a display with a notch, where the orb and status sit beside
+    /// the camera instead of taking a row here.
+    var showsPresence: Bool
+    var close: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: IslandGeometry.assistantSpacing) {
+            if showsPresence {
+                HStack(spacing: 0) {
+                    IslandAssistantPresence(session: session, captions: $captions, hovering: hovering, close: close)
+                    Spacer(minLength: MacBDesign.Space.close)
+                    IslandAssistantStatus(session: session)
+                }
+                .frame(height: IslandGeometry.assistantPresenceHeight)
+                .contentShape(Rectangle())
+                .onTapGesture { session.showsInput.toggle() }
+                .onHover { hovering = $0 }
+                .motion(MacBDesign.Motion.quick, value: hovering)
+            }
+            if let line = session.islandDetail(captions: captions) {
+                Text(line)
+                    .font(.system(size: MacBDesign.TypeScale.micro))
+                    .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, maxHeight: IslandGeometry.captionHeight, alignment: .topLeading)
+                    .textSelection(.enabled)
+                    .help(line)
+                    .id(line)
+                    .transition(.opacity)
+            }
+            if let confirmation = session.confirmation {
+                confirmationCard(confirmation)
+                    .frame(height: IslandGeometry.assistantConfirmationHeight)
+                    .transition(.opacity)
+            }
         }
+        .foregroundStyle(MacBDesign.IslandToken.Ink.primary)
+        .motion(MacBDesign.Motion.quick, value: session.islandDetail(captions: captions))
+        .motion(MacBDesign.Motion.normal, value: session.confirmation?.text)
     }
 
     // MARK: - Confirmation
@@ -185,43 +237,6 @@ struct IslandAssistantView: View {
         )
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
             .strokeBorder(MacBDesign.IslandToken.Fill.strong.opacity(0.7), lineWidth: 0.7))
-        .shadow(color: .black.opacity(0.28), radius: 12, y: 5)
-    }
-
-    // MARK: - Typing
-
-    /// A thin line to type into, for when saying it out loud is not an option.
-    private var inputRow: some View {
-        HStack(spacing: MacBDesign.Space.snug) {
-            TextField("yaz", text: $typed)
-                .textFieldStyle(.plain)
-                .font(.system(size: MacBDesign.TypeScale.micro))
-                .focused($typing)
-                .onSubmit(send)
-                .disabled(!session.isActive)
-                .accessibilityLabel("MacB'ye yaz")
-            if case .failed(let message) = session.state, message == AIAssistantService.missingKeyMessage {
-                Button("Ayarlar", action: openSettings).controlSize(.mini)
-            }
-            if !typed.trimmingCharacters(in: .whitespaces).isEmpty {
-                Button(action: send) {
-                    Image(systemName: "arrow.up.circle.fill").font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(MacBDesign.IslandToken.accent)
-                .accessibilityLabel("Gönder")
-                .transition(.opacity.combined(with: .scale))
-            }
-        }
-        .padding(.horizontal, MacBDesign.Space.regular)
-        .frame(height: 22)
-        .background(MacBDesign.IslandToken.Fill.hairline, in: Capsule())
-        .animation(.easeOut(duration: 0.15), value: typed.isEmpty)
-    }
-
-    private func send() {
-        session.say(typed)
-        typed = ""
     }
 
     private static func title(for tool: JarvisTool) -> String {
@@ -414,5 +429,77 @@ struct JarvisMiniOrb: View {
         }
         .frame(width: 14, height: 14)
         .animation(.easeOut(duration: 0.12), value: energy)
+    }
+}
+
+/// The text field, in the navigation row's place.
+///
+/// Typing is a moment, not a mode: the row of sections steps aside while the
+/// user writes, and comes back as soon as the line is sent or dismissed. The
+/// island keeps its height the whole time.
+struct IslandAssistantInput: View {
+    @ObservedObject var session: JarvisSession
+    var openSettings: () -> Void
+    /// False for the copy of the panel that is fading out, so two fields never
+    /// fight over the keyboard.
+    var isInteractive: Bool
+    @State private var typed = ""
+    @FocusState private var focused: Bool
+
+    private var hasText: Bool { !typed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var body: some View {
+        HStack(spacing: MacBDesign.Space.close) {
+            JarvisMiniOrb(state: session.state,
+                          level: session.state == .speaking ? session.outputLevel : session.inputLevel)
+                .accessibilityHidden(true)
+            TextField("MacB’ye yaz", text: $typed)
+                .textFieldStyle(.plain)
+                .font(.system(size: MacBDesign.TypeScale.body))
+                .focused($focused)
+                .onSubmit(send)
+                .onExitCommand(perform: dismiss)
+                .disabled(!session.isActive)
+                .accessibilityLabel("MacB'ye yaz")
+            if case .failed(let message) = session.state, message == AIAssistantService.missingKeyMessage {
+                Button("Ayarlar", action: openSettings)
+                    .buttonStyle(IslandCapsuleButtonStyle())
+            }
+            Button(action: hasText ? send : dismiss) {
+                Image(systemName: hasText ? "arrow.up" : "xmark")
+                    .font(.system(size: hasText ? 11 : 9, weight: .bold))
+                    .foregroundStyle(hasText ? Color.black : MacBDesign.IslandToken.Ink.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(hasText ? MacBDesign.IslandToken.navSelectedFill : MacBDesign.IslandToken.Fill.base,
+                                in: Circle())
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .buttonStyle(.plain)
+            .help(hasText ? "Gönder" : "Vazgeç")
+            .accessibilityLabel(hasText ? "Gönder" : "Vazgeç")
+        }
+        .padding(.leading, MacBDesign.Space.regular)
+        .padding(.trailing, MacBDesign.Space.tight)
+        .frame(height: 30)
+        .background(MacBDesign.IslandToken.navFill, in: Capsule())
+        .overlay(Capsule().strokeBorder(MacBDesign.IslandToken.Fill.hairline, lineWidth: 0.7))
+        .frame(height: IslandGeometry.navigationHeight)
+        .motion(MacBDesign.Motion.quick, value: hasText)
+        .onAppear {
+            typed = ""
+            if isInteractive { focused = true }
+        }
+    }
+
+    private func send() {
+        guard hasText else { return }
+        session.say(typed)
+        typed = ""
+        session.showsInput = false
+    }
+
+    private func dismiss() {
+        typed = ""
+        session.showsInput = false
     }
 }

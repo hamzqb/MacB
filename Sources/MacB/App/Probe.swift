@@ -132,21 +132,49 @@ import Security
             return {
                 let session = JarvisSession(keys: AIKeyStore(), memory: JarvisMemoryStore(),
                                             voice: { .marin }, model: { JarvisProtocol.defaultModel })
-                let view = IslandAssistantView(session: session, captions: .constant(false),
-                                               close: {}, openSettings: {})
-                let host = NSHostingView(rootView: view)
-                host.frame = NSRect(x: 0, y: 0, width: IslandGeometry.assistantWidth, height: 400)
-                host.layoutSubtreeIfNeeded()
-                let fitting = host.fittingSize
-                let reserved = IslandGeometry.assistantHeight(showsInput: false, showsCaptions: false,
+                let screen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 } ?? NSScreen.main
+                var notch: CGFloat = 0
+                if let screen, let left = screen.auxiliaryTopLeftArea, let right = screen.auxiliaryTopRightArea {
+                    notch = max(0, right.minX - left.maxX)
+                }
+                let camera = screen?.safeAreaInsets.top ?? 0
+                let width = IslandGeometry.assistantWidth(hasConfirmation: false, notchWidth: notch)
+                let ear = IslandGeometry.assistantEarContentWidth(panelWidth: width, notchWidth: notch)
+                print("notch: \(Int(notch)) camera strip: \(Int(camera)) panel: \(Int(width)) ear: \(Int(ear))")
+                // The longest words the status line says, drawn in its own font.
+                for status in ["dinliyorum", "düşünüyor…", "internette arıyor…", "bağlanamadı"] {
+                    let text = NSHostingView(rootView: Text(status)
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium)).fixedSize())
+                    let needed = text.fittingSize.width
+                    print("status \"\(status)\": \(Int(needed.rounded()))pt \(needed <= ear ? "ok" : "MISS: kesilir")")
+                }
+                // The orb plus all three hover buttons on the left side.
+                let presence = NSHostingView(rootView: IslandAssistantPresence(
+                    session: session, captions: .constant(false), hovering: true, close: {}).fixedSize())
+                let left = presence.fittingSize
+                print("left side hovered: \(Int(left.width.rounded()))x\(Int(left.height.rounded())) "
+                      + (left.width <= ear && left.height <= camera ? "ok" : "MISS: taşıyor"))
+                // The ears are in the camera strip, the camera and settings
+                // buttons in the navigation row under it: different rows.
+                print("ears y: 0-\(Int(camera))  controls y: \(Int(camera + IslandGeometry.topPadding))-"
+                      + "\(Int(camera + IslandGeometry.topPadding + IslandGeometry.navigationHeight))")
+                let input = NSHostingView(rootView: IslandAssistantInput(session: session, openSettings: {},
+                                                                         isInteractive: false))
+                input.frame = NSRect(x: 0, y: 0, width: width - IslandGeometry.horizontalPadding * 2, height: 200)
+                input.layoutSubtreeIfNeeded()
+                let inputHeight = input.fittingSize.height
+                print("input: \(Int(inputHeight.rounded())) nav row: \(Int(IslandGeometry.navigationHeight)) "
+                      + (inputHeight <= IslandGeometry.navigationHeight ? "ok" : "MISS: taşıyor"))
+                let body = NSHostingView(rootView: IslandAssistantView(session: session, captions: .constant(false),
+                                                                       showsPresence: notch == 0, close: {}))
+                body.frame = NSRect(x: 0, y: 0, width: width, height: 400)
+                body.layoutSubtreeIfNeeded()
+                let reserved = IslandGeometry.assistantHeight(hasEars: notch > 0, showsDetail: false,
                                                               hasConfirmation: false)
-                print("width: \(IslandGeometry.assistantWidth)")
-                print("fits: \(Int(fitting.height.rounded())) reserved: \(Int(reserved.rounded()))")
-                print(fitting.height <= reserved ? "ok: sığıyor" : "MISS: taşıyor")
-                print("with input: \(Int(IslandGeometry.assistantHeight(showsInput: true, showsCaptions: false, hasConfirmation: false)))")
-                print("with captions: \(Int(IslandGeometry.assistantHeight(showsInput: false, showsCaptions: true, hasConfirmation: false)))")
-                print("confirmation width: \(IslandGeometry.assistantConfirmationWidth)")
-                print("with confirmation: \(Int(IslandGeometry.assistantHeight(showsInput: true, showsCaptions: true, hasConfirmation: true)))")
+                print("body: \(Int(body.fittingSize.height.rounded())) reserved: \(Int(reserved)) "
+                      + (body.fittingSize.height <= reserved + 0.5 ? "ok" : "MISS: taşıyor"))
+                print("with captions: \(Int(IslandGeometry.assistantHeight(hasEars: notch > 0, showsDetail: true, hasConfirmation: false)))")
+                print("with confirmation: \(Int(IslandGeometry.assistantHeight(hasEars: notch > 0, showsDetail: true, hasConfirmation: true)))")
             }
         }
         if arguments.contains("--measure-briefing") {
