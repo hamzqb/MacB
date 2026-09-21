@@ -58,7 +58,12 @@ xattr -d 'com.apple.fileprovider.fpfs#P' "$app_dir" 2>/dev/null || true
 # self-signed certificate that lives only in this Mac's login keychain; it is
 # used when present, and a machine without it falls back to ad-hoc as before.
 default_identity="-"
-if security find-certificate -c "MacB Local Signing" >/dev/null 2>&1; then
+# Prefer the concrete hash of the local identity. Using the common name can be
+# ambiguous after a certificate is recreated, and then codesign fails even
+# though a valid identity exists.
+if identity_hash="$(security find-identity -v -p codesigning 2>/dev/null | awk '/"MacB Local Signing"/ { print $2; exit }')" && [[ -n "$identity_hash" ]]; then
+    default_identity="$identity_hash"
+elif security find-certificate -c "MacB Local Signing" >/dev/null 2>&1; then
     default_identity="MacB Local Signing"
 fi
 signing_identity="${MACB_SIGNING_IDENTITY:-$default_identity}"
