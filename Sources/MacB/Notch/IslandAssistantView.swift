@@ -2,14 +2,10 @@ import AppKit
 import MacBCore
 import SwiftUI
 
-/// What a conversation looks like in the open island, in three pieces.
-///
-/// `IslandAssistantEars` is the orb and the status word, in the strips either
-/// side of the camera. `IslandAssistantView` is the body under the navigation
-/// row, and it is empty unless there is something to read: a subtitle, a
-/// fault, a question waiting for a yes. `IslandAssistantInput` takes the
-/// navigation row's place while the user types. None of them stacks a row on
-/// top of the island for its own sake.
+/// What a conversation looks like in the open island. There is no navigation
+/// row: `IslandAssistantEars` puts the orb and the status word either side of
+/// the camera, and `IslandAssistantPanel` adds the text field, a subtitle or a
+/// question under them only when one is wanted.
 extension JarvisSession {
     /// The status as one or two words.
     var islandStatus: String {
@@ -59,7 +55,7 @@ struct IslandAssistantEars: View {
         .padding(.horizontal, IslandGeometry.horizontalPadding)
         .frame(maxHeight: .infinity)
         .contentShape(Rectangle())
-        .onTapGesture { session.showsInput.toggle() }
+        .onTapGesture { session.showsInput = true }
         .onHover { hovering = $0 }
         .motion(MacBDesign.Motion.quick, value: hovering)
         .accessibilityElement(children: .contain)
@@ -139,52 +135,69 @@ struct IslandAssistantStatus: View {
     }
 }
 
-/// The body under the navigation row. Empty — and zero high — while there is
-/// nothing to read.
-struct IslandAssistantView: View {
+/// The open island while a conversation runs: the orb and status up top, and
+/// under them only what is wanted right now — the text field while the pointer
+/// is here, a subtitle, a question waiting for a yes.
+struct IslandAssistantPanel: View {
     @ObservedObject var session: JarvisSession
     /// Whether the island shows what is being said. The user's choice, kept
     /// between conversations.
     @Binding var captions: Bool
-    /// False on a display with a notch, where the orb and status sit beside
-    /// the camera instead of taking a row here.
-    var showsPresence: Bool
+    /// The strip beside the camera; zero on a display without a notch.
+    var cameraHeight: CGFloat
+    var earWidth: CGFloat
+    var showsInput: Bool
+    var isInteractive: Bool
     var close: () -> Void
+    var openSettings: () -> Void
     @State private var hovering = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: IslandGeometry.assistantSpacing) {
-            if showsPresence {
+        VStack(spacing: IslandGeometry.assistantSpacing) {
+            if cameraHeight > 0 {
+                IslandAssistantEars(session: session, captions: $captions, earWidth: earWidth, close: close)
+                    .frame(height: cameraHeight)
+            } else {
                 HStack(spacing: 0) {
                     IslandAssistantPresence(session: session, captions: $captions, hovering: hovering, close: close)
                     Spacer(minLength: MacBDesign.Space.close)
                     IslandAssistantStatus(session: session)
                 }
                 .frame(height: IslandGeometry.assistantPresenceHeight)
+                .padding(.horizontal, IslandGeometry.horizontalPadding)
+                .padding(.top, IslandGeometry.assistantPresenceTop)
                 .contentShape(Rectangle())
-                .onTapGesture { session.showsInput.toggle() }
+                .onTapGesture { session.showsInput = true }
                 .onHover { hovering = $0 }
                 .motion(MacBDesign.Motion.quick, value: hovering)
             }
-            if let line = session.islandDetail(captions: captions) {
-                Text(line)
-                    .font(.system(size: MacBDesign.TypeScale.micro))
-                    .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
-                    .lineLimit(2)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, maxHeight: IslandGeometry.captionHeight, alignment: .topLeading)
-                    .textSelection(.enabled)
-                    .help(line)
-                    .id(line)
-                    .transition(.opacity)
+            VStack(alignment: .leading, spacing: IslandGeometry.assistantSpacing) {
+                if showsInput {
+                    IslandAssistantInput(session: session, openSettings: openSettings, isInteractive: isInteractive)
+                        .transition(.opacity.combined(with: .offset(y: -4)))
+                }
+                if let line = session.islandDetail(captions: captions) {
+                    Text(line)
+                        .font(.system(size: MacBDesign.TypeScale.micro))
+                        .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, maxHeight: IslandGeometry.captionHeight, alignment: .topLeading)
+                        .textSelection(.enabled)
+                        .help(line)
+                        .id(line)
+                        .transition(.opacity)
+                }
+                if let confirmation = session.confirmation {
+                    confirmationCard(confirmation)
+                        .frame(height: IslandGeometry.assistantConfirmationHeight)
+                        .transition(.opacity)
+                }
             }
-            if let confirmation = session.confirmation {
-                confirmationCard(confirmation)
-                    .frame(height: IslandGeometry.assistantConfirmationHeight)
-                    .transition(.opacity)
-            }
+            .padding(.horizontal, MacBDesign.Space.regular + 4)
         }
         .foregroundStyle(MacBDesign.IslandToken.Ink.primary)
+        .motion(MacBDesign.Motion.quick, value: showsInput)
         .motion(MacBDesign.Motion.quick, value: session.islandDetail(captions: captions))
         .motion(MacBDesign.Motion.normal, value: session.confirmation?.text)
     }
@@ -432,11 +445,8 @@ struct JarvisMiniOrb: View {
     }
 }
 
-/// The text field, in the navigation row's place.
-///
-/// Typing is a moment, not a mode: the row of sections steps aside while the
-/// user writes, and comes back as soon as the line is sent or dismissed. The
-/// island keeps its height the whole time.
+/// The text field: a slim capsule that is there while the pointer is over the
+/// island or the user is typing, and gone otherwise.
 struct IslandAssistantInput: View {
     @ObservedObject var session: JarvisSession
     var openSettings: () -> Void
@@ -480,14 +490,22 @@ struct IslandAssistantInput: View {
         }
         .padding(.leading, MacBDesign.Space.regular)
         .padding(.trailing, MacBDesign.Space.tight)
-        .frame(height: 30)
+        .frame(height: IslandGeometry.assistantInputHeight)
         .background(MacBDesign.IslandToken.navFill, in: Capsule())
         .overlay(Capsule().strokeBorder(MacBDesign.IslandToken.Fill.hairline, lineWidth: 0.7))
-        .frame(height: IslandGeometry.navigationHeight)
         .motion(MacBDesign.Motion.quick, value: hasText)
         .onAppear {
             typed = ""
-            if isInteractive { focused = true }
+            // Shown by the pointer passing over, not by a request to type:
+            // only take the keyboard when the user asked for the field.
+            if isInteractive, session.showsInput { focused = true }
+        }
+        .onChange(of: session.showsInput) { _, wanted in
+            if isInteractive { focused = wanted }
+        }
+        .onChange(of: focused) { _, isFocused in
+            if isFocused { session.showsInput = true }
+            else if !hasText { session.showsInput = false }
         }
     }
 
@@ -495,11 +513,13 @@ struct IslandAssistantInput: View {
         guard hasText else { return }
         session.say(typed)
         typed = ""
+        focused = false
         session.showsInput = false
     }
 
     private func dismiss() {
         typed = ""
+        focused = false
         session.showsInput = false
     }
 }

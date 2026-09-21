@@ -2151,19 +2151,11 @@ struct CoreTestRunner {
                            "Something claims to shut the Mac down")
             }),
             ("IslandGeometry: the assistant sits beside the notch and only grows when asked", {
-                let resting = IslandGeometry.assistantHeight(hasEars: true, showsDetail: false,
-                                                            hasConfirmation: false)
-                try expect(resting == 0, "A conversation beside the notch added a body: \(resting)")
-                let badge = IslandGeometry.assistantHeight(hasEars: false, showsDetail: false,
-                                                          hasConfirmation: false)
-                try expect(badge > 0 && badge <= 28, "Without a notch the badge is not a slim row: \(badge)")
-                let reading = IslandGeometry.assistantHeight(hasEars: true, showsDetail: true,
-                                                             hasConfirmation: false)
-                let asking = IslandGeometry.assistantHeight(hasEars: true, showsDetail: true,
-                                                            hasConfirmation: true)
-                try expect(reading > resting && asking > reading,
-                           "The assistant did not grow with what was asked for")
-                try expect(reading <= 32, "Subtitles are more than two lines: \(reading)")
+                let reading = IslandGeometry.assistantPanelHeight(cameraHeight: 32, showsInput: false,
+                                                                  showsDetail: true, hasConfirmation: false)
+                let asking = IslandGeometry.assistantPanelHeight(cameraHeight: 32, showsInput: true,
+                                                                 showsDetail: true, hasConfirmation: true)
+                try expect(asking > reading, "A question did not grow the island")
                 try expect(IslandGeometry.assistantWidth <= 320, "The assistant is too wide")
                 // A 13" and a 16" notch: the status word must fit beside the
                 // camera, and the panel must not turn into a banner.
@@ -2175,6 +2167,18 @@ struct CoreTestRunner {
                 }
                 try expect(IslandGeometry.assistantWidth(hasConfirmation: true)
                            == IslandGeometry.assistantConfirmationWidth, "A question lost its room")
+                // The whole panel: a strip at rest, the field only on hover.
+                let rest = IslandGeometry.assistantPanelHeight(cameraHeight: 32, showsInput: false,
+                                                               showsDetail: false, hasConfirmation: false)
+                let hover = IslandGeometry.assistantPanelHeight(cameraHeight: 32, showsInput: true,
+                                                                showsDetail: false, hasConfirmation: false)
+                try expect(rest <= 40, "At rest the island is more than a strip: \(rest)")
+                try expect(hover > rest && hover <= 84, "Hovering does not show a slim field: \(hover)")
+                try expect(IslandGeometry.assistantPanelRadius(hasBody: false) * 2 <= rest + 0.5,
+                           "The resting corners are taller than the strip")
+                let flat = IslandGeometry.assistantPanelHeight(cameraHeight: 0, showsInput: false,
+                                                               showsDetail: false, hasConfirmation: false)
+                try expect(flat > 0 && flat <= 40, "Without a notch the badge is not slim: \(flat)")
             }),
             ("SettingsPane: every page has its own address, and they are all Apple's", {
                 try expect(Set(SettingsPane.allCases.map(\.address)).count == SettingsPane.allCases.count,

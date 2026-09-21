@@ -154,27 +154,29 @@ import Security
                 let left = presence.fittingSize
                 print("left side hovered: \(Int(left.width.rounded()))x\(Int(left.height.rounded())) "
                       + (left.width <= ear && left.height <= camera ? "ok" : "MISS: taşıyor"))
-                // The ears are in the camera strip, the camera and settings
-                // buttons in the navigation row under it: different rows.
-                print("ears y: 0-\(Int(camera))  controls y: \(Int(camera + IslandGeometry.topPadding))-"
-                      + "\(Int(camera + IslandGeometry.topPadding + IslandGeometry.navigationHeight))")
                 let input = NSHostingView(rootView: IslandAssistantInput(session: session, openSettings: {},
                                                                          isInteractive: false))
-                input.frame = NSRect(x: 0, y: 0, width: width - IslandGeometry.horizontalPadding * 2, height: 200)
+                input.frame = NSRect(x: 0, y: 0, width: width - 32, height: 200)
                 input.layoutSubtreeIfNeeded()
                 let inputHeight = input.fittingSize.height
-                print("input: \(Int(inputHeight.rounded())) nav row: \(Int(IslandGeometry.navigationHeight)) "
-                      + (inputHeight <= IslandGeometry.navigationHeight ? "ok" : "MISS: taşıyor"))
-                let body = NSHostingView(rootView: IslandAssistantView(session: session, captions: .constant(false),
-                                                                       showsPresence: notch == 0, close: {}))
-                body.frame = NSRect(x: 0, y: 0, width: width, height: 400)
-                body.layoutSubtreeIfNeeded()
-                let reserved = IslandGeometry.assistantHeight(hasEars: notch > 0, showsDetail: false,
-                                                              hasConfirmation: false)
-                print("body: \(Int(body.fittingSize.height.rounded())) reserved: \(Int(reserved)) "
-                      + (body.fittingSize.height <= reserved + 0.5 ? "ok" : "MISS: taşıyor"))
-                print("with captions: \(Int(IslandGeometry.assistantHeight(hasEars: notch > 0, showsDetail: true, hasConfirmation: false)))")
-                print("with confirmation: \(Int(IslandGeometry.assistantHeight(hasEars: notch > 0, showsDetail: true, hasConfirmation: true)))")
+                print("input: \(Int(inputHeight.rounded())) reserved: \(Int(IslandGeometry.assistantInputHeight)) "
+                      + (inputHeight <= IslandGeometry.assistantInputHeight + 0.5 ? "ok" : "MISS: taşıyor"))
+                // The whole panel as the island draws it, at rest and hovered.
+                for hovered in [false, true] {
+                    let reserved = IslandGeometry.assistantPanelHeight(cameraHeight: notch > 0 ? camera : 0,
+                                                                       showsInput: hovered, showsDetail: false,
+                                                                       hasConfirmation: false)
+                    let panel = NSHostingView(rootView: IslandAssistantPanel(
+                        session: session, captions: .constant(false), cameraHeight: notch > 0 ? camera : 0,
+                        earWidth: ear, showsInput: hovered, isInteractive: false, close: {}, openSettings: {}))
+                    panel.frame = NSRect(x: 0, y: 0, width: width, height: 400)
+                    panel.layoutSubtreeIfNeeded()
+                    let needed = panel.fittingSize.height
+                    print("panel \(hovered ? "hover" : "rest"): \(Int(needed.rounded())) reserved: \(Int(reserved)) "
+                          + (needed <= reserved + 0.5 ? "ok" : "MISS: taşıyor"))
+                }
+                print("with captions: \(Int(IslandGeometry.assistantPanelHeight(cameraHeight: camera, showsInput: false, showsDetail: true, hasConfirmation: false)))")
+                print("with confirmation: \(Int(IslandGeometry.assistantPanelHeight(cameraHeight: camera, showsInput: true, showsDetail: true, hasConfirmation: true)))")
             }
         }
         if arguments.contains("--measure-briefing") {

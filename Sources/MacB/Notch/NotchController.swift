@@ -9,6 +9,10 @@ struct NotchLayout: Equatable {
     var width: CGFloat = 180
     var height: CGFloat = 32
     var radius: CGFloat = 12
+    /// The conversation's own layout: no navigation row, the orb and status
+    /// beside the camera, the text field only when it is wanted.
+    var isAssistantCompact = false
+    var showsAssistantInput = false
 }
 
 struct IslandToast: Equatable {
@@ -258,6 +262,8 @@ struct IslandToast: Equatable {
             assistant.$lines.map { $0.last?.text.isEmpty ?? true }
         )
         .map { _ in () }
+        .merge(with: assistant.$showsInput.removeDuplicates().map { _ in () },
+               preferences.$assistantCaptions.removeDuplicates().map { _ in () })
         .sink { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self, self.state.content == .assistant else { return }
@@ -644,7 +650,10 @@ struct IslandToast: Equatable {
             suppressHoverUntilExit = false
             if event?.type == .leftMouseDown, state.hasKeyboardFocus { panel.resignKey() }
         }
+        let changed = pointerInside != inside
         pointerInside = inside
+        // The conversation shows its text field under the pointer only.
+        if changed, state.content == .assistant, state.isOpen { render() }
     }
     /// Opens the island on the assistant and keeps it there while it talks.
     func startAssistant() {
@@ -753,6 +762,21 @@ struct IslandToast: Equatable {
             return NotchLayout(phase: .peek, content: .default,
                 width: min(width, maxWidth),
                 height: camera + IslandGeometry.peekHeight, radius: 20)
+        case .expanded where state.content == .assistant && !incomingDragActive
+                && !presentation.cameraPreviewVisible:
+            let showsInput = pointerInside || assistant.showsInput
+            let showsDetail = assistant.islandDetail(captions: preferences.assistantCaptions) != nil
+            let hasConfirmation = assistant.confirmation != nil
+            let width = min(maxWidth, IslandGeometry.assistantWidth(hasConfirmation: hasConfirmation,
+                                                                    notchWidth: assistantNotchWidth))
+            var layout = NotchLayout(phase: .expanded, content: .assistant, width: width,
+                height: IslandGeometry.assistantPanelHeight(cameraHeight: assistantNotchWidth > 0 ? camera : 0,
+                                                            showsInput: showsInput, showsDetail: showsDetail,
+                                                            hasConfirmation: hasConfirmation),
+                radius: IslandGeometry.assistantPanelRadius(hasBody: showsInput || showsDetail || hasConfirmation))
+            layout.isAssistantCompact = true
+            layout.showsAssistantInput = showsInput
+            return layout
         case .expanded:
             let width = incomingDragActive
                 ? IslandGeometry.dropWidth(screenWidth: screenWidth)
@@ -786,10 +810,7 @@ struct IslandToast: Equatable {
         case .timer:
             return IslandGeometry.sectionWidth(620, screenWidth: screenWidth)
         case .assistant:
-            return IslandGeometry.sectionWidth(
-                IslandGeometry.assistantWidth(hasConfirmation: assistant.confirmation != nil,
-                                              notchWidth: assistantNotchWidth),
-                screenWidth: screenWidth)
+            return IslandGeometry.sectionWidth(IslandGeometry.assistantWidth, screenWidth: screenWidth)
         case .briefing:
             return IslandGeometry.sectionWidth(IslandGeometry.briefingWidth, screenWidth: screenWidth)
         case .agent:
@@ -818,10 +839,9 @@ struct IslandToast: Equatable {
         case .timer:
             return IslandGeometry.timerHeight
         case .assistant:
-            return IslandGeometry.assistantHeight(
-                hasEars: assistantNotchWidth > 0,
-                showsDetail: assistant.islandDetail(captions: preferences.assistantCaptions) != nil,
-                hasConfirmation: assistant.confirmation != nil)
+            // Only while a drop or the camera preview takes the panel over;
+            // otherwise the conversation has its own layout above.
+            return 0
         case .briefing:
             return IslandGeometry.briefingHeight(chipCount: briefing.chips.count)
         case .agent:

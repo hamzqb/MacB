@@ -235,36 +235,30 @@ struct NotchView: View {
                 .frame(height: IslandGeometry.peekHeight)
                 .padding(.horizontal, 18)
             }.frame(width: layout.width, height: layout.height, alignment: .top).clipped()
+        case .expanded where layout.isAssistantCompact:
+            IslandAssistantPanel(session: assistant, captions: $preferences.assistantCaptions,
+                                 cameraHeight: hasEars ? presentation.cameraHeight : 0,
+                                 earWidth: hasEars
+                                    ? IslandGeometry.assistantEarContentWidth(panelWidth: layout.width,
+                                                                              notchWidth: presentation.cameraWidth)
+                                    : 0,
+                                 showsInput: layout.showsAssistantInput, isInteractive: isInteractive,
+                                 close: closeAssistant, openSettings: openSettings)
+                .frame(width: layout.width, height: layout.height, alignment: .top).clipped()
         case .expanded:
             VStack(spacing: 0) {
                 Color.clear.frame(height: presentation.cameraHeight)
-                    .overlay {
-                        if layout.content == .assistant, hasEars {
-                            IslandAssistantEars(session: assistant, captions: $preferences.assistantCaptions,
-                                                earWidth: IslandGeometry.assistantEarContentWidth(
-                                                    panelWidth: layout.width, notchWidth: presentation.cameraWidth),
-                                                close: closeAssistant)
-                        }
-                    }
                 VStack(spacing: IslandGeometry.gap) {
-                    if layout.content == .assistant, assistant.showsInput {
-                        IslandAssistantInput(session: assistant, openSettings: openSettings,
-                                             isInteractive: isInteractive)
-                            .transition(.opacity)
-                    } else {
-                        // The target section, not this copy's. Both copies of the
-                        // panel are on screen during a cross-fade, and a row that
-                        // disagrees with itself shows two pucks at once.
-                        IslandNavigation(selected: presentation.layout.content, isEditing: widgets.isEditing,
-                                         select: select,
-                                         toggleEditing: { widgets.isEditing.toggle() },
-                                         cameraAction: cameraAction, openSettings: openSettings)
-                            .transition(.opacity)
-                    }
+                    // The target section, not this copy's. Both copies of the
+                    // panel are on screen during a cross-fade, and a row that
+                    // disagrees with itself shows two pucks at once.
+                    IslandNavigation(selected: presentation.layout.content, isEditing: widgets.isEditing,
+                                     select: select,
+                                     toggleEditing: { widgets.isEditing.toggle() },
+                                     cameraAction: cameraAction, openSettings: openSettings)
                     if presentation.cameraPreviewVisible { cameraCard }
-                    if layout.content != .assistant || assistantHasBody { section(layout) }
+                    section(layout)
                 }
-                .motion(MacBDesign.Motion.quick, value: assistant.showsInput)
                 .padding(.horizontal, IslandGeometry.horizontalPadding)
                 .padding(.top, IslandGeometry.topPadding)
                 .padding(.bottom, IslandGeometry.bottomPadding)
@@ -310,8 +304,9 @@ struct NotchView: View {
             case .timer:
                 IslandTimerView(timer: timer)
             case .assistant:
-                IslandAssistantView(session: assistant, captions: $preferences.assistantCaptions,
-                                    showsPresence: !hasEars, close: closeAssistant)
+                // Reached only while a drop or the camera preview has the
+                // panel; the conversation itself is `IslandAssistantPanel`.
+                EmptyView()
             case .briefing:
                 IslandBriefingView(briefing: briefing, close: closeBriefing, talk: startAssistant)
             case .agent:
@@ -324,13 +319,6 @@ struct NotchView: View {
     /// Whether the orb and status can sit beside the camera: only with a notch
     /// to sit beside.
     private var hasEars: Bool { presentation.cameraHeight > 0 && presentation.cameraWidth > 0 }
-
-    /// Mirrors `IslandGeometry.assistantHeight`: false when the controller
-    /// reserved no body, so the section does not leave a gap under the row.
-    private var assistantHasBody: Bool {
-        !hasEars || assistant.islandDetail(captions: preferences.assistantCaptions) != nil
-            || assistant.confirmation != nil
-    }
 
     @ViewBuilder private var appsContent: some View {
         IslandLauncherView(launcher: launcher, notify: notify)

@@ -76,23 +76,34 @@ public enum IslandGeometry {
         return widgetHeight * CGFloat(rows.count) + gap * CGFloat(rows.count - 1)
     }
 
-    /// The body the voice assistant adds under the navigation row.
+    /// The whole open island while a conversation runs. There is no navigation
+    /// row: the sections are one step away once the conversation ends, and a
+    /// row of house and grid icons under a voice says the wrong thing.
     ///
-    /// On a display with a notch the orb and the status word live in the two
-    /// strips either side of the camera, which the panel covers anyway, so a
-    /// conversation on its own adds nothing at all. Without a notch they need
-    /// one slim row. Typing never adds height: the text field takes the
-    /// navigation row's place instead of stacking under it. Subtitles and a
-    /// question waiting for a yes are the only things that grow the island.
-    public static func assistantHeight(hasEars: Bool, showsDetail: Bool,
-                                       hasConfirmation: Bool) -> CGFloat {
+    /// At rest it is the strip beside the camera and a sliver under it — a
+    /// wider notch with an orb on one side and a word on the other. The text
+    /// field appears only while the pointer is over the island or the user is
+    /// typing; subtitles and a question add themselves below.
+    public static func assistantPanelHeight(cameraHeight: CGFloat, showsInput: Bool,
+                                            showsDetail: Bool, hasConfirmation: Bool) -> CGFloat {
+        let top = cameraHeight > 0 ? cameraHeight : assistantPresenceTop + assistantPresenceHeight
         var parts: [CGFloat] = []
-        if !hasEars { parts.append(assistantPresenceHeight) }
+        if showsInput { parts.append(assistantInputHeight) }
         if showsDetail { parts.append(captionHeight) }
         if hasConfirmation { parts.append(assistantConfirmationHeight) }
-        guard !parts.isEmpty else { return 0 }
-        return parts.reduce(0, +) + CGFloat(parts.count - 1) * assistantSpacing
+        guard !parts.isEmpty else { return top + assistantRestBottom }
+        return top + assistantSpacing + parts.reduce(0, +)
+            + CGFloat(parts.count - 1) * assistantSpacing + assistantBodyBottom
     }
+
+    /// Rounder when it is only a strip, so the bottom corners never reach
+    /// higher than the strip is tall.
+    public static func assistantPanelRadius(hasBody: Bool) -> CGFloat { hasBody ? 20 : 14 }
+
+    public static let assistantInputHeight: CGFloat = 30
+    public static let assistantPresenceTop: CGFloat = 8
+    public static let assistantRestBottom: CGFloat = 6
+    public static let assistantBodyBottom: CGFloat = 12
 
     /// The orb-and-word row, only on displays without a notch to sit beside.
     public static let assistantPresenceHeight: CGFloat = 24
@@ -114,7 +125,7 @@ public enum IslandGeometry {
     public static let assistantConfirmationWidth: CGFloat = 392
 
     /// With a notch the panel has to be wide enough that each strip beside the
-    /// camera holds its content; the navigation row's own floor still applies.
+    /// camera holds its content.
     public static func assistantWidth(hasConfirmation: Bool, notchWidth: CGFloat = 0) -> CGFloat {
         let resting = notchWidth > 0
             ? notchWidth + 2 * (assistantEarText + assistantEarGap + horizontalPadding)
