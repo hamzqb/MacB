@@ -76,6 +76,13 @@ struct IslandAssistantPresence: View {
             JarvisOrb(state: session.state, input: session.inputLevel, output: session.outputLevel)
                 .frame(width: 24, height: 24)
                 .accessibilityLabel("MacB, \(session.islandStatus)")
+            if session.isGuest && !hovering {
+                Image(systemName: "person.fill.questionmark")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(MacBDesign.IslandToken.Ink.faint)
+                    .help("Misafir: yüz tanınmadı. Hafıza, mail, takvim ve ekran kapalı.")
+                    .transition(.opacity)
+            }
             if session.isFreeEngine && !hovering {
                 // Free is a mode, not a fault: it gets a mark of its own rather
                 // than an apology in the status line.

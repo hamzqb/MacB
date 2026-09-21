@@ -134,6 +134,13 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     /// turns it on: the first read raises macOS's Automation prompt, and
     /// nothing should raise that on its own.
     @Published var mailEnabled: Bool { didSet { defaults.set(mailEnabled, forKey: "mailEnabled") } }
+    /// A card when the user comes back after a while: new mail, the next
+    /// meeting. Nothing to say, no card.
+    @Published var returnSummaryEnabled: Bool {
+        didSet { defaults.set(returnSummaryEnabled, forKey: "returnSummaryEnabled") }
+    }
+    /// A line in the island for important new mail and a meeting ten minutes away.
+    @Published var headsUpEnabled: Bool { didSet { defaults.set(headsUpEnabled, forKey: "headsUpEnabled") } }
     /// Senders the user calls important, one per line in Settings.
     @Published var importantSenders: [String] {
         didSet { defaults.set(importantSenders, forKey: "importantSenders") }
@@ -367,6 +374,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         freeEngineReadsScreen = defaults.bool(forKey: "freeEngineReadsScreen")
         briefingVoice = defaults.string(forKey: "briefingVoice") ?? ""
         mailEnabled = defaults.bool(forKey: "mailEnabled")
+        returnSummaryEnabled = defaults.object(forKey: "returnSummaryEnabled") as? Bool ?? true
+        headsUpEnabled = defaults.object(forKey: "headsUpEnabled") as? Bool ?? true
         importantSenders = defaults.stringArray(forKey: "importantSenders") ?? []
         jarvisHotKeyEnabled = defaults.bool(forKey: "jarvisHotKeyEnabled")
         let personaMigrationKey = "jarvisPersonaKankaDefaultMigrated"

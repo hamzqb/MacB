@@ -158,6 +158,14 @@ enum JarvisToolOutcome {
     /// says otherwise.
     @Published var showsInput = false
 
+    /// Set before `start()` when the face at the Mac was not the owner's: the
+    /// conversation then has no memory, no name and only the public tools.
+    @Published var isGuest = false
+
+    /// The tools this conversation may run, checked again at dispatch so a
+    /// model cannot call one it was never offered.
+    private func mayRun(_ tool: JarvisTool) -> Bool { !isGuest || JarvisTool.guestTools.contains(tool) }
+
     /// Audio captured before the session was ready, so the microphone can be
     /// opened while the socket is still shaking hands instead of after.
     private var pendingAudio: [Data] = []
@@ -229,7 +237,7 @@ enum JarvisToolOutcome {
         send(JarvisProtocol.sessionUpdate(voice: voice(), now: Date(),
                                           userName: NSFullUserName().split(separator: " ").first.map(String.init),
                                           memory: memory.facts, persona: persona(),
-                                          scenarios: scenarioNames()))
+                                          scenarios: scenarioNames(), guest: isGuest))
         receiver = Task { [weak self] in await self?.receive(from: socket, generation: current) }
         Task { [weak self] in
             guard let self else { return }
@@ -493,7 +501,7 @@ enum JarvisToolOutcome {
             "content": JarvisProtocol.instructions(
                 now: Date(),
                 userName: NSFullUserName().split(separator: " ").first.map(String.init),
-                memory: memory.facts, persona: persona(), scenarios: scenarioNames())
+                memory: memory.facts, persona: persona(), scenarios: scenarioNames(), guest: isGuest)
                 + Self.freeEngineNote
         ]]
         if let note { append(.jarvis, note) }
@@ -515,9 +523,10 @@ enum JarvisToolOutcome {
         You are running in the free mode: what you write is read aloud by the         Mac's own synthesiser. Write one or two spoken sentences, never         Markdown, never a list, never an address or a path. You cannot see the         screen in this mode — say so if asked. You cannot be interrupted, so do         not ask a question and keep talking.
         """
 
-    /// How many times round the tool loop before giving up. A small model that
-    /// has called four tools and still not answered is not about to.
-    private static let freeToolRounds = 4
+    /// How many times round the tool loop before giving up. Enough for a
+    /// short task on screen — look, click, type, check — and not so many that
+    /// a model going in circles keeps going.
+    private static let freeToolRounds = 10
     /// The free engine listens on this Mac and costs nothing to leave open, so
     /// it waits longer for somebody to say something than the billed one does.
     private static let freeQuietLimit: TimeInterval = 75
@@ -564,7 +573,8 @@ enum JarvisToolOutcome {
         for _ in 0..<Self.freeToolRounds {
             guard generation == current, isActive else { return }
             do {
-                let reply = try await engine.answer(messages: freeMessages, tools: engine.conversationTools)
+                let tools = engine.conversationTools.filter(mayRun)
+                let reply = try await engine.answer(messages: freeMessages, tools: tools)
                 guard generation == current, isActive else { return }
                 if let provider = engine.provider {
                     cost?.record(provider: provider, model: "", usage: reply.usage)
@@ -607,7 +617,7 @@ enum JarvisToolOutcome {
         }
         for call in calls {
             guard generation == current, isActive else { return false }
-            guard let tool = call.tool, let toolbox else {
+            guard let tool = call.tool, mayRun(tool), let toolbox else {
                 freeMessages.append(AIChatStream.toolResultMessage(
                     callID: call.callID,
                     output: JarvisProtocol.result(["ok": false, "error": "unknown tool"])))
@@ -684,7 +694,7 @@ enum JarvisToolOutcome {
         var ending = false
         for call in calls {
             guard generation == current, isActive else { return }
-            guard let tool = call.tool, let toolbox else {
+            guard let tool = call.tool, mayRun(tool), let toolbox else {
                 send(JarvisProtocol.functionOutput(callID: call.callID,
                                                    output: JarvisProtocol.result(["ok": false, "error": "unknown tool"])))
                 continue

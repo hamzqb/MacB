@@ -127,6 +127,16 @@ import MacBCore
         givenAt = Date()
     }
 
+    /// The card for coming back after a while. Same card as the briefing, but
+    /// it does not count as the day's briefing, and it speaks only when the
+    /// briefing would.
+    func presentReturn(greeting: String, chips: [Briefing.Chip], lines: [String]) {
+        self.greeting = greeting
+        self.chips = chips
+        self.lines = lines
+        if preferences.briefingSpeaks { speak() }
+    }
+
     /// Takes the briefing off the island.
     func dismiss() {
         lines = []

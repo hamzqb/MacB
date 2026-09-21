@@ -108,7 +108,7 @@ public struct FaceIdentity: Codable, Equatable, Identifiable, Sendable {
 /// Face unlock never touches the Mac login. It gates MacB's private surfaces
 /// only, and each one can be turned off on its own.
 public enum ProtectedArea: String, Codable, CaseIterable, Sendable {
-    case clipboard, shelf, camera, uninstaller
+    case clipboard, shelf, camera, uninstaller, assistant
 
     public var title: String {
         switch self {
@@ -116,6 +116,7 @@ public enum ProtectedArea: String, Codable, CaseIterable, Sendable {
         case .shelf: return "Dosya rafı"
         case .camera: return "Kamera önizleme"
         case .uninstaller: return "Uygulama kaldırma"
+        case .assistant: return "Asistanın özel bilgileri"
         }
     }
 
@@ -125,6 +126,7 @@ public enum ProtectedArea: String, Codable, CaseIterable, Sendable {
         case .shelf: return "tray.full"
         case .camera: return "camera"
         case .uninstaller: return "trash"
+        case .assistant: return "person.crop.circle.badge.checkmark"
         }
     }
 }

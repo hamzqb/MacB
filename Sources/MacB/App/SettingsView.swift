@@ -418,6 +418,12 @@ struct SettingsView: View {
                 settingToggle("Sesli oku", detail: "Mac'in kendi Türkçe sesiyle ya da seçersen daha canlı bir Gemini sesiyle. İkisi de ücretsiz.",
                               isOn: $preferences.briefingSpeaks)
                     .disabled(!preferences.briefingEnabled)
+                settingToggle("Dönünce özet",
+                              detail: "10 dakikadan uzun ayrılıp dönünce: yeni mail, sıradaki toplantı. Söylenecek bir şey yoksa kart çıkmaz.",
+                              isOn: $preferences.returnSummaryEnabled)
+                settingToggle("Önemli şeyleri haber ver",
+                              detail: "Önemli yeni mail ve 10 dakika sonra başlayacak toplantı island'da kısa bir satırla görünür.",
+                              isOn: $preferences.headsUpEnabled)
                 HStack(spacing: MacBDesign.Space.regular) {
                     Text("Ses").font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                     Spacer(minLength: 8)

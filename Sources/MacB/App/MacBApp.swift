@@ -275,6 +275,9 @@ private final class Flag: @unchecked Sendable {
     }()
     private lazy var scenarios = ScenarioStore(keepAwake: keepAwake, arrangements: arrangements,
                                                media: media, timer: islandTimer)
+    private lazy var proactive = ProactiveService(
+        preferences: preferences, mail: mail, jobs: agentJobs, briefing: briefing, faceUnlock: faceUnlock,
+        present: { [weak self] event in self?.notch.showHeadsUp(event) })
     private lazy var watchers = WatchTaskStore(systemMonitor: systemMonitor, processes: processes,
                                                notify: { [weak self] symbol, message in self?.notifyIsland(symbol: symbol, message: message) })
     private lazy var jarvis = JarvisSession(
@@ -404,6 +407,8 @@ private final class Flag: @unchecked Sendable {
         systemMonitor.start()
         processes.start()
         watchers.start()
+        // Runs while the screen is locked too: that is when "away" begins.
+        proactive.start()
         lid.setOpenAngle(preferences.lidHingeAngle)
         lid.setEnabled(preferences.lidHingeEnabled)
         applyPreferences()

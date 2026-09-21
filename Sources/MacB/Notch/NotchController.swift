@@ -357,6 +357,14 @@ struct IslandToast: Equatable {
         systemEvents.present(.notice(text))
     }
 
+    /// Something worth knowing before being asked. Never over an open panel:
+    /// if the user is working in the island, it waits for the next one.
+    func showHeadsUp(_ event: IslandEvent) {
+        guard preferences.islandEventsEnabled else { return }
+        guard state.phase != .expanded, !incomingDragActive, !developmentPreviewLocked else { return }
+        systemEvents.present(event)
+    }
+
     /// The lid has come back up. One line, read in the time it takes to sit down.
     private func greetAfterLidOpen() {
         lidBlur.hide()
@@ -661,8 +669,23 @@ struct IslandToast: Equatable {
         enabled = true
         start()
         openPanel(showing: .assistant)
-        assistant.start()
-        render()
+        // Mail, calendar, memory and the screen are the owner's. When the
+        // user has put the assistant behind their face, a conversation starts
+        // only after a look — or Touch ID — and someone else gets a guest.
+        guard faceUnlock.settings.guards(.assistant), !faceUnlock.isUnlocked(.assistant) else {
+            assistant.isGuest = false
+            assistant.start()
+            render()
+            return
+        }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            let recognised = await self.faceUnlock.requestAccess(to: .assistant)
+            guard self.assistantIsActive else { return }
+            self.assistant.isGuest = !recognised
+            self.assistant.start()
+            self.render()
+        }
     }
 
     /// Ends the conversation and lets the island go back to normal.

@@ -229,18 +229,21 @@ import ScreenCaptureKit
             } catch { return fail(error.localizedDescription) }
         case .clickControl:
             do {
-                return ok(["message": try screenControl.press(arguments["target"] as? String ?? "",
-                                                               role: arguments["role"] as? String)])
+                let message = try screenControl.press(arguments["target"] as? String ?? "",
+                                                      role: arguments["role"] as? String)
+                return await ok(withScreenAfter(["message": message]))
             } catch { return fail(error.localizedDescription) }
         case .typeText:
             do {
-                return ok(["message": try screenControl.type(arguments["text"] as? String ?? "",
-                                                              into: arguments["field"] as? String)])
+                let message = try screenControl.type(arguments["text"] as? String ?? "",
+                                                     into: arguments["field"] as? String)
+                return await ok(withScreenAfter(["message": message]))
             } catch { return fail(error.localizedDescription) }
         case .pressKeys:
             do {
-                return ok(["message": try screenControl.press(keys: arguments["keys"] as? String ?? "",
-                                                               times: (arguments["times"] as? NSNumber)?.intValue ?? 1)])
+                let message = try screenControl.press(keys: arguments["keys"] as? String ?? "",
+                                                      times: (arguments["times"] as? NSNumber)?.intValue ?? 1)
+                return await ok(withScreenAfter(["message": message]))
             } catch { return fail(error.localizedDescription) }
         case .media:
             return mediaControl(arguments["action"] as? String ?? "toggle")
@@ -457,6 +460,26 @@ import ScreenCaptureKit
         }
         notify(task.kind.symbol, "Takip eklendi: \(task.title)")
         return ok(["created": task.title, "kind": task.kind.title, "condition": task.condition.title])
+    }
+
+    /// What the front window shows once the action has settled, so a task of
+    /// several steps can check each one without a separate call — one round
+    /// trip instead of two, which on the live engine is also half the cost.
+    private func withScreenAfter(_ fields: [String: Any]) async -> [String: Any] {
+        try? await Task.sleep(nanoseconds: 450_000_000)
+        var all = fields
+        if let after = try? screenControl.controls(limit: 30) {
+            all["now_showing"] = [
+                "app": after.app, "window": after.window,
+                "controls": after.controls.map { control -> [String: Any] in
+                    var entry: [String: Any] = ["role": control.role.replacingOccurrences(of: "AX", with: "").lowercased(),
+                                                "name": control.label]
+                    if let value = control.value { entry["value"] = value }
+                    return entry
+                }
+            ]
+        }
+        return all
     }
 
     // MARK: - Web

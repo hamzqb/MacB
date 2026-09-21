@@ -1610,7 +1610,8 @@ struct CoreTestRunner {
                            "The screen-control grant covers the wrong tools")
                 try expect(Set(JarvisTool.allCases.filter(\.readsOutsideContent))
                            == [.webSearch, .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .calendarEvents,
-                               .media, .codingAgents, .readMail, .screenControls],
+                               .media, .codingAgents, .readMail, .screenControls,
+                               .clickControl, .typeText, .pressKeys],
                            "The outside-content set drifted")
                 for tool in JarvisTool.allCases where tool.isScreenControl || tool == .screenControls {
                     try expect(AgentPolicy.isForbidden(tool), "A background job could touch the screen with \(tool)")
@@ -2186,6 +2187,61 @@ struct CoreTestRunner {
                 try expect(JarvisTool(rawValue: "power_action") == .powerAction, "The tool name changed")
                 try expect(JarvisTool.allCases.allSatisfy { !$0.rawValue.contains("shutdown") },
                            "Something claims to shut the Mac down")
+            }),
+            ("Guest: an unrecognised face gets no memory, no name and only public tools", {
+                let update = JarvisProtocol.sessionUpdate(voice: .marin, now: Date(), userName: "Hamza",
+                                                          memory: ["Kahveyi sütsüz içer"], scenarios: ["toplantı"],
+                                                          guest: true)
+                let session = try require(update["session"] as? [String: Any], "No session")
+                let text = try require(session["instructions"] as? String, "No instructions")
+                try expect(!text.contains("Hamza") && !text.contains("Kahveyi") && !text.contains("toplantı"),
+                           "Something personal reached a guest")
+                try expect(text.contains("GUEST"), "The model was not told it is talking to a guest")
+                let tools = Set((session["tools"] as? [[String: Any]] ?? []).compactMap { $0["name"] as? String })
+                try expect(tools == Set(JarvisTool.guestTools.map(\.rawValue)), "A guest was offered \(tools)")
+                for tool in [JarvisTool.readMail, .calendarEvents, .remember, .readScreenText, .clickControl,
+                             .typeText, .readBrowserPage, .startBackgroundJob] {
+                    try expect(!JarvisTool.guestTools.contains(tool), "A guest could use \(tool)")
+                }
+                let owner = JarvisProtocol.sessionUpdate(voice: .marin, now: Date(), userName: "Hamza")
+                let ownerText = (owner["session"] as? [String: Any])?["instructions"] as? String ?? ""
+                try expect(ownerText.contains("Hamza") && !ownerText.contains("GUEST"), "The owner became a guest")
+                try expect(ProtectedArea.allCases.contains(.assistant), "The assistant cannot be put behind the face")
+            }),
+            ("Presence: away, back, the welcome card and what may be named", {
+                try expect(!Presence.isAway(idleSeconds: 60) && Presence.isAway(idleSeconds: 11 * 60), "Away threshold")
+                try expect(Presence.isBack(idleSeconds: 3) && !Presence.isBack(idleSeconds: 120), "Back threshold")
+                let old = MailHeader(sender: "Ayşe <a@x.com>", subject: "Eski", date: Date(timeIntervalSince1970: 1))
+                let new = MailHeader(sender: "Mehmet Yılmaz <m@x.com>", subject: "Sözleşme", date: Date(timeIntervalSince1970: 2))
+                try expect(Presence.newMail(now: [old, new], seenBefore: [old.id]) == [new], "New mail was not told apart")
+                try expect(Presence.AwaySummary(awayFor: 1200).isEmpty, "An empty absence made a card")
+                let summary = Presence.AwaySummary(awayFor: 1800, newMail: 3, importantSenders: ["Mehmet"],
+                                                   nextEvent: ("Ekip toplantısı", 12))
+                let named = summary.chips(showNames: true).map(\.text).joined(separator: " ")
+                let hidden = summary.chips(showNames: false).map(\.text).joined(separator: " ")
+                try expect(named.contains("Mehmet") && named.contains("Ekip toplantısı"), "Names missing for the owner: \(named)")
+                try expect(!hidden.contains("Mehmet") && !hidden.contains("Ekip"), "Names shown to someone unrecognised: \(hidden)")
+                try expect(hidden.contains("3 yeni mail"), "Counts missing: \(hidden)")
+                let spoken = summary.lines(name: nil, showNames: false).joined(separator: " ")
+                try expect(!spoken.contains("Mehmet") && !spoken.contains("Ekip"), "Names read out to a stranger")
+                try expect(Presence.AwaySummary.greeting(name: "Hamza") == "Tekrar hoş geldin Hamza.", "Greeting")
+            }),
+            ("HeadsUp: meetings ten minutes ahead, important new mail, never on the first look", {
+                let now = Date(timeIntervalSince1970: 1_000_000)
+                try expect(HeadsUp.announcesMeeting(start: now.addingTimeInterval(600), now: now), "Ten minutes out missed")
+                try expect(HeadsUp.announcesMeeting(start: now.addingTimeInterval(650), now: now), "A minute's poll could miss it")
+                try expect(!HeadsUp.announcesMeeting(start: now.addingTimeInterval(30 * 60), now: now), "Announced too early")
+                try expect(!HeadsUp.announcesMeeting(start: now.addingTimeInterval(-60), now: now), "Announced after it began")
+                let flagged = MailHeader(sender: "Banka <b@x.com>", subject: "Ekstre", date: now, isFlagged: true)
+                let plain = MailHeader(sender: "Bülten <n@x.com>", subject: "Haftalık", date: now)
+                try expect(HeadsUp.mailWorthTelling(now: [flagged, plain], seen: [], isFirstLook: true, senders: []).isEmpty,
+                           "Everything was news on the first look")
+                try expect(HeadsUp.mailWorthTelling(now: [flagged, plain], seen: [], isFirstLook: false, senders: []) == [flagged],
+                           "Only the important new mail should interrupt")
+                try expect(HeadsUp.mailWorthTelling(now: [flagged], seen: [flagged.id], isFirstLook: false, senders: []).isEmpty,
+                           "The same mail interrupted twice")
+                let event = HeadsUp.mailEvent(flagged)
+                try expect(event.kind == .headsUp && event.title.contains("Banka"), "Mail heads-up: \(event.title)")
             }),
             ("GeminiSpeech: voices round-trip, audio is found and wrapped as WAV", {
                 for voice in GeminiSpeech.voices {

@@ -10,6 +10,9 @@ import Foundation
 public struct IslandEvent: Equatable, Sendable {
     public enum Kind: String, Equatable, Sendable {
         case nowPlaying, charging, unplugged, batteryLow, welcome, lidClosing, rule
+        /// Something worth knowing before being asked: important mail, a
+        /// meeting about to start.
+        case headsUp
     }
 
     public let kind: Kind
@@ -39,6 +42,7 @@ public struct IslandEvent: Equatable, Sendable {
         case .batteryLow: return 3.0
         case .welcome: return 2.8
         case .rule: return 2.6
+        case .headsUp: return 4.5
         // Long enough to survive a slow close: the island has to still be there
         // to fold, and it leaves with the screen either way.
         case .lidClosing: return 6.0
@@ -59,6 +63,7 @@ public struct IslandEvent: Equatable, Sendable {
         case .batteryLow: return 3
         case .welcome: return 3
         case .rule: return 3
+        case .headsUp: return 3
         case .lidClosing: return 4
         case .charging, .unplugged: return 1
         case .nowPlaying: return 0
