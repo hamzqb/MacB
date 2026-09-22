@@ -2239,6 +2239,18 @@ struct CoreTestRunner {
                 try expect(IslandEnvelope.size(holding: CGSize(width: 1500, height: 200), screenWidth: 1512).width == 1512,
                            "The window is wider than the screen")
             }),
+            ("IslandActivity: one thing beside the camera, most important first", {
+                try expect(IslandActivity.running(assistant: false, timer: true, music: true, keepAwake: false, shelf: true)
+                           == [.timer, .music, .shelf], "Wrong order")
+                try expect(IslandActivity.running(assistant: true, timer: true, music: false, keepAwake: false, shelf: false).first
+                           == .assistant, "A conversation must win the wings")
+                try expect(IslandActivity.width(for: nil, notchWidth: 180) == nil, "Nothing running still takes room")
+                try expect(IslandActivity.width(for: .music, notchWidth: 180) == 180 + 2 * IslandActivity.music.wing,
+                           "Wings do not sit beside the notch")
+                try expect(IslandActivity.width(for: .timer, notchWidth: nil) == IslandActivity.pillGap + 2 * IslandActivity.timer.wing,
+                           "Without a notch the wings should close up")
+                try expect(IslandActivity.allCases.allSatisfy { $0.wing <= 64 }, "A wing is wider than a notch wing should be")
+            }),
             ("LocalModel: Qwen's template, tool calls in and out, the file", {
                 let tools = [JarvisTool.setVolume.chatDeclaration]
                 let calls = [JarvisCall(callID: "c1", name: "set_volume", arguments: "{\"percent\":30}")]

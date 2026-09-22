@@ -462,6 +462,9 @@ private final class Flag: @unchecked Sendable {
         } else if CommandLine.arguments.contains("--preview-active-timer") {
             islandTimer.start()
             notch.showDevelopmentPreview(phase: .expanded, content: .home)
+        } else if CommandLine.arguments.contains("--preview-collapsed-timer") {
+            islandTimer.start()
+            notch.showDevelopmentPreview(phase: .collapsed)
         } else if CommandLine.arguments.contains("--preview-peek") {
             notch.showDevelopmentPreview(phase: .peek)
         } else if CommandLine.arguments.contains("--preview-files") {

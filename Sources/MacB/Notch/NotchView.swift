@@ -288,106 +288,114 @@ struct NotchView: View {
         IslandLauncherView(launcher: launcher, notify: notify)
     }
 
-    /// Collapsed indicators. With nothing running the island renders nothing and takes no clicks.
+    /// The closed island: the notch with two small wings for the one thing
+    /// that matters most right now — a picture on the left, a live reading on
+    /// the right. With nothing running it renders nothing and takes no clicks.
     @ViewBuilder private var compact: some View {
-        if collapsedIndicators.isEmpty {
-            Color.clear.allowsHitTesting(false).accessibilityHidden(true)
-        } else {
+        if let activity = activities.first {
             Button(action: open) {
-                HStack(spacing: MacBDesign.Space.snug) {
+                HStack(spacing: 0) {
+                    leftWing(activity)
+                        .frame(width: activity.wing)
+                        .overlay(alignment: .bottomTrailing) { secondaryBadge }
                     Spacer(minLength: 0)
-                    ForEach(collapsedIndicators, id: \.label) { indicator in
-                        collapsedPill(indicator)
-                            .transition(.scale(scale: 0.82).combined(with: .opacity))
-                    }
-                    Spacer(minLength: 0)
+                    rightWing(activity)
+                        .frame(width: activity.wing)
                 }
-                .padding(.horizontal, MacBDesign.Space.snug)
+                .id(activity)
+                .transition(.blurReplace)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background {
-                    Capsule()
-                        .fill(LinearGradient(colors: [Color.white.opacity(0.07), Color.white.opacity(0.025), .black.opacity(0.08)],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing))
-                        .padding(.horizontal, MacBDesign.Space.tight)
-                        .padding(.vertical, MacBDesign.Space.hair)
-                }
-                .overlay(alignment: .bottom) { statusLine }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .motion(MacBDesign.Motion.gentle, value: activity)
             .accessibilityLabel(collapsedIndicators.map { "\($0.label) \($0.value)" }.joined(separator: ", "))
+        } else {
+            Color.clear.allowsHitTesting(false).accessibilityHidden(true)
         }
     }
 
+    /// The same order the controller sizes the island by.
+    private var activities: [IslandActivity] {
+        guard presentation.indicators else { return [] }
+        return IslandActivity.running(assistant: assistant.isActive, timer: timer.isActive, music: media.isPlaying,
+                                      keepAwake: keepAwake.isActive, shelf: !shelf.items.isEmpty)
+    }
 
-    private func collapsedPill(_ indicator: CollapsedIndicator) -> some View {
-        HStack(spacing: MacBDesign.Space.tight) {
-            if indicator.isAssistant {
-                JarvisMiniOrb(state: assistant.state,
-                              level: assistant.state == .speaking ? assistant.outputLevel : assistant.inputLevel)
-                    .frame(width: 13, height: 13)
-            } else if indicator.isPlayingMedia {
-                EqualizerBars(tint: indicator.tint, isPlaying: media.isPlaying, height: 10)
-                    .frame(width: 13)
+    @ViewBuilder private func leftWing(_ activity: IslandActivity) -> some View {
+        switch activity {
+        case .music:
+            if let artwork = media.artwork {
+                Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
+                    .frame(width: 22, height: 22)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(.white.opacity(0.14), lineWidth: 0.5))
             } else {
-                Image(systemName: indicator.symbol)
-                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
+                Image(systemName: "music.note").font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(media.tint ?? .white)
             }
-            Text(indicator.value)
-                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
-                .monospacedDigit()
-                .lineLimit(1)
-                .truncationMode(.tail)
-        }
-        .foregroundStyle(indicator.tint)
-        .padding(.horizontal, MacBDesign.Space.snug)
-        .frame(height: 22)
-        .background(indicator.tint.opacity(0.12), in: Capsule())
-        .overlay(Capsule().strokeBorder(indicator.tint.opacity(0.20), lineWidth: 0.7))
-        .shadow(color: indicator.tint.opacity(0.12), radius: 7, y: 3)
-        .motion(MacBDesign.Motion.atollFluid, value: indicator.value)
-    }
-
-    /// A hairline along the bottom of the closed island, filled as far as
-    /// whatever is counting has got.
-    ///
-    /// One thing at a time, and the most urgent wins: a timer running out beats
-    /// a battery filling, which beats a song playing. Nothing to count, no line.
-    @ViewBuilder private var statusLine: some View {
-        if let status = collapsedStatus {
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(MacBDesign.IslandToken.Fill.base)
-                    Capsule().fill(status.tint)
-                        .frame(width: proxy.size.width * min(1, max(0, status.fraction)))
-                }
+        case .timer:
+            ZStack {
+                Circle().stroke(.white.opacity(0.16), lineWidth: 2.5)
+                Circle().trim(from: 0, to: max(0.02, 1 - timer.progress))
+                    .stroke(MacBDesign.IslandToken.accent, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .motion(MacBDesign.Motion.progress, value: timer.progress)
             }
-            .frame(height: 2)
-            .padding(.horizontal, MacBDesign.Space.regular)
-            .padding(.bottom, MacBDesign.Space.hair)
-            .motion(MacBDesign.Motion.normal, value: status.fraction)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
+            .frame(width: 15, height: 15)
+        case .assistant:
+            JarvisMiniOrb(state: assistant.state,
+                          level: assistant.state == .speaking ? assistant.outputLevel : assistant.inputLevel)
+                .frame(width: 16, height: 16)
+        case .keepAwake:
+            Image(systemName: "cup.and.heat.waves.fill").font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(MacBDesign.IslandToken.accent)
+        case .shelf:
+            Image(systemName: "tray.full.fill").font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
         }
     }
 
-    private struct CollapsedStatus {
-        let fraction: Double
-        let tint: Color
+    @ViewBuilder private func rightWing(_ activity: IslandActivity) -> some View {
+        switch activity {
+        case .music:
+            EqualizerBars(tint: media.tint ?? .white, isPlaying: media.isPlaying, height: 12)
+                .frame(width: 16)
+        case .timer:
+            wingReading(timer.remainingText, tint: MacBDesign.IslandToken.accent)
+        case .assistant:
+            EqualizerBars(tint: MacBDesign.IslandToken.accent,
+                          isPlaying: assistant.state == .speaking || assistant.state == .listening, height: 12)
+                .frame(width: 16)
+        case .keepAwake:
+            wingReading(keepAwake.remainingText, tint: .white.opacity(0.85))
+        case .shelf:
+            wingReading("\(shelf.items.count)", tint: .white.opacity(0.85))
+        }
     }
 
-    private var collapsedStatus: CollapsedStatus? {
-        if timer.isActive {
-            return CollapsedStatus(fraction: timer.progress, tint: MacBDesign.IslandToken.accent)
+    private func wingReading(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .contentTransition(.numericText())
+            .motion(MacBDesign.Motion.gentle, value: text)
+    }
+
+    /// Something else is running too: a dot on the picture says so, and the
+    /// open panel says what.
+    @ViewBuilder private var secondaryBadge: some View {
+        if activities.count > 1 {
+            Circle().fill(MacBDesign.IslandToken.accent)
+                .frame(width: 5, height: 5)
+                .overlay(Circle().strokeBorder(.black, lineWidth: 1))
+                .offset(x: -8, y: -6)
+                .accessibilityHidden(true)
         }
-        if systemMonitor.snapshot.isCharging, let battery = systemMonitor.snapshot.batteryPercent {
-            return CollapsedStatus(fraction: battery / 100, tint: Color(nsColor: .systemGreen))
-        }
-        if media.isPlaying, media.duration > 0 {
-            return CollapsedStatus(fraction: media.position / media.duration,
-                                   tint: media.tint ?? MacBDesign.IslandToken.primaryText.opacity(0.8))
-        }
-        return nil
     }
 
     private struct CollapsedIndicator {

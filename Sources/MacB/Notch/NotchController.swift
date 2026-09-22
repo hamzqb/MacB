@@ -216,6 +216,11 @@ struct IslandToast: Equatable {
         media.$isPlaying.removeDuplicates().sink { [weak self] _ in
             DispatchQueue.main.async { self?.render() }
         }.store(in: &subscriptions)
+        // What the closed island shows beside the camera.
+        Publishers.Merge3(timer.objectWillChange.map { _ in () }, shelf.objectWillChange.map { _ in () },
+                          KeepAwakeService.shared.$isActive.removeDuplicates().map { _ in () })
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.render() } }
+            .store(in: &subscriptions)
         // The assistant's body appears for a subtitle, a fault or a question,
         // and the panel has to follow at once, not on the next pointer move.
         // Only the few things that change its size: the levels publish thirty
@@ -599,6 +604,10 @@ struct IslandToast: Equatable {
         pointerInside = inside
         // The conversation shows its text field under the pointer only.
         if changed, state.content == .assistant, state.isOpen { render() }
+        if changed, !state.isOpen, collapsedIndicatorWidth() > 0 {
+            if inside, !suppressHoverUntilExit { Haptics.targetEntered() }
+            render()
+        }
     }
     /// Opens the island on the assistant and keeps it there while it talks.
     func startAssistant() {
@@ -707,10 +716,15 @@ struct IslandToast: Equatable {
         switch state.phase {
         case .collapsed:
             let indicators = collapsedIndicatorWidth()
+            // Under the pointer a live island leans out a little — the
+            // promise that it opens — before it does.
+            let leaning = pointerInside && indicators > 0 && !suppressHoverUntilExit
+            let growth = leaning ? IslandMotion.hoverGrowth : 0
             let width = IslandGeometry.collapsedWidth(notchWidth: hardwareNotchWidth(), indicatorWidth: indicators)
+            let height = camera > 0 ? camera : (indicators > 0 ? IslandActivity.pillHeight : 10)
             return NotchLayout(phase: .collapsed, content: state.content,
-                width: min(maxWidth, width),
-                height: camera > 0 ? camera : (indicators > 0 ? 32 : 10), radius: 0)
+                width: min(maxWidth, width + 2 * growth),
+                height: height + growth / 2, radius: camera > 0 ? 12 : height / 2)
         case .peek:
             let width: CGFloat
             if let event = presentation.event {
@@ -820,14 +834,15 @@ struct IslandToast: Equatable {
                         aiActivity: aiActivity, systemMonitor: systemMonitor)
     }
 
+    /// What the closed island is showing beside the camera, if anything.
+    private var primaryActivity: IslandActivity? {
+        guard preferences.compactIndicators else { return nil }
+        return IslandActivity.running(assistant: assistant.isActive, timer: timer.isActive, music: media.isPlaying,
+                                      keepAwake: KeepAwakeService.shared.isActive, shelf: !shelf.items.isEmpty).first
+    }
+
     private func collapsedIndicatorWidth() -> CGFloat {
-        guard preferences.compactIndicators else { return 0 }
-        var slots = 0
-        if media.isPlaying { slots += 1 }
-        if timer.isActive { slots += 1 }
-        if !shelf.items.isEmpty { slots += 1 }
-        guard slots > 0 else { return 0 }
-        return CGFloat(slots) * 58 + (hardwareNotchWidth() ?? 190)
+        IslandActivity.width(for: primaryActivity, notchWidth: hardwareNotchWidth()) ?? 0
     }
 
     /// The camera housing the assistant's orb and status sit either side of;
@@ -962,7 +977,13 @@ struct IslandToast: Equatable {
             return
         }
         let response = IslandMotion.response(opening: opening)
-        withAnimation(.spring(response: response, dampingFraction: IslandMotion.damping)) {
+        // Leaning out under the pointer is the one springy motion; opening
+        // and closing never bounce.
+        let leaning = previousLayout.phase == .collapsed && target.phase == .collapsed
+        let spring: Animation = leaning
+            ? .spring(response: IslandMotion.hoverResponse, dampingFraction: IslandMotion.hoverDamping)
+            : .spring(response: response, dampingFraction: IslandMotion.damping)
+        withAnimation(spring) {
             presentation.width = target.width
             presentation.height = target.height
             presentation.radius = target.radius

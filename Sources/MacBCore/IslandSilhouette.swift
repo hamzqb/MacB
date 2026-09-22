@@ -140,3 +140,53 @@ public enum IslandEnvelope {
                height: (size.height + topBleed + bottomPadding).rounded(.up))
     }
 }
+
+/// What the closed island shows beside the camera, one thing at a time.
+///
+/// The notch grows two small wings — a picture on the left, a live reading on
+/// the right — for whatever matters most right now. The rest wait for the
+/// open panel, with a small badge saying something else is going on: two
+/// activities side by side in 40 points of wing is two illegible ones.
+public enum IslandActivity: Int, CaseIterable, Comparable, Sendable {
+    /// Most important first.
+    case assistant, timer, music, keepAwake, shelf
+
+    public static func < (lhs: IslandActivity, rhs: IslandActivity) -> Bool { lhs.rawValue < rhs.rawValue }
+
+    /// The running activities, most important first.
+    public static func running(assistant: Bool, timer: Bool, music: Bool, keepAwake: Bool, shelf: Bool) -> [IslandActivity] {
+        var running: [IslandActivity] = []
+        if assistant { running.append(.assistant) }
+        if timer { running.append(.timer) }
+        if music { running.append(.music) }
+        if keepAwake { running.append(.keepAwake) }
+        if shelf { running.append(.shelf) }
+        return running
+    }
+
+    /// Width of each wing: enough for a picture and a short reading, and no
+    /// more, so the island stays a notch and not a bar.
+    public var wing: CGFloat {
+        switch self {
+        case .assistant: return 44
+        case .timer: return 64
+        case .music: return 42
+        case .keepAwake: return 60
+        case .shelf: return 42
+        }
+    }
+
+    /// The closed island's width for `activity`, beside a notch `notchWidth`
+    /// wide, or as a floating pill on a display without one. Nil when nothing
+    /// is running.
+    public static func width(for activity: IslandActivity?, notchWidth: CGFloat?) -> CGFloat? {
+        guard let activity else { return nil }
+        let middle = notchWidth ?? pillGap
+        return (middle + 2 * activity.wing).rounded(.up)
+    }
+
+    /// The space between the wings where there is no camera to go round.
+    public static let pillGap: CGFloat = 18
+    /// Height of the closed strip on a display without a notch.
+    public static let pillHeight: CGFloat = 30
+}
