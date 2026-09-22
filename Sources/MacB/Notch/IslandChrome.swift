@@ -1,42 +1,6 @@
 import SwiftUI
 import MacBCore
 
-/// Visual chrome shared by the notch surface. The AppKit material underneath is
-/// still the real blur; these layers give it a machined edge, ambient colour and
-/// small inner shelves without adding more backdrop blur.
-struct IslandAmbientGlow: View {
-    var phase: NotchPhase
-    var tint: Color?
-    var isActive: Bool
-
-    var body: some View {
-        ZStack {
-            if phase != .collapsed {
-                RadialGradient(colors: [accent.opacity(isActive ? 0.22 : 0.12), .clear],
-                               center: .topLeading, startRadius: 2, endRadius: 260)
-                    .scaleEffect(x: 1.18, y: 0.84, anchor: .topLeading)
-                    .blendMode(.plusLighter)
-                RadialGradient(colors: [.white.opacity(0.055), .clear],
-                               center: .bottomTrailing, startRadius: 12, endRadius: 320)
-                    .scaleEffect(x: 1.05, y: 0.72, anchor: .bottomTrailing)
-                    .blendMode(.screen)
-                LinearGradient(stops: [
-                    .init(color: .white.opacity(0.08), location: 0),
-                    .init(color: .clear, location: 0.32),
-                    .init(color: .black.opacity(0.18), location: 1)
-                ], startPoint: .top, endPoint: .bottom)
-            }
-        }
-        .opacity(phase == .peek ? 0.72 : 1)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .motion(MacBDesign.Motion.atollFluid, value: phase)
-        .motion(MacBDesign.Motion.gentle, value: isActive)
-    }
-
-    private var accent: Color { tint ?? MacBDesign.IslandToken.accent }
-}
-
 struct IslandGlassShelf<Content: View>: View {
     var isSelected = false
     var tint: Color = MacBDesign.IslandToken.accent

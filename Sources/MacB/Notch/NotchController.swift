@@ -80,13 +80,17 @@ struct IslandToast: Equatable {
     private let presentation = NotchPresentation()
     private var state = PanelState()
     private var panel: NotchPanel?
-    /// The sheet of real glass under the panel. See `updateBackdrop(phase:)`.
-    private var islandBackdrop: ShapedVisualEffectView?
-    private var islandSaturation: IslandSaturationView?
     /// The fold the island was last drawn at, so repeated identical readings
     /// feed the blur's watchdog without redrawing the panel for nothing.
     private var lastRenderedFold: Double = 0
-    private var animationTimer: Timer?
+    /// Bumped by every render, so a delayed step from an older one (the
+    /// leave, the window shrinking after a close) can tell it is stale.
+    private var renderGeneration = 0
+    /// The island's target rectangle on screen: what hover and clicks are
+    /// measured against. Not the window, which is larger (see
+    /// `IslandEnvelope`), and not the shape mid-animation, which would let a
+    /// resize under a still pointer look like the pointer leaving.
+    private var islandRect: NSRect = .zero
     private var deadlineTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
     private var monitors: [Any] = []
@@ -101,7 +105,6 @@ struct IslandToast: Equatable {
     private var toastTask: Task<Void, Never>?
     private var cameraWindow: NSWindow?
     private let lidBlur = LidBlurOverlay.shared
-    private let glow = IslandGlowOverlay()
     var enabled = true {
         didSet { if enabled { start() } else { stop() } }
     }
@@ -169,8 +172,8 @@ struct IslandToast: Equatable {
             cameraAction: { [weak self] in self?.handleCameraAction() },
             notify: { [weak self] symbol, message in self?.showToast(symbol: symbol, message: message) })
         let host = NotchHostingView(rootView: view)
-        host.onPointerChanged = { [weak self] inside in
-            self?.pointerBoundaryChanged(inside: inside)
+        host.onPointerChanged = { [weak self] _ in
+            self?.pointerBoundaryChanged()
         }
         host.onDragChanged = { [weak self] active in self?.setDrag(active, incoming: true) }
         host.onDragURLsChanged = { [weak self] urls in self?.presentation.pendingDropURLs = urls }
@@ -178,40 +181,12 @@ struct IslandToast: Equatable {
             self?.shelf.add(urls: urls)
             self?.showToast(symbol: "checkmark", message: "\(urls.count) öğe eklendi")
         }
-        // The glass lives in the window, under the SwiftUI view, rather than
-        // inside it.
-        //
-        // A `.behindWindow` material is the only thing on macOS that samples the
-        // screen behind a window, and it cannot do that from inside a SwiftUI
-        // hierarchy: the island clips itself to its own outline and folds with
-        // the lid, and a subtree SwiftUI has to rasterise has nothing behind it
-        // to sample. Hosted there it drew a flat dark sheet and the "glass" was
-        // paint. Here it is a sibling of the hosting view, composited by AppKit,
-        // and the desktop genuinely comes through.
-        let container = NSView(frame: .zero)
-        container.autoresizingMask = [.width, .height]
-        let backdrop = ShapedVisualEffectView()
-        backdrop.blendingMode = .behindWindow
-        backdrop.state = .active
-        backdrop.appearance = NSAppearance(named: .darkAqua)
-        backdrop.autoresizingMask = [.width, .height]
-        backdrop.isHidden = true
+        // The glass is drawn by SwiftUI inside the island's own outline (see
+        // `NotchView.islandSurface`), so the window holds nothing but the
+        // hosting view. The window is transparent around the island, and
+        // passes clicks through there: see `updateHitTesting()`.
         host.autoresizingMask = [.width, .height]
-        // Above the material, below the content: the material's own blur has
-        // already been composited by the time this layer's filter runs, so the
-        // saturation lands on the blurred desktop and not on the widgets.
-        let saturation = IslandSaturationView(frame: .zero)
-        saturation.autoresizingMask = [.width, .height]
-        saturation.isHidden = true
-        container.addSubview(backdrop)
-        container.addSubview(saturation, positioned: .above, relativeTo: backdrop)
-        container.addSubview(host, positioned: .above, relativeTo: saturation)
-        window.contentView = container
-        backdrop.frame = container.bounds
-        saturation.frame = container.bounds
-        host.frame = container.bounds
-        islandBackdrop = backdrop
-        islandSaturation = saturation
+        window.contentView = host
         panel = window
         updateDisplay(); window.orderFrontRegardless()
         let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .leftMouseDown, .leftMouseUp]
@@ -230,18 +205,7 @@ struct IslandToast: Equatable {
         preferences.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self else { return }
-                // Switching the surface changes nothing about the panel's size,
-                // so it would never reach the glass through a re-render alone.
-                self.updateBackdrop(phase: self.presentation.layout.phase)
                 self.render()
-            }
-        }.store(in: &subscriptions)
-        // The glass cannot fold, so it steps aside for the hinge and comes back
-        // when the lid is open again.
-        lid.$foldProgress.map { $0 > 0.001 }.removeDuplicates().sink { [weak self] _ in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.updateBackdrop(phase: self.presentation.layout.phase)
             }
         }.store(in: &subscriptions)
         // Opening the library and adding a widget both change how much room home
@@ -427,7 +391,7 @@ struct IslandToast: Equatable {
     }
 
     func stop() {
-        animationTimer?.invalidate(); animationTimer = nil
+        renderGeneration += 1
         systemEvents.stop()
         toastTask?.cancel(); toastTask = nil
         deadlineTask?.cancel(); deadlineTask = nil
@@ -441,7 +405,6 @@ struct IslandToast: Equatable {
         camera.stop()
         cameraWindow?.orderOut(nil); cameraWindow = nil
         lidBlur.hide()
-        glow.hide()
     }
 
     func openPanel() {
@@ -562,46 +525,6 @@ struct IslandToast: Equatable {
             Task { @MainActor in action() }
         })
     }
-    /// Keeps the window's glass in step with the panel it sits under.
-    ///
-    /// Hidden rather than faded when it is not wanted: an appearance with no
-    /// material, Reduce Transparency, a collapsed island with nothing to be
-    /// glass, and the fold, where the panel is a rotated picture and a flat
-    /// sheet of glass behind it would not rotate with it.
-    private func updateBackdrop(phase: NotchPhase) {
-        guard let backdrop = islandBackdrop else { return }
-        let reduceTransparency = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
-        let wanted = preferences.islandAppearance.usesMaterial
-            && !reduceTransparency
-            && phase != .collapsed
-            && lid.foldProgress <= 0.001
-        backdrop.isHidden = !wanted
-        islandSaturation?.isHidden = !wanted
-        guard wanted else { return }
-        // `.hudWindow` is the one that carries the most of what is behind it —
-        // it is what Spotlight is made of. `.fullScreenUI` was tried first and
-        // is nearly opaque: it looked exactly like the flat black panel it was
-        // meant to replace, which cost an evening to notice.
-        backdrop.material = preferences.islandAppearance == .blackGlass ? .fullScreenUI : .hudWindow
-        backdrop.topRadius = presentation.cameraHeight > 0 ? 0 : presentation.radius
-        backdrop.bottomRadius = presentation.radius
-        // The material has one fixed density, so the only way to go further is
-        // to thin the frost itself and let some of the screen past unblurred.
-        // Floored well short of nothing: a panel you can read a sentence through
-        // is a hole in the screen, not a surface.
-        let translucency = min(1, max(0, preferences.islandTranslucency))
-        backdrop.alphaValue = 1 - 0.42 * translucency
-        // Colour comes back as the frost thins, which is the whole trick: what
-        // is behind the sheet has to look more alive through it than beside it,
-        // or the panel reads as a grey slab no matter how much of the desktop
-        // is technically getting through.
-        if let saturation = islandSaturation {
-            saturation.topRadius = backdrop.topRadius
-            saturation.bottomRadius = backdrop.bottomRadius
-            saturation.saturation = 1 + 0.7 * translucency
-        }
-    }
-
     private func updateDisplay() {
         let mouseScreen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
         let notchedScreen = NSScreen.screens.first { $0.safeAreaInsets.top > 0 }
@@ -628,7 +551,7 @@ struct IslandToast: Equatable {
             if !active { presentation.pendingDropURLs = [] }
         }
         if !sourceDragActive && !incomingDragActive {
-            pointerInside = panel?.frame.contains(NSEvent.mouseLocation) == true
+            pointerInside = islandRect.contains(NSEvent.mouseLocation)
             if pointerInside { state.pointerEntered(); deadlineTask?.cancel() }
             else { state.pointerExited(at: ProcessInfo.processInfo.systemUptime); scheduleDeadline() }
         }
@@ -636,13 +559,27 @@ struct IslandToast: Equatable {
     }
     private func pointerChanged(_ event: NSEvent) {
         guard !developmentPreviewLocked else { return }
-        guard let panel else { return }
-        let inside = panel.frame.contains(NSEvent.mouseLocation)
+        guard panel != nil else { return }
+        let inside = islandRect.contains(NSEvent.mouseLocation)
+        updateHitTesting()
         updatePointer(inside: inside, event: event)
     }
-    private func pointerBoundaryChanged(inside: Bool) {
+    private func pointerBoundaryChanged() {
         guard !developmentPreviewLocked else { return }
-        updatePointer(inside: inside, event: nil)
+        updateHitTesting()
+        updatePointer(inside: islandRect.contains(NSEvent.mouseLocation), event: nil)
+    }
+
+    /// The window takes the mouse only over the island. Everywhere else in it
+    /// is transparent, and a click there belongs to whatever is underneath.
+    /// A drag keeps it, so a file can be dropped as soon as it arrives.
+    private func updateHitTesting() {
+        guard let panel else { return }
+        let collapsedAndEmpty = presentation.layout.phase == .collapsed
+            && collapsedIndicatorWidth() == 0 && presentation.cameraHeight == 0
+        let over = islandRect.insetBy(dx: -2, dy: -2).contains(NSEvent.mouseLocation)
+        let takes = !collapsedAndEmpty && (over || sourceDragActive || incomingDragActive)
+        if panel.ignoresMouseEvents == takes { panel.ignoresMouseEvents = !takes }
     }
     private func updatePointer(inside: Bool, event: NSEvent?) {
         guard let panel else { return }
@@ -972,89 +909,123 @@ struct IslandToast: Equatable {
             render()
         }
     }
-    /// Puts a shadow under the island, and optionally some of its own light.
-    ///
-    /// A collapsed island casts nothing: it is flush against the bezel, there is
-    /// no object standing off the screen to throw a shadow, and a permanent
-    /// smudge under the notch would be a defect rather than a flourish. The
-    /// shadow is not optional where the island is open; the light is.
-    private func updateGlow(frame: NSRect, on screen: NSScreen, phase: NotchPhase) {
-        guard phase != .collapsed else { return glow.hide() }
-        let tint = (media.isPlaying ? media.tint : nil) ?? MacBDesign.IslandToken.accent
-        glow.update(frame: frame, on: screen, radius: presentation.radius, tint: tint,
-                    shadow: 1,
-                    glow: preferences.islandGlow ? (phase == .expanded ? 1 : 0.55) : 0)
-    }
-
     private func render(immediate: Bool = false) {
-        guard let panel, let screen = display else { return }
+        guard panel != nil, let screen = display else { return }
         presentation.indicators = preferences.compactIndicators
         let target = targetLayout()
-        // A collapsed island with nothing to report must not sit over the desktop as a hit target.
-        panel.ignoresMouseEvents = target.phase == .collapsed && collapsedIndicatorWidth() == 0
-            && presentation.cameraHeight == 0
         media.setPanelVisible(state.isOpen && (state.content == .home || state.phase == .peek))
         let homePanelVisible = state.isOpen && state.content == .home
         systemMonitor.setFastSampling(homePanelVisible)
         processes.setFastSampling(homePanelVisible && widgets.isActive(.topProcesses))
         weather.setPanelVisible(homePanelVisible && widgets.isActive(.weather))
-        guard target != presentation.layout || immediate else { return }
+        placeIsland(target, on: screen)
+        guard target != presentation.layout || immediate else { return updateHitTesting() }
         let reducedMotion = !preferences.animationsEnabled
             || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        // Let the cards leave before the panel does. Closing used to take the
-        // whole strip away in one frame while opening dealt the cards out one
-        // by one, so the island arrived like an object and left like a bug.
-        // The wait is short enough that closing still feels immediate.
+        renderGeneration += 1
+        let generation = renderGeneration
+        // On the way out the content leaves first — a short fade and blur —
+        // and then the shape closes behind it.
         if !immediate, !reducedMotion, !presentation.isLeaving,
-           target.phase == .collapsed, presentation.layout.phase == .expanded {
-            presentation.isLeaving = true
+           target.phase == .collapsed, presentation.layout.phase != .collapsed {
+            withAnimation(.easeIn(duration: IslandMotion.leaveDuration)) { presentation.isLeaving = true }
             Task { @MainActor [weak self] in
-                try? await Task.sleep(nanoseconds: 130_000_000)
-                self?.render()
+                try? await Task.sleep(nanoseconds: UInt64(IslandMotion.leaveDuration * 1_000_000_000))
+                guard let self, self.renderGeneration == generation else { return }
+                self.render()
             }
             return
         }
-        presentation.isLeaving = false
-        animationTimer?.invalidate(); animationTimer = nil
         let previousLayout = presentation.layout
         let crossfadesContent = previousLayout.phase != target.phase || previousLayout.content != target.content
-        presentation.previousLayout = previousLayout
-        presentation.layout = target
-        let startWidth = presentation.width, startHeight = presentation.height, startRadius = presentation.radius
-        let reduced = reducedMotion
-        func apply(_ amount: Double, fade: Double) {
-            let t = CGFloat(amount)
-            presentation.width = startWidth + (target.width - startWidth) * t
-            presentation.height = startHeight + (target.height - startHeight) * t
-            presentation.radius = startRadius + (target.radius - startRadius) * t
-            presentation.transition = crossfadesContent ? fade : 1
-            let box = NSRect(x: screen.frame.midX - presentation.width / 2,
-                             y: screen.frame.maxY - presentation.height,
-                             width: presentation.width, height: presentation.height)
-            panel.setFrame(box, display: true)
-            updateBackdrop(phase: target.phase)
-            updateGlow(frame: box, on: screen, phase: target.phase)
+        let opening = target.width * target.height >= previousLayout.width * previousLayout.height
+        // The window grows before the island does, all at once and unseen,
+        // so nothing about the window moves while the island animates.
+        growEnvelope(toHold: target, on: screen)
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) {
+            presentation.isLeaving = false
+            presentation.previousLayout = previousLayout
+            presentation.layout = target
+            if crossfadesContent && !immediate && !reducedMotion { presentation.transition = 0 }
         }
-        if immediate { apply(1, fade: 1); return }
-        let duration = reduced ? 0.10 : (target.phase == .collapsed ? MacBDesign.closeDuration : MacBDesign.openDuration)
-        let startTime = ProcessInfo.processInfo.systemUptime
-        apply(reduced ? 1 : 0, fade: crossfadesContent ? 0 : 1)
-        let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] timer in
-            MainActor.assumeIsolated {
-                guard let self else { timer.invalidate(); return }
-                let fraction = min(1, (ProcessInfo.processInfo.systemUptime - startTime) / duration)
-                let shaped = reduced ? 1 : MorphTiming.progress(fraction)
-                let fade = crossfadesContent ? max(0, min(1, (fraction - 0.18) / 0.62)) : 1
-                apply(shaped, fade: MorphTiming.progress(fade))
-                if fraction >= 1 { timer.invalidate(); self.animationTimer = nil }
+        updateHitTesting()
+        if immediate || reducedMotion {
+            withTransaction(instant) {
+                presentation.width = target.width
+                presentation.height = target.height
+                presentation.radius = target.radius
+                presentation.transition = 1
+            }
+            fitEnvelope(to: target, on: screen)
+            return
+        }
+        let response = IslandMotion.response(opening: opening)
+        withAnimation(.spring(response: response, dampingFraction: IslandMotion.damping)) {
+            presentation.width = target.width
+            presentation.height = target.height
+            presentation.radius = target.radius
+        }
+        if crossfadesContent {
+            // The new content waits for the shape to be most of the way there.
+            let delay = opening ? response * IslandMotion.revealDelayFraction : 0
+            withAnimation(.easeOut(duration: IslandMotion.revealDuration).delay(delay)) {
+                presentation.transition = 1
             }
         }
-        animationTimer = timer; RunLoop.main.add(timer, forMode: .common)
+        // After it settles, the window shrinks back to what the island needs.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(IslandMotion.settleTime(opening: opening) * 1_000_000_000))
+            guard let self, self.renderGeneration == generation, let screen = self.display else { return }
+            self.fitEnvelope(to: target, on: screen)
+        }
+    }
+
+    /// Where the island is on `screen` for `layout`: hover and clicks are
+    /// measured against this.
+    private func placeIsland(_ layout: NotchLayout, on screen: NSScreen) {
+        islandRect = NSRect(x: screen.frame.midX - layout.width / 2, y: screen.frame.maxY - layout.height,
+                            width: layout.width, height: layout.height)
+    }
+
+    /// The window size for an island of `layout`, shoulders included.
+    private func envelopeSize(for layout: NotchLayout, on screen: NSScreen) -> CGSize {
+        let silhouette = IslandSilhouette.forBody(height: layout.height + IslandEnvelope.topBleed,
+                                                  radius: layout.radius, underNotch: presentation.cameraHeight > 0)
+        return IslandEnvelope.size(holding: CGSize(width: layout.width + 2 * silhouette.shoulder, height: layout.height),
+                                   screenWidth: screen.frame.width)
+    }
+
+    private func setEnvelope(_ size: CGSize, on screen: NSScreen) {
+        guard let panel else { return }
+        let frame = NSRect(x: (screen.frame.midX - size.width / 2).rounded(),
+                           y: screen.frame.maxY + IslandEnvelope.topBleed - size.height,
+                           width: size.width, height: size.height)
+        guard panel.frame != frame else { return }
+        panel.setFrame(frame, display: true)
+    }
+
+    /// Makes the window big enough for both where the island is and where it
+    /// is going. Never smaller: shrinking waits for the island to settle.
+    private func growEnvelope(toHold target: NotchLayout, on screen: NSScreen) {
+        guard let panel else { return }
+        let needed = envelopeSize(for: target, on: screen)
+        let current = panel.frame.size
+        let size = CGSize(width: max(needed.width, current.width), height: max(needed.height, current.height))
+        if size != current { setEnvelope(size, on: screen) }
+    }
+
+    private func fitEnvelope(to layout: NotchLayout, on screen: NSScreen) {
+        setEnvelope(envelopeSize(for: layout, on: screen), on: screen)
     }
 }
 
 final class NotchPanel: NSPanel {
     var onEscape: (() -> Void)?
+    /// The island's window reaches a few points above the top of the screen
+    /// (`IslandEnvelope.topBleed`); AppKit would otherwise push it back down.
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func cancelOperation(_ sender: Any?) { onEscape?() }

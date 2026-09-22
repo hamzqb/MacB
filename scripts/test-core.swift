@@ -2208,6 +2208,37 @@ struct CoreTestRunner {
                 try expect(ownerText.contains("Hamza") && !ownerText.contains("GUEST"), "The owner became a guest")
                 try expect(ProtectedArea.allCases.contains(.assistant), "The assistant cannot be put behind the face")
             }),
+            ("IslandSilhouette: the notch grows, the window stays still", {
+                let closed = IslandSilhouette.forBody(height: 28, radius: 14, underNotch: true)
+                let open = IslandSilhouette.forBody(height: 240, radius: 24, underNotch: true)
+                try expect(closed.shoulder == IslandSilhouette.minimumShoulder && open.shoulder == IslandSilhouette.maximumShoulder,
+                           "Shoulders do not scale with height: \(closed.shoulder) \(open.shoulder)")
+                try expect(closed.topRadius == 0 && open.bottomRadius == 24, "Under a notch the top must be flush")
+                let floating = IslandSilhouette.forBody(height: 40, radius: 30, underNotch: false)
+                try expect(floating.shoulder == 0 && floating.topRadius == 20 && floating.bottomRadius == 20,
+                           "Without a notch the corners must round, capped at half the height")
+                let rect = CGRect(x: 0, y: 0, width: 400, height: 200)
+                let box = open.path(in: rect).boundingBoxOfPath
+                try expect(abs(box.minX) < 0.01 && abs(box.maxX - 400) < 0.01 && abs(box.minY) < 0.01 && abs(box.maxY - 200) < 0.01,
+                           "The outline does not fill its rect: \(box)")
+                let path = open.path(in: rect)
+                try expect(path.contains(CGPoint(x: 200, y: 100)), "The middle is not inside")
+                try expect(!path.contains(CGPoint(x: 3, y: 30)), "The shoulder did not curve in: a point beside the body is inside")
+                try expect(path.contains(CGPoint(x: 8, y: 0.5)), "The shoulder does not reach the bezel")
+                let flipped = open.path(in: rect, yDown: false)
+                try expect(flipped.contains(CGPoint(x: 8, y: 199.5)) && !flipped.contains(CGPoint(x: 8, y: 0.5)),
+                           "The AppKit path is not the mirror image")
+                try expect(abs(IslandMotion.stiffness(response: 0.5) - pow(2 * Double.pi / 0.5, 2)) < 0.001,
+                           "Core Animation would not match SwiftUI's spring")
+                try expect(IslandMotion.closeResponse < IslandMotion.openResponse && IslandMotion.damping == 1,
+                           "Closing must be quicker than opening, and neither may bounce")
+                let envelope = IslandEnvelope.size(holding: CGSize(width: 600, height: 200), screenWidth: 1512)
+                try expect(envelope.width == 600 + 2 * IslandEnvelope.sidePadding
+                           && envelope.height == 200 + IslandEnvelope.topBleed + IslandEnvelope.bottomPadding,
+                           "The window has no room for the shadow")
+                try expect(IslandEnvelope.size(holding: CGSize(width: 1500, height: 200), screenWidth: 1512).width == 1512,
+                           "The window is wider than the screen")
+            }),
             ("LocalModel: Qwen's template, tool calls in and out, the file", {
                 let tools = [JarvisTool.setVolume.chatDeclaration]
                 let calls = [JarvisCall(callID: "c1", name: "set_volume", arguments: "{\"percent\":30}")]

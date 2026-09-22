@@ -45,101 +45,101 @@ struct NotchView: View {
     var cameraAction: () -> Void
     var notify: (String, String) -> Void
     @State private var clipboardFilter: ClipboardFilter = .recent
-    /// Where the pointer is inside the panel, for the specular highlight.
-    @State private var pointer: CGPoint?
     /// The island is glass from edge to edge, so this setting is not a detail
     /// here: with it on, every translucent surface in the panel goes solid.
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    private var increaseContrast: Bool { colorSchemeContrast == .increased }
 
+    /// The window is larger than the island and never resizes while it
+    /// moves (see `IslandEnvelope`); the island sits at its top centre and
+    /// everything around it is transparent.
     var body: some View {
+        island
+            .modifier(HingeFold(progress: lid.foldProgress))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .foregroundStyle(.white)
+            .preferredColorScheme(.dark)
+            .onExitCommand(perform: close)
+    }
+
+    private var isCollapsed: Bool { presentation.layout.phase == .collapsed }
+
+    /// The shape itself: surface, content, rim and shadow, clipped to the
+    /// notch-grown outline. Its size and corners are the only things that
+    /// animate for an open or a close, on one spring set by the controller.
+    private var island: some View {
         ZStack(alignment: .top) {
             islandSurface
-            IslandAmbientGlow(phase: presentation.layout.phase,
-                              tint: media.tint,
-                              isActive: media.isPlaying || assistant.isActive || timer.isActive)
-                .clipShape(islandShape)
-            if presentation.transition < 1 {
-                content(presentation.previousLayout, isInteractive: false)
-                    .opacity(1 - presentation.transition)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
+            Group {
+                if presentation.transition < 1 {
+                    content(presentation.previousLayout, isInteractive: false)
+                        .opacity(1 - presentation.transition)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                content(presentation.layout, isInteractive: true)
+                    .opacity(presentation.transition)
+                if let toast = presentation.toast {
+                    toastView(toast)
+                        .padding(.top, presentation.cameraHeight + 8)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(10)
+                }
             }
-            content(presentation.layout, isInteractive: true).opacity(presentation.transition)
-            if let toast = presentation.toast {
-                toastView(toast)
-                    .padding(.top, presentation.cameraHeight + 8)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(10)
-            }
+            // On the way out the content goes first, softly, and the shape
+            // follows it.
+            .blur(radius: presentation.isLeaving ? IslandMotion.leaveBlur : 0)
+            .opacity(presentation.isLeaving ? 0 : 1)
+            .padding(.top, IslandEnvelope.topBleed)
         }
-        .frame(width: presentation.width, height: presentation.height, alignment: .top)
-        .clipShape(islandShape)
-        .overlay(specularHighlight)
-        .onContinuousHover(coordinateSpace: .local) { phase in
-            switch phase {
-            case .active(let point): pointer = point
-            case .ended: pointer = nil
-            }
-        }
-        .overlay(islandShape.strokeBorder(surfaceStrokeStyle,
-            lineWidth: presentation.layout.phase == .collapsed ? 0 : 1)
-            .motion(MacBDesign.Motion.gentle, value: media.tint))
-        .modifier(HingeFold(progress: lid.foldProgress))
-        .foregroundStyle(.white)
-        .preferredColorScheme(.dark)
-        .onExitCommand(perform: close)
+        .frame(width: presentation.width + 2 * silhouette.shoulder,
+               height: presentation.height + IslandEnvelope.topBleed, alignment: .top)
+        .clipShape(outline)
+        .overlay(outline.stroke(surfaceStrokeStyle, lineWidth: isCollapsed ? 0 : 0.8))
+        .compositingGroup()
+        // A plain shadow, no coloured glow: the island is an object standing
+        // off the screen, not a light. A collapsed island is flush with the
+        // bezel and casts nothing.
+        .shadow(color: .black.opacity(isCollapsed ? 0 : 0.55), radius: isCollapsed ? 0 : 18, y: isCollapsed ? 0 : 8)
     }
 
-    /// The bright spot a sheet of glass carries under a light source.
-    ///
-    /// Apple's interactive glass already brightens the rim under the pointer,
-    /// which is felt more than seen. This is the other half of the same idea:
-    /// a soft pool of light on the face of the sheet, moving with the cursor,
-    /// so the panel reads as something with a surface rather than a hole cut in
-    /// the screen. It is deliberately faint. A highlight you notice as a
-    /// highlight has already failed.
-    ///
-    /// Only on glass, and never while collapsed: there is no sheet to light
-    /// when the island is a black bar, and a moving spot on pure black would
-    /// just look like a rendering fault.
-    @ViewBuilder private var specularHighlight: some View {
-        if let pointer, carriesGlass, presentation.layout.phase != .collapsed {
-            RadialGradient(colors: [.white.opacity(0.10), .white.opacity(0.03), .clear],
-                           center: .center, startRadius: 0, endRadius: 90)
-                .frame(width: 220, height: 220)
-                .position(pointer)
-                .blendMode(.plusLighter)
-                .allowsHitTesting(false)
-                .motion(MacBDesign.Motion.instant, value: pointer)
-        }
+    private var silhouette: IslandSilhouette {
+        IslandSilhouette.forBody(height: presentation.height + IslandEnvelope.topBleed,
+                                 radius: presentation.radius,
+                                 underNotch: presentation.cameraHeight > 0)
     }
+
+    private var outline: IslandOutlineShape { IslandOutlineShape(silhouette: silhouette) }
 
     private var carriesGlass: Bool {
         guard !reduceTransparency else { return false }
         return preferences.islandAppearance == .liquidGlass || preferences.islandAppearance == .blackGlass
     }
 
+    /// Pure black by default, like the notch it grows out of. Glass, when
+    /// chosen, is Liquid Glass drawn inside the island's own outline, and
+    /// only once the island is open: the closed strip stays black so it never
+    /// outlines the camera. A gradient keeps the top of the glass black where
+    /// it meets the bezel and lets the lower part show what is behind it.
     @ViewBuilder private var islandSurface: some View {
-        if presentation.layout.phase == .collapsed {
+        if isCollapsed && collapsedIndicators.isEmpty {
+            // Nothing to show: the island is not there, and the hardware notch
+            // is left to be itself.
             Color.clear
-        } else if reduceTransparency {
-            // Asked for less transparency, given none: a flat surface the
-            // widgets are guaranteed to read against, whatever the wallpaper.
+        } else if isCollapsed || reduceTransparency || preferences.islandAppearance == .pureBlack {
             Color.black
         } else {
             switch preferences.islandAppearance {
             case .pureBlack:
                 Color.black
-            case .liquidGlass:
-                translucentSurface(tinted: false)
-            case .blackGlass:
-                translucentSurface(tinted: true)
+            case .liquidGlass, .blackGlass:
+                glassSurface(dark: preferences.islandAppearance == .blackGlass)
             case .customImage:
                 if let image = background.image {
                     Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
-                    // Widgets and labels are white; the picture has to stay behind them.
-                    Color.black.opacity(0.76)
-                    glassSheen
+                    Color.black.opacity(0.72)
+                    LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .center)
                 } else {
                     Color.black
                 }
@@ -147,81 +147,38 @@ struct NotchView: View {
         }
     }
 
-    /// What the island draws over its own glass.
-    ///
-    /// The glass itself is not here. A `.behindWindow` material cannot sample
-    /// the screen from inside a SwiftUI hierarchy that clips and folds itself,
-    /// so it lives in the panel's window under this view — see
-    /// `NotchController.updateBackdrop(phase:)`. What is left here is the veil
-    /// that keeps white text legible over a white desktop, and how much of it
-    /// there is, is the user's call.
-    @ViewBuilder private func translucentSurface(tinted: Bool) -> some View {
-        Color.black.opacity(veilOpacity(tinted: tinted))
-        glassSheen
+    @ViewBuilder private func glassSurface(dark: Bool) -> some View {
+        if #available(macOS 26.0, *) {
+            ZStack {
+                Color.clear.glassEffect(.clear, in: outline)
+                LinearGradient(stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black.opacity(dark ? 0.86 : 0.74), location: 0.28),
+                    .init(color: .black.opacity(veil(dark: dark)), location: 1)
+                ], startPoint: .top, endPoint: .bottom)
+            }
+        } else {
+            Color.black.opacity(0.94)
+        }
     }
 
-    /// How much black sits between the desktop and the widgets.
-    ///
-    /// At the top of the slider there is none at all: the material behind the
-    /// panel already carries enough of its own weight to keep white text on it,
-    /// and anything added on top of that was the reason the "glass" still read
-    /// as a black bar over a dark desktop.
-    private func veilOpacity(tinted: Bool) -> Double {
-        // The island can feel like glass without letting the page behind it bleed
-        // through every card. Keep a real OLED veil even at high translucency.
-        let heaviest: Double = tinted ? 0.88 : 0.76
-        let floor: Double = tinted ? 0.42 : 0.34
-        return max(floor, heaviest * (1 - translucency * 0.55))
+    /// How much black is left at the bottom of the glass. The slider in
+    /// Settings thins it; it never reaches nothing, because white text needs
+    /// something under it on a white desktop.
+    private func veil(dark: Bool) -> Double {
+        let translucency = min(1, max(0, preferences.islandTranslucency))
+        return (dark ? 0.78 : 0.62) - (dark ? 0.26 : 0.30) * translucency
     }
 
-    private var translucency: Double {
-        min(1, max(0, preferences.islandTranslucency))
-    }
-
-    /// What light does to a sheet of glass, as opposed to what paint does to a
-    /// panel.
-    ///
-    /// The old sheen ran from a white corner to a flat 28% black one, and that
-    /// black was there whatever the slider said — over a dark desktop it was
-    /// most of why the island still read as a bar rather than a pane. Glass
-    /// does darken towards the edge it is lit away from, but by a fraction of
-    /// that, and the fraction shrinks as the sheet gets thinner.
-    private var glassSheen: some View {
-        LinearGradient(stops: [
-            .init(color: .white.opacity(0.10 - 0.03 * translucency), location: 0),
-            .init(color: .white.opacity(0.035 - 0.01 * translucency), location: 0.24),
-            .init(color: .clear, location: 0.58),
-            .init(color: .black.opacity(0.30 * (1 - translucency) + 0.10), location: 1)
-        ], startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    /// The lit rim.
-    ///
-    /// The single most glass-like thing on a sheet of glass is its edge: it
-    /// gathers light along the top, almost vanishes down the sides, and picks
-    /// up a second, weaker line where it meets what is under it. A flat
-    /// one-colour hairline says "rounded rectangle"; this says "edge".
+    /// A faint rim: light along the top edge, almost nothing down the sides.
+    /// Pure black gets only a hairline, and only with Increase Contrast.
     private var surfaceStrokeStyle: AnyShapeStyle {
-        if presentation.layout.phase == .collapsed { return AnyShapeStyle(Color.clear) }
-        if media.isPlaying, let tint = media.tint {
-            return AnyShapeStyle(LinearGradient(
-                colors: [tint.opacity(0.60), tint.opacity(0.20), tint.opacity(0.34)],
-                startPoint: .top, endPoint: .bottom))
-        }
+        if isCollapsed { return AnyShapeStyle(Color.clear) }
         if preferences.islandAppearance == .pureBlack || reduceTransparency {
-            return AnyShapeStyle(MacBDesign.IslandToken.Fill.hairline)
+            return AnyShapeStyle(increaseContrast ? Color.white.opacity(0.45) : Color.white.opacity(0.06))
         }
-        return AnyShapeStyle(LinearGradient(colors: [
-            .white.opacity(0.24 + 0.22 * translucency),
-            .white.opacity(0.06),
-            .white.opacity(0.10 + 0.08 * translucency)
-        ], startPoint: .top, endPoint: .bottom))
-    }
-
-    private var islandShape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(topLeadingRadius: presentation.cameraHeight > 0 ? 0 : presentation.radius,
-            bottomLeadingRadius: presentation.radius, bottomTrailingRadius: presentation.radius,
-            topTrailingRadius: presentation.cameraHeight > 0 ? 0 : presentation.radius)
+        return AnyShapeStyle(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.05), .white.opacity(0.10)],
+                                            startPoint: .top, endPoint: .bottom))
     }
 
     @ViewBuilder private func content(_ layout: NotchLayout, isInteractive: Bool) -> some View {
@@ -722,4 +679,21 @@ private struct HingeFold: ViewModifier {
                 .motion(MacBDesign.Motion.tracking, value: progress)
         }
     }
+}
+
+/// `IslandSilhouette` as a SwiftUI shape, animatable, so the shoulders and the
+/// corners move on the same spring as the size.
+struct IslandOutlineShape: Shape {
+    var silhouette: IslandSilhouette
+
+    var animatableData: AnimatablePair<CGFloat, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(silhouette.shoulder, AnimatablePair(silhouette.topRadius, silhouette.bottomRadius)) }
+        set {
+            silhouette.shoulder = newValue.first
+            silhouette.topRadius = newValue.second.first
+            silhouette.bottomRadius = newValue.second.second
+        }
+    }
+
+    func path(in rect: CGRect) -> Path { Path(silhouette.path(in: rect)) }
 }
