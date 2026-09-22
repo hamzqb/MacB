@@ -69,6 +69,14 @@ enum SystemActions {
         return error == nil
     }
 
+    /// Starts macOS's own selection screenshot, copied to the clipboard.
+    /// MacB never captures a screen by itself: this hands the crosshair to
+    /// the user and takes nothing if they press Escape.
+    @discardableResult
+    static func captureSelectionToClipboard() -> Bool {
+        run("/usr/sbin/screencapture", ["-i", "-c"])
+    }
+
     /// Opens a page of System Settings. The address comes from the closed list
     /// in `SettingsPane`, never from anything a model wrote.
     @discardableResult

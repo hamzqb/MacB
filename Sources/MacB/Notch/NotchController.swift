@@ -745,7 +745,7 @@ struct IslandToast: Equatable {
                 width = IslandGeometry.eventWidth(title: event.title, detail: event.detail,
                                                   hasProgress: event.progress != nil)
             } else {
-                width = PeekModel.width(for: PeekModel.chips(peekInput()))
+                width = PeekModel.width(for: PeekModel.parts(peekInput()))
             }
             return NotchLayout(phase: .peek, content: .default,
                 width: min(width, maxWidth),
@@ -772,10 +772,9 @@ struct IslandToast: Equatable {
                 ? max(minimum, IslandGeometry.dropWidth(screenWidth: screenWidth))
                 : min(maxWidth, max(minimum, expandedContentWidth(screenWidth: screenWidth)))
             let body = expandedBodyHeight(width: width)
-            let cameraExtra: CGFloat = presentation.cameraPreviewVisible ? 136 : 0
             return NotchLayout(phase: .expanded, content: state.content,
                 width: width,
-                height: camera + IslandGeometry.expandedHeight(bodyHeight: body, navigationInEars: ears) + cameraExtra,
+                height: camera + IslandGeometry.expandedHeight(bodyHeight: body, navigationInEars: ears),
                 radius: MacBDesign.Island.cornerRadius)
         }
     }
@@ -815,6 +814,10 @@ struct IslandToast: Equatable {
     /// Body height per section. An empty section contributes nothing, so the panel shrinks to its navigation.
     private func expandedBodyHeight(width: CGFloat) -> CGFloat {
         if incomingDragActive { return IslandGeometry.dropTargetHeight }
+        // The mirror takes the whole body, in the camera's own proportions.
+        if presentation.cameraPreviewVisible {
+            return ((width - 2 * IslandGeometry.horizontalPadding) * 9 / 16).rounded()
+        }
         if let area = protectedArea(for: state.content), isLocked(area) {
             return IslandGeometry.lockedSectionHeight
         }
@@ -854,8 +857,8 @@ struct IslandToast: Equatable {
     /// The live values behind the hover strip. Nothing here starts a poll:
     /// every field is already being tracked for another part of the island.
     private func peekInput() -> PeekModel.Input {
-        PeekModel.input(media: media, timer: timer, weather: weather, shelf: shelf,
-                        aiActivity: aiActivity, systemMonitor: systemMonitor)
+        PeekModel.input(media: media, timer: timer, shelf: shelf,
+                        clipboard: clipboard, clipboardLocked: isLocked(.clipboard))
     }
 
     /// A level just changed: the closed island opens its wings to show it,
@@ -920,7 +923,9 @@ struct IslandToast: Equatable {
         }
     }
 
-    private func handleCameraAction() {
+    /// Also the way the camera preview is reached from the command line for
+    /// a screenshot check.
+    func handleCameraAction() {
         if presentation.cameraPreviewVisible && camera.isRunning {
             showLargeCamera()
             return

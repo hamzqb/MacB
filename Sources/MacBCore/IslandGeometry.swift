@@ -201,7 +201,7 @@ public enum IslandGeometry {
     public static let dropTargetHeight: CGFloat = 148
     /// The hover strip: one compact line of live status, never a second panel.
     public static let peekHeight: CGFloat = 44
-    public static let peekMaximumWidth: CGFloat = 460
+    public static let peekMaximumWidth: CGFloat = 560
 
     /// A drop needs two targets, not the whole strip, so the panel narrows while files hover.
     public static func dropWidth(screenWidth: CGFloat) -> CGFloat {

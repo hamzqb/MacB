@@ -1,41 +1,67 @@
+import AppKit
 import MacBCore
 import SwiftUI
 
-/// One compact line of live status shown while the pointer rests on the island.
+/// The strip shown while the pointer rests on the island: what is going on
+/// right now, and the three things most often wanted next.
 ///
-/// The peek never becomes a second panel: it is a single row of chips whose
-/// width follows the content, so an idle Mac shows a short strip instead of a
-/// wide empty card.
-struct PeekChip: Identifiable, Equatable {
-    enum Leading: Equatable {
-        case symbol(String)
-        case artwork
+/// Every part earns its place. Nothing playing means no track; nothing copied
+/// means no clipboard; an empty shelf means no shelf. What is left is the row
+/// of quick actions, so the strip is never an empty card.
+enum PeekPart: Equatable, Identifiable {
+    case media(title: String, artist: String)
+    case timer(String)
+    case clipboard(text: String, symbol: String)
+    case shelf(count: Int)
+    /// Always last, and always there.
+    case actions
+
+    var id: String {
+        switch self {
+        case .media: return "media"
+        case .timer: return "timer"
+        case .clipboard: return "clipboard"
+        case .shelf: return "shelf"
+        case .actions: return "actions"
+        }
     }
 
-    let id: String
-    let leading: Leading
-    let text: String
-    let detail: String?
-    let isAccent: Bool
-    /// Remaining share in 0...1, drawn as a hairline under the chip. The number
-    /// beside it says how much is left; the bar says it without being read.
-    var progress: Double?
-
-    /// Rough width of the rendered chip. The controller sizes the panel from this,
-    /// so the estimate has to live next to the view that draws it.
+    /// Roughly how wide it draws. The controller sizes the panel from this, so
+    /// the estimate lives beside the view that draws it.
     var estimatedWidth: CGFloat {
-        let glyph: CGFloat = 18
-        let label = CGFloat(text.count) * 6.6
-        let extra = detail.map { CGFloat($0.count) * 6.0 + 6 } ?? 0
-        return glyph + 6 + label + extra + (id == "media" ? 24 : 0)
+        switch self {
+        case .media(let title, let artist):
+            let text = max(CGFloat(title.count), CGFloat(artist.count)) * 6.4
+            return 26 + 8 + min(150, max(70, text)) + 26
+        case .timer(let text): return 24 + CGFloat(text.count) * 7.4
+        case .clipboard(let text, _): return 24 + min(130, max(60, CGFloat(text.count) * 6.2))
+        case .shelf: return 58
+        case .actions: return CGFloat(PeekAction.allCases.count) * 30 + 8
+        }
     }
 }
 
-struct AssistantPeekStatus: Equatable {
-    let name: String
-    let detail: String
-    /// Remaining allowance in 0...1 when the assistant reports one.
-    var remainingFraction: Double?
+/// What the strip can do without opening anything.
+enum PeekAction: String, CaseIterable, Identifiable {
+    case assistant, screenshot, keepAwake
+
+    var id: String { rawValue }
+
+    var symbol: String {
+        switch self {
+        case .assistant: return "sparkles"
+        case .screenshot: return "camera.viewfinder"
+        case .keepAwake: return "cup.and.heat.waves.fill"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .assistant: return "MacB'ye sor"
+        case .screenshot: return "Ekran görüntüsü al"
+        case .keepAwake: return "Uyanık tut"
+        }
+    }
 }
 
 enum PeekModel {
@@ -45,100 +71,63 @@ enum PeekModel {
         var mediaArtist = ""
         var timerActive = false
         var timerText = ""
-        var weatherSymbol: String?
-        var weatherTemperature: Int?
+        var clipboardText = ""
+        var clipboardSymbol = "text.quote"
         var shelfCount = 0
-        var assistants: [AssistantPeekStatus] = []
-        var batteryPercent: Double?
-        var isCharging = false
     }
 
-    /// The chips, in priority order. Everything here is already active work,
-    /// so nothing is polled just to fill the strip.
-    static func chips(_ input: Input) -> [PeekChip] {
-        var chips: [PeekChip] = []
+    /// The parts, in the order they are drawn.
+    static func parts(_ input: Input) -> [PeekPart] {
+        var parts: [PeekPart] = []
         if input.mediaAvailable, !input.mediaTitle.isEmpty {
-            chips.append(PeekChip(id: "media", leading: .artwork,
-                                    text: input.mediaTitle,
-                                    detail: input.mediaArtist.isEmpty ? nil : input.mediaArtist,
-                                    isAccent: false))
+            parts.append(.media(title: input.mediaTitle, artist: input.mediaArtist))
         }
-        if input.timerActive {
-            chips.append(PeekChip(id: "timer", leading: .symbol("timer"),
-                                    text: input.timerText, detail: nil, isAccent: true))
+        if input.timerActive { parts.append(.timer(input.timerText)) }
+        if !input.clipboardText.isEmpty {
+            parts.append(.clipboard(text: input.clipboardText, symbol: input.clipboardSymbol))
         }
-        // A crowded strip squeezes the widest chip first, and the widest chip is
-        // the track. Losing the artist keeps the title readable; keeping both
-        // left "Ortaya Karışık · Stabil" as "Or… S".
-        let crowded = input.assistants.count + (input.timerActive ? 1 : 0) >= 2
-        if crowded, let media = chips.firstIndex(where: { $0.id == "media" }) {
-            chips[media] = PeekChip(id: "media", leading: .artwork, text: input.mediaTitle,
-                                    detail: nil, isAccent: false)
-        }
-        for assistant in input.assistants.prefix(max(0, 3 - chips.count)) {
-            chips.append(PeekChip(id: "assistant-\(assistant.name)", leading: .symbol("sparkles"),
-                                    text: assistant.name, detail: assistant.detail, isAccent: true,
-                                    progress: assistant.remainingFraction))
-        }
-        if input.shelfCount > 0 {
-            chips.append(PeekChip(id: "shelf", leading: .symbol("tray.full.fill"),
-                                    text: "\(input.shelfCount)", detail: nil, isAccent: false))
-        }
-        if let temperature = input.weatherTemperature {
-            chips.append(PeekChip(id: "weather", leading: .symbol(input.weatherSymbol ?? "cloud.fill"),
-                                    text: "\(temperature)°", detail: nil, isAccent: false))
-        }
-        // Battery earns a chip only when it is doing something worth saying:
-        // charging, or low enough to change what you do next. A permanent
-        // percentage is the menu bar's job, not the island's.
-        if let percent = input.batteryPercent, input.isCharging || percent <= 20 {
-            chips.append(PeekChip(id: "battery",
-                                    leading: .symbol(input.isCharging ? "bolt.fill" : "battery.25"),
-                                    text: "\(Int(percent))%", detail: nil,
-                                    isAccent: input.isCharging || percent <= 10))
-        }
-        if chips.isEmpty {
-            chips.append(PeekChip(id: "idle", leading: .symbol("chevron.down"),
-                                    text: greeting(), detail: nil, isAccent: false))
-        }
-        return chips
+        if input.shelfCount > 0 { parts.append(.shelf(count: input.shelfCount)) }
+        parts.append(.actions)
+        return parts
     }
 
-    /// The one place the peek's inputs are gathered.
+    /// The one place the strip's inputs are gathered: the controller needs
+    /// them to size the panel and the view to draw it, and two copies drifted
+    /// apart once already.
     ///
-    /// The controller needs them to size the panel and the view needs them to
-    /// draw it. Two copies drifted apart once already, so both call this.
+    /// The clipboard is read only when it is not behind a lock, and only its
+    /// first line: the strip is a hint, not the history.
     @MainActor
     static func input(media: MediaService,
                       timer: TimerService,
-                      weather: WeatherService,
                       shelf: ShelfStore,
-                      aiActivity: AIActivityService,
-                      systemMonitor: SystemMonitorService) -> Input {
+                      clipboard: ClipboardShelfStore,
+                      clipboardLocked: Bool) -> Input {
         var input = Input()
         input.mediaAvailable = media.source != .none && !media.title.isEmpty
         input.mediaTitle = media.title
         input.mediaArtist = media.artist
         input.timerActive = timer.isActive
         input.timerText = timer.remainingText
-        if let snapshot = weather.snapshot {
-            input.weatherSymbol = snapshot.symbol
-            input.weatherTemperature = snapshot.temperature
+        if !clipboardLocked, let latest = clipboard.items.first {
+            input.clipboardText = Self.oneLine(latest.text)
+            input.clipboardSymbol = latest.kind.symbol
         }
         input.shelfCount = shelf.items.count
-        input.assistants = aiActivity.statuses.map {
-            AssistantPeekStatus(name: $0.kind.rawValue, detail: $0.detail,
-                                remainingFraction: $0.usage?.remainingPercent.map { $0 / 100 })
-        }
-        input.batteryPercent = systemMonitor.snapshot.batteryPercent
-        input.isCharging = systemMonitor.snapshot.isCharging
         return input
     }
 
-    /// Panel width for the given chips, capped so a long track title cannot stretch the strip.
-    static func width(for chips: [PeekChip]) -> CGFloat {
-        let content = chips.reduce(0) { $0 + $1.estimatedWidth } + CGFloat(max(0, chips.count - 1)) * 18
-        return min(IslandGeometry.peekMaximumWidth, max(200, content + 36))
+    static func oneLine(_ text: String) -> String {
+        let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return trimmed.count > 34 ? String(trimmed.prefix(33)) + "…" : trimmed
+    }
+
+    /// Panel width for the given parts, capped so a long track title cannot
+    /// stretch the strip.
+    static func width(for parts: [PeekPart]) -> CGFloat {
+        let content = parts.reduce(0) { $0 + $1.estimatedWidth } + CGFloat(max(0, parts.count - 1)) * 20
+        return min(IslandGeometry.peekMaximumWidth, max(220, content + 36))
     }
 
     static func greeting() -> String {
@@ -148,95 +137,155 @@ enum PeekModel {
         default: return "İyi akşamlar"
         }
     }
-
 }
 
 struct IslandPeekView: View {
-    let chips: [PeekChip]
+    let parts: [PeekPart]
     let artwork: NSImage?
+    let tint: Color?
     let mediaIsPlaying: Bool
+    let keepAwakeIsOn: Bool
     let open: () -> Void
     let toggleMedia: () -> Void
+    let openClipboard: () -> Void
+    let openShelf: () -> Void
+    let run: (PeekAction) -> Void
 
     var body: some View {
-        HStack(spacing: MacBDesign.Space.snug) {
-            ForEach(Array(chips.enumerated()), id: \.element.id) { index, chip in
-                Button(action: chip.id == "media" ? toggleMedia : open) {
-                    chipView(chip)
-
+        HStack(spacing: 0) {
+            ForEach(Array(parts.enumerated()), id: \.element.id) { index, part in
+                if index > 0 {
+                    Rectangle().fill(.white.opacity(0.1))
+                        .frame(width: 1, height: 20)
+                        .padding(.horizontal, 10)
                 }
-                .buttonStyle(.plain)
+                view(for: part)
             }
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
-        .accessibilityLabel(accessibilityLabel)
+        .accessibilityElement(children: .contain)
     }
 
-    private var accessibilityLabel: String {
-        chips.map { chip in [chip.text, chip.detail].compactMap { $0 }.joined(separator: " ") }
-            .joined(separator: ", ")
-    }
-
-    @ViewBuilder private func chipView(_ chip: PeekChip) -> some View {
-        VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
-            chipRow(chip)
-            if let progress = chip.progress { quotaBar(progress) }
+    @ViewBuilder private func view(for part: PeekPart) -> some View {
+        switch part {
+        case .media(let title, let artist): mediaPart(title: title, artist: artist)
+        case .timer(let text): timerPart(text)
+        case .clipboard(let text, let symbol): clipboardPart(text: text, symbol: symbol)
+        case .shelf(let count): shelfPart(count)
+        case .actions: actionsPart
         }
-        // Flat, on the island's own black: the words carry the chip.
-        .padding(.horizontal, MacBDesign.Space.regular)
-        .frame(height: chip.progress == nil ? 30 : 36, alignment: .center)
-        .background(MacBDesign.IslandToken.Fill.low, in: Capsule())
-        // The track is the one chip allowed to shrink, but not to nothing.
-        .frame(minWidth: chip.id == "media" ? 122 : nil, alignment: .leading)
-        .fixedSize(horizontal: chip.id != "media", vertical: false)
     }
 
-    /// Orange while there is room, red once the allowance is nearly gone.
-    private func quotaBar(_ progress: Double) -> some View {
-        let value = min(1, max(0, progress))
-        let tint: Color = value <= 0.1 ? MacBDesign.IslandToken.destructive : MacBDesign.IslandToken.accent
-        return GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(MacBDesign.IslandToken.Fill.raised)
-                Capsule().fill(tint).frame(width: proxy.size.width * value)
+    // MARK: - Parts
+
+    /// The cover, the title over the artist, and one button that plays or
+    /// pauses. Pressing anywhere else opens the player.
+    private func mediaPart(title: String, artist: String) -> some View {
+        HStack(spacing: 8) {
+            Button(action: open) {
+                HStack(spacing: 8) {
+                    artworkView
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(title)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        if !artist.isEmpty {
+                            Text(artist)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(tint ?? .white.opacity(0.5))
+                                .lineLimit(1)
+                        }
+                    }
+                    .frame(maxWidth: 150, alignment: .leading)
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(IslandPressStyle())
+            .accessibilityLabel("\(title), \(artist). Oynatıcıyı aç")
+            Button(action: toggleMedia) {
+                Image(systemName: mediaIsPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(IslandPressStyle())
+            .accessibilityLabel(mediaIsPlaying ? "Duraklat" : "Oynat")
         }
-        .frame(height: 2)
-        .accessibilityHidden(true)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
-    @ViewBuilder private func chipRow(_ chip: PeekChip) -> some View {
-        HStack(spacing: MacBDesign.Space.snug) {
-            switch chip.leading {
-            case .artwork:
-                artworkView
-            case .symbol(let symbol):
+    private func timerPart(_ text: String) -> some View {
+        Button(action: open) {
+            HStack(spacing: 6) {
+                Image(systemName: "timer")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(MacBDesign.IslandToken.accent)
+                Text(text)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(IslandPressStyle())
+        .accessibilityLabel("Zamanlayıcı \(text)")
+    }
+
+    private func clipboardPart(text: String, symbol: String) -> some View {
+        Button(action: openClipboard) {
+            HStack(spacing: 7) {
                 Image(systemName: symbol)
-                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
-                    .foregroundStyle(chip.isAccent ? MacBDesign.IslandToken.accent : MacBDesign.IslandToken.secondaryText)
-                    .frame(width: 16)
-            }
-            Text(chip.text)
-                .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
-                .foregroundStyle(Color.white)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .layoutPriority(1)
-            if let detail = chip.detail {
-                Text(detail)
-                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
-                    .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.55))
+                Text(text)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.88))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .layoutPriority(-1)
             }
-            if chip.id == "media" {
-                if mediaIsPlaying { PeekEqualizer() }
-                Image(systemName: mediaIsPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
+            .frame(maxWidth: 150, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(IslandPressStyle())
+        .accessibilityLabel("Son kopyalanan: \(text). Panoyu aç")
+    }
+
+    private func shelfPart(_ count: Int) -> some View {
+        Button(action: openShelf) {
+            HStack(spacing: 6) {
+                Image(systemName: "tray.full.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                Text("\(count)")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
-                    .frame(width: 20, height: 20)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(IslandPressStyle())
+        .accessibilityLabel("Rafta \(count) öğe. Rafı aç")
+    }
+
+    private var actionsPart: some View {
+        HStack(spacing: 2) {
+            ForEach(PeekAction.allCases) { action in
+                let isOn = action == .keepAwake && keepAwakeIsOn
+                Button { run(action) } label: {
+                    Image(systemName: action.symbol)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(isOn ? MacBDesign.IslandToken.accent : .white.opacity(0.78))
+                        .frame(width: 28, height: 28)
+                        .background {
+                            if isOn { Circle().fill(MacBDesign.IslandToken.accent.opacity(0.16)) }
+                        }
+                        .contentShape(Circle())
+                }
+                .buttonStyle(IslandPressStyle())
+                .help(action.label)
+                .accessibilityLabel(action.label)
             }
         }
     }
@@ -246,41 +295,15 @@ struct IslandPeekView: View {
             Image(nsImage: artwork)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
-                .frame(width: 20, height: 20)
-                .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .frame(width: 26, height: 26)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
         } else {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(MacBDesign.IslandToken.Fill.base)
-                .frame(width: 20, height: 20)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(.white.opacity(0.08))
+                .frame(width: 26, height: 26)
                 .overlay(Image(systemName: "music.note")
-                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
-                    .foregroundStyle(MacBDesign.IslandToken.secondaryText))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.6)))
         }
     }
 }
-
-/// Four bars that rise and fall while audio plays.
-///
-/// Driven by the clock rather than by the audio itself: MacB does not tap the
-/// output, and a decorative meter is not worth asking for that permission. It
-/// only exists while the peek is on screen and something is actually playing.
-private struct PeekEqualizer: View {
-    private let phases: [Double] = [0, 0.35, 0.7, 1.05]
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 18.0)) { context in
-            let time = context.date.timeIntervalSinceReferenceDate
-            HStack(alignment: .center, spacing: MacBDesign.Space.hair) {
-                ForEach(Array(phases.enumerated()), id: \.offset) { _, phase in
-                    let wave = (sin(time * 5.4 + phase * .pi * 2) + 1) / 2
-                    Capsule()
-                        .fill(MacBDesign.IslandToken.accent)
-                        .frame(width: 2, height: 4 + wave * 9)
-                }
-            }
-            .frame(width: 14, height: 14)
-        }
-        .accessibilityHidden(true)
-    }
-}
-

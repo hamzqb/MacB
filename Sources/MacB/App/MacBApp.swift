@@ -471,6 +471,9 @@ private final class Flag: @unchecked Sendable {
         } else if CommandLine.arguments.contains("--preview-collapsed-timer") {
             islandTimer.start()
             notch.showDevelopmentPreview(phase: .collapsed)
+        } else if CommandLine.arguments.contains("--preview-camera") {
+            notch.showDevelopmentPreview(phase: .expanded, content: .home)
+            notch.handleCameraAction()
         } else if CommandLine.arguments.contains("--preview-stats") {
             notch.showDevelopmentPreview(phase: .expanded, content: .stats)
         } else if CommandLine.arguments.contains("--preview-peek") {

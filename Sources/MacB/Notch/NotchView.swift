@@ -221,8 +221,7 @@ struct NotchView: View {
                 .padding(.horizontal, IslandGeometry.horizontalPadding)
                 .frame(height: presentation.cameraHeight)
                 VStack(spacing: IslandGeometry.gap) {
-                    if presentation.cameraPreviewVisible { cameraCard }
-                    section(layout)
+                    if presentation.cameraPreviewVisible { cameraCard } else { section(layout) }
                 }
                 .padding(.horizontal, IslandGeometry.horizontalPadding)
                 .padding(.top, IslandGeometry.topPadding)
@@ -240,8 +239,7 @@ struct NotchView: View {
                                      select: select,
                                      toggleEditing: { widgets.isEditing.toggle() },
                                      cameraAction: cameraAction, openSettings: openSettings)
-                    if presentation.cameraPreviewVisible { cameraCard }
-                    section(layout)
+                    if presentation.cameraPreviewVisible { cameraCard } else { section(layout) }
                 }
                 .padding(.horizontal, IslandGeometry.horizontalPadding)
                 .padding(.top, IslandGeometry.topPadding)
@@ -526,14 +524,33 @@ struct NotchView: View {
     }
 
     private var peek: some View {
-        IslandPeekView(chips: PeekModel.chips(peekInput), artwork: media.artwork,
-                       mediaIsPlaying: media.isPlaying, open: open,
-                       toggleMedia: media.playPause)
+        IslandPeekView(parts: PeekModel.parts(peekInput), artwork: media.artwork,
+                       tint: media.tint, mediaIsPlaying: media.isPlaying,
+                       keepAwakeIsOn: keepAwake.isActive,
+                       open: open, toggleMedia: media.playPause,
+                       openClipboard: { select(.clipboard) }, openShelf: { select(.files) },
+                       run: run)
     }
 
     private var peekInput: PeekModel.Input {
-        PeekModel.input(media: media, timer: timer, weather: weather, shelf: shelf,
-                        aiActivity: aiActivity, systemMonitor: systemMonitor)
+        PeekModel.input(media: media, timer: timer, shelf: shelf,
+                        clipboard: clipboard, clipboardLocked: isLocked(.clipboard))
+    }
+
+    /// The strip's own buttons. Each one is something the island can do
+    /// without opening: nothing here needs a panel.
+    private func run(_ action: PeekAction) {
+        switch action {
+        case .assistant:
+            startAssistant()
+        case .screenshot:
+            // The selection screenshot macOS itself takes; MacB never captures
+            // a screen on its own.
+            close()
+            SystemActions.captureSelectionToClipboard()
+        case .keepAwake:
+            if keepAwake.isActive { keepAwake.stop() } else { _ = keepAwake.toggle(minutes: 60) }
+        }
     }
 
     private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
@@ -651,15 +668,25 @@ struct NotchView: View {
         }.padding(.horizontal, MacBDesign.Space.close).frame(height: 32).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 9))
     }
 
+    /// The camera fills the panel on its own: a mirror is something to look
+    /// at, not a strip above a list.
     private var cameraCard: some View {
         Button(action: cameraAction) {
             ZStack(alignment: .bottomTrailing) {
                 if camera.isRunning { CameraPreviewView(service: camera) }
-                else { MacBDesign.IslandToken.Fill.hairline.overlay(ProgressView().controlSize(.small)) }
-                Label("Büyüt", systemImage: "arrow.up.left.and.arrow.down.right").font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
-                    .padding(.horizontal, MacBDesign.Space.close).frame(height: 24).background(.black.opacity(0.6), in: Capsule()).padding(MacBDesign.Space.close)
-            }.frame(height: 118).clipShape(RoundedRectangle(cornerRadius: 16))
-        }.buttonStyle(.plain).accessibilityLabel("Kamera önizlemesini büyüt")
+                else { Color.white.opacity(0.06).overlay(ProgressView().controlSize(.small)) }
+                Label("Büyüt", systemImage: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+                    .padding(.horizontal, MacBDesign.Space.close)
+                    .frame(height: 24)
+                    .background(.black.opacity(0.55), in: Capsule())
+                    .padding(MacBDesign.Space.close)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Kamera önizlemesini büyüt")
     }
 
     private func compactEmpty(_ title: String, symbol: String, detail: String) -> some View {
