@@ -13,6 +13,7 @@ import Foundation
 /// in this file, never anything a model, a web page or a setting can influence.
 public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     case openAI
+    case nvidia
     case groq
     case openRouter
     case gemini
@@ -23,6 +24,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var title: String {
         switch self {
         case .openAI: return "OpenAI"
+        case .nvidia: return "NVIDIA"
         case .groq: return "Groq"
         case .openRouter: return "OpenRouter"
         case .gemini: return "Google Gemini"
@@ -34,6 +36,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var account: String {
         switch self {
         case .openAI: return "openai"
+        case .nvidia: return "nvidia"
         case .groq: return "groq"
         case .openRouter: return "openrouter"
         case .gemini: return "gemini"
@@ -48,6 +51,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var keyPrefix: String? {
         switch self {
         case .openAI: return "sk-"
+        case .nvidia: return "nvapi-"
         case .groq: return "gsk_"
         case .openRouter: return "sk-or-"
         case .huggingFace: return "hf_"
@@ -58,6 +62,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var defaultModel: String {
         switch self {
         case .openAI: return "gpt-5-mini"
+        case .nvidia: return "meta/llama-3.3-70b-instruct"
         case .groq: return "openai/gpt-oss-120b"
         case .openRouter: return "meta-llama/llama-3.3-70b-instruct:free"
         case .gemini: return "gemini-3.6-flash"
@@ -81,6 +86,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var chatURL: URL {
         switch self {
         case .openAI: return URL(string: "https://api.openai.com/v1/responses")!
+        case .nvidia: return URL(string: "https://integrate.api.nvidia.com/v1/chat/completions")!
         case .groq: return URL(string: "https://api.groq.com/openai/v1/chat/completions")!
         case .openRouter: return URL(string: "https://openrouter.ai/api/v1/chat/completions")!
         case .gemini: return URL(string: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")!
@@ -92,6 +98,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var modelsURL: URL {
         switch self {
         case .openAI: return URL(string: "https://api.openai.com/v1/models")!
+        case .nvidia: return URL(string: "https://integrate.api.nvidia.com/v1/models")!
         case .groq: return URL(string: "https://api.groq.com/openai/v1/models")!
         case .openRouter: return URL(string: "https://openrouter.ai/api/v1/models")!
         case .gemini: return URL(string: "https://generativelanguage.googleapis.com/v1beta/openai/models")!
@@ -103,6 +110,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var signUpURL: URL {
         switch self {
         case .openAI: return URL(string: "https://platform.openai.com/api-keys")!
+        case .nvidia: return URL(string: "https://build.nvidia.com/settings/api-keys")!
         case .groq: return URL(string: "https://console.groq.com/keys")!
         case .openRouter: return URL(string: "https://openrouter.ai/keys")!
         case .gemini: return URL(string: "https://aistudio.google.com/apikey")!
@@ -115,6 +123,8 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         switch self {
         case .openAI:
             return "Ücretli. Canlı sesli asistan ve kaynak gösteren web araması yalnız bunda var."
+        case .nvidia:
+            return "NVIDIA'nın kendi sunucularında çalışan büyük açık modeller. Anahtarın varsa metin soruları için ilk sırada bu kullanılır. Web araması yok."
         case .groq:
             return "Ücretsiz ve çok hızlı; ama küçük modelleri zayıf cevap verir. Web araması yok."
         case .openRouter:
@@ -134,6 +144,12 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         switch self {
         case .openAI:
             return ["gpt-6-astra", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-4.1-mini"]
+        case .nvidia:
+            // NVIDIA's catalogue moves as fast as the others; "Modelleri
+            // yenile" in Settings asks the service itself for the real list.
+            return ["meta/llama-3.3-70b-instruct", "deepseek-ai/deepseek-r1",
+                    "moonshotai/kimi-k2-instruct", "qwen/qwen3-235b-a22b",
+                    "nvidia/llama-3.1-nemotron-70b-instruct", "openai/gpt-oss-120b"]
         case .groq:
             // Groq retires model names constantly — these are the ones that
             // answered in 2026; "Modelleri yenile" in Settings asks the
@@ -162,7 +178,10 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     /// parameter one that answers a real question badly: fast nonsense is
     /// still nonsense. Gemini's free tier is a frontier-class model, so the
     /// good free one goes first and the fast one is the fallback.
-    public static let textOrder: [AIProvider] = [.gemini, .groq, .openRouter, .openAI, .huggingFace]
+    /// NVIDIA is first while a key is stored for it: its free tier serves
+    /// frontier-sized open models, and nothing about it is metered per token
+    /// the way OpenAI is.
+    public static let textOrder: [AIProvider] = [.nvidia, .gemini, .groq, .openRouter, .openAI, .huggingFace]
 
     /// The provider to use when nobody has chosen one, given what is stored.
     ///
