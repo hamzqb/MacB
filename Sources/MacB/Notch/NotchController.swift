@@ -39,6 +39,8 @@ struct IslandToast: Equatable {
     @Published var cameraPreviewVisible = false
     /// A system change the island is announcing for a moment.
     @Published var event: IslandEvent?
+    /// A volume or brightness change, shown in the closed island's wings.
+    @Published var hud: IslandHUD?
 }
 
 @MainActor final class NotchController: NSObject, NSWindowDelegate {
@@ -105,6 +107,8 @@ struct IslandToast: Equatable {
     private var toastTask: Task<Void, Never>?
     private var cameraWindow: NSWindow?
     private let lidBlur = LidBlurOverlay.shared
+    private let levels = SystemLevelService()
+    private var hudTask: Task<Void, Never>?
     var enabled = true {
         didSet { if enabled { start() } else { stop() } }
     }
@@ -202,9 +206,12 @@ struct IslandToast: Equatable {
         observe(Notification.Name("MacBDropTargetActivated")) { [weak self] in
             self?.dragHandedOff = true; self?.closePanel(immediate: true)
         }
+        levels.onChange = { [weak self] hud in self?.showHUD(hud) }
+        if preferences.islandHUDEnabled { levels.start() }
         preferences.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self else { return }
+                if self.preferences.islandHUDEnabled { self.levels.start() } else { self.levels.stop() }
                 self.render()
             }
         }.store(in: &subscriptions)
@@ -398,6 +405,8 @@ struct IslandToast: Equatable {
     func stop() {
         renderGeneration += 1
         systemEvents.stop()
+        levels.stop()
+        hudTask?.cancel(); hudTask = nil; presentation.hud = nil
         toastTask?.cancel(); toastTask = nil
         deadlineTask?.cancel(); deadlineTask = nil
         observers.forEach(NotificationCenter.default.removeObserver); observers.removeAll()
@@ -714,6 +723,11 @@ struct IslandToast: Equatable {
         let screenWidth = display?.frame.width ?? 1512
         let maxWidth = screenWidth - IslandGeometry.displayMargin
         switch state.phase {
+        case .collapsed where presentation.hud != nil:
+            let width = IslandHUD.width(notchWidth: hardwareNotchWidth())
+            let height = camera > 0 ? camera : IslandActivity.pillHeight
+            return NotchLayout(phase: .collapsed, content: state.content, width: min(maxWidth, width),
+                               height: height, radius: camera > 0 ? 12 : height / 2)
         case .collapsed:
             let indicators = collapsedIndicatorWidth()
             // Under the pointer a live island leans out a little — the
@@ -832,6 +846,27 @@ struct IslandToast: Equatable {
     private func peekInput() -> PeekModel.Input {
         PeekModel.input(media: media, timer: timer, weather: weather, shelf: shelf,
                         aiActivity: aiActivity, systemMonitor: systemMonitor)
+    }
+
+    /// A level just changed: the closed island opens its wings to show it,
+    /// and closes them again after a moment. Another press restarts the
+    /// clock and moves the meter, without the island closing in between.
+    private func showHUD(_ hud: IslandHUD) {
+        guard preferences.islandHUDEnabled, !state.isOpen else { return }
+        let wasShowing = presentation.hud != nil
+        if wasShowing, presentation.hud?.kind == hud.kind {
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.9)) { presentation.hud = hud }
+        } else {
+            presentation.hud = hud
+            render()
+        }
+        hudTask?.cancel()
+        hudTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(IslandHUD.duration * 1_000_000_000))
+            guard let self, !Task.isCancelled else { return }
+            self.presentation.hud = nil
+            self.render()
+        }
     }
 
     /// What the closed island is showing beside the camera, if anything.

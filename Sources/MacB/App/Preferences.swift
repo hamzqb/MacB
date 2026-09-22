@@ -164,6 +164,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
 
     /// The free engine thinks with the downloaded local model first, when
     /// there is one. On by default: it is free, private and needs no internet.
+    /// Volume and brightness changes shown in the island.
+    @Published var islandHUDEnabled: Bool { didSet { defaults.set(islandHUDEnabled, forKey: "islandHUDEnabled") } }
     @Published var localModelEnabled: Bool { didSet { defaults.set(localModelEnabled, forKey: "localModelEnabled") } }
 
     @Published var jarvisModel: String {
@@ -381,6 +383,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         jarvisEngine = defaults.string(forKey: "jarvisEngine") ?? JarvisEngineChoice.automatic.rawValue
         freeEngineReadsScreen = defaults.bool(forKey: "freeEngineReadsScreen")
         localModelEnabled = defaults.object(forKey: "localModelEnabled") as? Bool ?? true
+        islandHUDEnabled = defaults.object(forKey: "islandHUDEnabled") as? Bool ?? true
         briefingVoice = defaults.string(forKey: "briefingVoice") ?? ""
         mailEnabled = defaults.bool(forKey: "mailEnabled")
         returnSummaryEnabled = defaults.object(forKey: "returnSummaryEnabled") as? Bool ?? true

@@ -1363,6 +1363,9 @@ struct SettingsView: View {
                 settingToggle("Sistem değişikliklerini göster",
                               detail: "Şarkı geçince ya da şarj takılınca island kısa süre açılıp gösterir.",
                               isOn: $preferences.islandEventsEnabled)
+                settingToggle("Ses ve parlaklığı island'da göster",
+                              detail: "Ses ya da parlaklık değişince çentik iki yana açılıp seviyeyi gösterir. macOS'un kendi göstergesi de görünmeye devam eder.",
+                              isOn: $preferences.islandHUDEnabled)
             }
             section("Island yüzeyi", "rectangle.topthird.inset.filled") {
                 Picker("Island yüzeyi", selection: $preferences.islandAppearance) {

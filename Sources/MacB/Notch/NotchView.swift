@@ -123,7 +123,7 @@ struct NotchView: View {
     /// outlines the camera. A gradient keeps the top of the glass black where
     /// it meets the bezel and lets the lower part show what is behind it.
     @ViewBuilder private var islandSurface: some View {
-        if isCollapsed && collapsedIndicators.isEmpty {
+        if isCollapsed && collapsedIndicators.isEmpty && presentation.hud == nil {
             // Nothing to show: the island is not there, and the hardware notch
             // is left to be itself.
             Color.clear
@@ -292,7 +292,9 @@ struct NotchView: View {
     /// that matters most right now — a picture on the left, a live reading on
     /// the right. With nothing running it renders nothing and takes no clicks.
     @ViewBuilder private var compact: some View {
-        if let activity = activities.first {
+        if let hud = presentation.hud {
+            hudWings(hud)
+        } else if let activity = activities.first {
             Button(action: open) {
                 HStack(spacing: 0) {
                     leftWing(activity)
@@ -313,6 +315,43 @@ struct NotchView: View {
         } else {
             Color.clear.allowsHitTesting(false).accessibilityHidden(true)
         }
+    }
+
+    /// A level that just changed: its symbol on the left, a meter and the
+    /// number on the right.
+    private func hudWings(_ hud: IslandHUD) -> some View {
+        let tint: Color = hud.kind == .brightness ? Color(red: 1, green: 0.84, blue: 0.35) : .white
+        return HStack(spacing: 0) {
+            Image(systemName: hud.symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(tint)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: IslandHUD.wing - 24, alignment: .leading)
+                .padding(.leading, 18)
+                .frame(width: IslandHUD.wing, alignment: .leading)
+            Spacer(minLength: 0)
+            HStack(spacing: 8) {
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.16))
+                        Capsule().fill(tint).frame(width: max(5, proxy.size.width * hud.shownLevel))
+                    }
+                }
+                .frame(height: 5)
+                Text(hud.percentText)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.7))
+                    .contentTransition(.numericText())
+                    .frame(width: 22, alignment: .trailing)
+            }
+            .padding(.trailing, 16)
+            .frame(width: IslandHUD.wing)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .transition(.blurReplace)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(hud.accessibilityText)
     }
 
     /// The same order the controller sizes the island by.

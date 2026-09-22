@@ -2251,6 +2251,17 @@ struct CoreTestRunner {
                            "Without a notch the wings should close up")
                 try expect(IslandActivity.allCases.allSatisfy { $0.wing <= 64 }, "A wing is wider than a notch wing should be")
             }),
+            ("IslandHUD: a level at a glance", {
+                try expect(IslandHUD(kind: .volume, level: 0.8).symbol == "speaker.wave.3.fill", "Loud is not three waves")
+                try expect(IslandHUD(kind: .volume, level: 0.2).symbol == "speaker.wave.1.fill", "Quiet is not one wave")
+                let muted = IslandHUD(kind: .volume, level: 0.6, isMuted: true)
+                try expect(muted.symbol == "speaker.slash.fill" && muted.shownLevel == 0 && muted.percentText == "0",
+                           "Muted still shows a level")
+                try expect(IslandHUD(kind: .brightness, level: 1.4).level == 1 && IslandHUD(kind: .brightness, level: -1).level == 0,
+                           "Levels are not clamped")
+                try expect(IslandHUD(kind: .brightness, level: 0.3).symbol == "sun.min.fill", "Dim is not the small sun")
+                try expect(IslandHUD.width(notchWidth: 180) == 180 + 2 * IslandHUD.wing, "The HUD does not sit beside the notch")
+            }),
             ("LocalModel: Qwen's template, tool calls in and out, the file", {
                 let tools = [JarvisTool.setVolume.chatDeclaration]
                 let calls = [JarvisCall(callID: "c1", name: "set_volume", arguments: "{\"percent\":30}")]

@@ -190,3 +190,56 @@ public enum IslandActivity: Int, CaseIterable, Comparable, Sendable {
     /// Height of the closed strip on a display without a notch.
     public static let pillHeight: CGFloat = 30
 }
+
+/// A level the user just changed — volume or brightness — shown for a moment
+/// in the island: the notch opens two wings, a symbol on the left and a meter
+/// on the right, and closes again. It replaces nothing of macOS's own; it is
+/// where the eyes already are.
+public struct IslandHUD: Equatable, Sendable {
+    public enum Kind: String, Sendable { case volume, brightness }
+
+    public var kind: Kind
+    /// 0…1.
+    public var level: Double
+    public var isMuted: Bool
+
+    public init(kind: Kind, level: Double, isMuted: Bool = false) {
+        self.kind = kind
+        self.level = min(1, max(0, level))
+        self.isMuted = isMuted
+    }
+
+    public var symbol: String {
+        switch kind {
+        case .volume:
+            if isMuted || level <= 0.001 { return "speaker.slash.fill" }
+            if level < 0.34 { return "speaker.wave.1.fill" }
+            if level < 0.67 { return "speaker.wave.2.fill" }
+            return "speaker.wave.3.fill"
+        case .brightness:
+            return level < 0.5 ? "sun.min.fill" : "sun.max.fill"
+        }
+    }
+
+    /// What the meter shows: nothing while muted, whatever the level.
+    public var shownLevel: Double { isMuted ? 0 : level }
+
+    public var percentText: String { "\(Int((shownLevel * 100).rounded()))" }
+
+    public var accessibilityText: String {
+        switch kind {
+        case .volume: return isMuted ? "Ses kapalı" : "Ses yüzde \(percentText)"
+        case .brightness: return "Parlaklık yüzde \(percentText)"
+        }
+    }
+
+    /// Long enough to read, short enough to be gone by the next thought; a
+    /// second key press restarts it.
+    public static let duration: TimeInterval = 1.6
+    /// Each wing: a symbol on one side, a meter and a number on the other.
+    public static let wing: CGFloat = 104
+
+    public static func width(notchWidth: CGFloat?) -> CGFloat {
+        (notchWidth ?? IslandActivity.pillGap) + 2 * wing
+    }
+}
