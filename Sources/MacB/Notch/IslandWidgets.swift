@@ -63,6 +63,17 @@ struct IslandWidgetStrip: View {
                     ForEach(Array(row.widgets.enumerated()), id: \.element.id) { columnIndex, widget in
                         widgetCard(widget)
                             .frame(maxHeight: .infinity)
+                            // Columns, not cards: a hairline between
+                            // neighbours is all the structure the strip needs.
+                            .overlay(alignment: .leading) {
+                                if columnIndex > 0 && !store.isEditing {
+                                    Rectangle().fill(MacBDesign.IslandToken.Fill.base)
+                                        .frame(width: 1)
+                                        .padding(.vertical, 14)
+                                        .offset(x: -IslandGeometry.gap / 2 - 0.5)
+                                        .allowsHitTesting(false)
+                                }
+                            }
                             .modifier(EntranceEffect(isVisible: hasAppeared && !isLeaving,
                                                      index: rowIndex * max(1, columns) + columnIndex,
                                                      isEnabled: !reduceMotion))
@@ -93,22 +104,13 @@ struct IslandWidgetStrip: View {
             .allowsHitTesting(!store.isEditing)
             .frame(width: IslandGeometry.widgetWidth(columnWidth: columnWidth, span: widget.size.columns),
                    height: IslandGeometry.widgetHeight)
-            .clipShape(RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous))
-            // Depth, applied in one place so every widget reads as the same
-            // material: a light fall from the top edge and a rim that is bright
-            // where light would land and dark where it would not.
-            .overlay {
-                RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
-                    .fill(LinearGradient(colors: [MacBDesign.IslandToken.Fill.low, .clear],
-                                         startPoint: .top, endPoint: .center))
-                    .allowsHitTesting(false)
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
-                    .strokeBorder(LinearGradient(colors: [MacBDesign.IslandToken.Fill.strong, MacBDesign.IslandToken.Fill.hairline],
-                                                 startPoint: .top, endPoint: .bottom),
-                                  lineWidth: 0.8)
-                    .allowsHitTesting(false)
+            // No card: the widget sits straight on the island's black, and
+            // only while arranging does it show the slot it occupies.
+            .background {
+                if store.isEditing {
+                    RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
+                        .fill(MacBDesign.IslandToken.Fill.low)
+                }
             }
             .overlay(editingOverlay(widget))
             // The card being carried leaves a slot rather than a faint copy of
@@ -354,37 +356,6 @@ struct WidgetCard<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(.horizontal, span <= 1 ? 9 : 12)
             .padding(.vertical, MacBDesign.Space.regular)
-            .background(cardSurface)
-            .clipShape(RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous))
-            .overlay(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
-                    .fill(RadialGradient(colors: [.white.opacity(isActive ? 0.13 : 0.075), .clear],
-                                         center: .topLeading, startRadius: 0, endRadius: 145))
-                    .allowsHitTesting(false)
-            }
-            .overlay(RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
-                .strokeBorder(LinearGradient(colors: [.white.opacity(isActive ? 0.34 : 0.20),
-                                                      .white.opacity(0.055),
-                                                      .black.opacity(0.28)],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing),
-                              lineWidth: 0.85))
-            .shadow(color: .black.opacity(isActive ? 0.42 : 0.30), radius: isActive ? 18 : 12, y: isActive ? 9 : 6)
-    }
-
-    /// A dark card with a lit top edge. It used to be clear Liquid Glass,
-    /// which let whatever was behind the island show through every card and
-    /// fight the white text; a painted gradient keeps the depth and the text
-    /// stays readable on any wallpaper.
-    @ViewBuilder private var cardSurface: some View {
-        ZStack {
-            LinearGradient(colors: [
-                Color.white.opacity(isActive ? 0.105 : 0.060),
-                Color.black.opacity(isActive ? 0.50 : 0.58),
-                Color.black.opacity(0.72)
-            ], startPoint: .topLeading, endPoint: .bottomTrailing)
-            LinearGradient(colors: [Color.clear, MacBDesign.IslandToken.accent.opacity(isActive ? 0.12 : 0.035)],
-                           startPoint: .top, endPoint: .bottomTrailing)
-        }
     }
 }
 
@@ -424,40 +395,16 @@ struct MediaWidget: View {
 
     @ViewBuilder private func content(width: CGFloat) -> some View {
         if !isLive { idle }
-        else if width < 260 { compact }
+        else if width < 250 { compact }
         else if style == .record { record }
         else { full }
     }
 
     // MARK: - Background
 
-    @ViewBuilder private var background: some View {
-        switch style {
-        case .artwork:
-            if let artwork = media.artwork, isLive {
-                Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
-                // The cover is the card, so the text needs its own ground: a
-                // soft band at the top for the artist and a deeper one at the
-                // bottom where the transport sits.
-                LinearGradient(stops: [.init(color: .black.opacity(0.55), location: 0),
-                                       .init(color: .black.opacity(0.15), location: 0.42),
-                                       .init(color: .black.opacity(0.88), location: 1)],
-                               startPoint: .top, endPoint: .bottom)
-            } else {
-                MacBDesign.IslandToken.widgetFill
-            }
-        case .glass:
-            if let artwork = media.artwork, isLive {
-                Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
-                    .blur(radius: 34, opaque: true)
-                    .overlay(Color.black.opacity(0.42))
-            } else {
-                MacBDesign.IslandToken.widgetFill
-            }
-        case .compact, .record:
-            MacBDesign.IslandToken.widgetFill
-        }
-    }
+    /// No card behind the player: the cover is the one picture, and the
+    /// island's black is the ground everything else sits on.
+    private var background: some View { Color.clear }
 
     // MARK: - Layouts
 
@@ -468,54 +415,65 @@ struct MediaWidget: View {
     private var compact: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: MacBDesign.Space.close) {
-                // With the cover already filling the card, a second copy of it
-                // is just a smaller hole in the artwork.
-                if style != .artwork { cover(size: 26, radius: 6) }
-                VStack(alignment: .leading, spacing: 0) {
+                cover(size: 42, radius: 10)
+                VStack(alignment: .leading, spacing: 1) {
                     Text(media.title.isEmpty ? media.source.title : media.title)
-                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .bold))
-                        .lineLimit(1).minimumScaleFactor(0.8)
-                    Text(media.artist.isEmpty ? media.source.title : media.artist)
-                        .font(.system(size: MacBDesign.TypeScale.micro))
-                        .foregroundStyle(MacBDesign.IslandToken.secondaryText)
-                        .lineLimit(1).minimumScaleFactor(0.8)
-                }
-                Spacer(minLength: 0)
-            }
-            Spacer(minLength: 2)
-            transport(glyph: 9, diameter: 22, spacing: MacBDesign.Space.close)
-        }
-        .padding(.horizontal, MacBDesign.Space.regular)
-        .padding(.vertical, MacBDesign.Space.tight)
-    }
-
-    private var full: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: MacBDesign.Space.regular) {
-                if style != .artwork { cover(size: 38, radius: 9) }
-                VStack(alignment: .leading, spacing: MacBDesign.Space.hair) {
-                    Text(media.title.isEmpty ? media.source.title : media.title)
-                        .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .bold))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(titleTint)
                         .lineLimit(1).minimumScaleFactor(0.85)
                     Text(media.artist.isEmpty ? media.source.title : media.artist)
-                        .font(.system(size: MacBDesign.TypeScale.micro))
-                        .foregroundStyle(MacBDesign.IslandToken.secondaryText)
-                        .lineLimit(1)
+                        .font(.system(size: 11))
+                        .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+                        .lineLimit(1).minimumScaleFactor(0.85)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: media.source.symbol)
-                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
-                    .foregroundStyle(MacBDesign.IslandToken.secondaryText)
-                    .accessibilityHidden(true)
             }
             Spacer(minLength: 4)
-            if media.duration > 0 { progress }
-            transport(glyph: 11, diameter: 28,
-                      spacing: style == .artwork ? MacBDesign.Space.regular : MacBDesign.Space.section)
-                .padding(.top, media.duration > 0 ? 4 : 0)
+            if media.duration > 0 { progress.padding(.bottom, 2) }
+            transport(glyph: 11, diameter: 24, spacing: MacBDesign.Space.comfortable, alignment: .leading)
         }
-        .padding(.horizontal, MacBDesign.Space.regular)
-        .padding(.vertical, MacBDesign.Space.tight)
+        .padding(.horizontal, MacBDesign.Space.tight)
+    }
+
+    /// The player: the cover on the left as tall as the strip, the track in
+    /// the song's own colour beside it, a thin line of progress and the
+    /// transport underneath. The cover is the one memorable thing.
+    private var full: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.height, 84)
+            HStack(alignment: .center, spacing: MacBDesign.Space.comfortable) {
+                cover(size: side, radius: 12)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(media.title.isEmpty ? media.source.title : media.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(titleTint)
+                        .lineLimit(1).minimumScaleFactor(0.85)
+                        .motion(MacBDesign.Motion.gentle, value: media.tint)
+                    Text(media.artist.isEmpty ? media.source.title : media.artist)
+                        .font(.system(size: 12))
+                        .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if media.duration > 0 { progress }
+                    transport(glyph: 12, diameter: 26, spacing: MacBDesign.Space.loose, alignment: .leading)
+                        .padding(.top, media.duration > 0 ? 2 : 0)
+                }
+                .frame(maxHeight: side)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .leading)
+        }
+        .padding(.horizontal, MacBDesign.Space.tight)
+        .padding(.vertical, MacBDesign.Space.hair)
+    }
+
+    /// The title takes the cover's colour, lifted so a dark cover still gives
+    /// a colour that reads on black.
+    private var titleTint: Color {
+        guard let tint = media.tint else { return .white }
+        let color = NSColor(tint).usingColorSpace(.deviceRGB) ?? .white
+        let brightness = max(color.brightnessComponent, 0.78)
+        return Color(nsColor: NSColor(hue: color.hueComponent, saturation: min(color.saturationComponent, 0.7),
+                                      brightness: brightness, alpha: 1))
     }
 
     private var record: some View {
@@ -560,10 +518,8 @@ struct MediaWidget: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
-            .strokeBorder(MacBDesign.IslandToken.Fill.raised, lineWidth: 0.5))
-        // The cover throws a little of its own colour onto the card behind it.
-        .shadow(color: (media.tint ?? .black).opacity(0.45), radius: 6, y: 2)
+        .scaleEffect(media.isPlaying ? 1 : 0.92)
+        .motion(.smooth(duration: 0.3), value: media.isPlaying)
         .accessibilityHidden(true)
     }
 
@@ -610,18 +566,13 @@ struct MediaWidget: View {
     private func playButton(diameter: CGFloat, glyph: CGFloat) -> some View {
         Button(action: media.playPause) {
             Image(systemName: media.isPlaying ? "pause.fill" : "play.fill")
-                .font(.system(size: glyph, weight: .bold))
-                .foregroundStyle(MacBDesign.IslandToken.primaryText)
+                .font(.system(size: glyph + 5, weight: .bold))
+                .foregroundStyle(.white)
                 .frame(width: diameter, height: diameter)
-                // The button sits on album art as often as on black, so it
-                // carries its own contrast rather than borrowing the card's.
-                .background(.black.opacity(0.34), in: Circle())
-                .background(tint.opacity(media.isPlaying ? 0.55 : 0.30), in: Circle())
-                .overlay(Circle().strokeBorder(MacBDesign.IslandToken.Fill.strong, lineWidth: 0.5))
-                .motion(MacBDesign.Motion.gentle, value: media.tint)
+                .contentShape(Rectangle())
                 .contentTransition(.symbolEffect(.replace))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IslandPressStyle())
         .accessibilityLabel(media.isPlaying ? "Duraklat" : "Oynat")
     }
 
@@ -641,13 +592,13 @@ struct MediaWidget: View {
             }
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(MacBDesign.IslandToken.Fill.strong)
-                    Capsule().fill(tint)
+                    Capsule().fill(MacBDesign.IslandToken.Fill.base)
+                    Capsule().fill(titleTint)
                         .frame(width: proxy.size.width * min(1, max(0, media.position / max(1, media.duration))))
                         .motion(MacBDesign.Motion.normal, value: media.position)
                 }
             }
-            .frame(height: 2)
+            .frame(height: 3)
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(TimerService.format(media.position)) geçti, \(TimerService.format(max(0, media.duration - media.position))) kaldı")
@@ -658,12 +609,11 @@ struct MediaWidget: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(MacBDesign.IslandToken.primaryText)
-                .shadow(color: .black.opacity(0.5), radius: 2)
-                .frame(width: size + 10, height: size + 10)
+                .foregroundStyle(.white.opacity(0.9))
+                .frame(width: size + 12, height: size + 12)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IslandPressStyle())
         .help(label)
         .accessibilityLabel(label)
     }
@@ -1280,32 +1230,26 @@ struct WidgetEmptyState: View {
 
     private var diameter: CGFloat { span >= 2 ? 34 : 28 }
 
+    /// Quiet: a glyph and a line, left-aligned like everything else in the
+    /// strip, in the dimmer inks. Empty is not an event.
     var body: some View {
-        VStack(spacing: span >= 2 ? 7 : 5) {
-            ZStack {
-                Circle()
-                    .fill(RadialGradient(colors: [MacBDesign.IslandToken.Fill.raised, MacBDesign.IslandToken.Fill.hairline],
-                                         center: .topLeading, startRadius: 1, endRadius: diameter))
-                Circle().strokeBorder(MacBDesign.IslandToken.Fill.base, lineWidth: 0.8)
-                Image(systemName: symbol)
-                    .font(.system(size: span >= 2 ? MacBDesign.TypeScale.emphasis : MacBDesign.TypeScale.body, weight: .medium))
-                    .foregroundStyle(MacBDesign.IslandToken.secondaryText)
+        VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(MacBDesign.IslandToken.Ink.tertiary)
+            Spacer(minLength: 0)
+            Text(title)
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
+                .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+            if let hint, span >= 2 {
+                Text(hint)
+                    .font(.system(size: MacBDesign.TypeScale.micro))
+                    .foregroundStyle(MacBDesign.IslandToken.Ink.faint)
             }
-            .frame(width: diameter, height: diameter)
-            VStack(spacing: MacBDesign.Space.hair) {
-                Text(title)
-                    .font(.system(size: span >= 2 ? MacBDesign.TypeScale.caption : MacBDesign.TypeScale.micro, weight: .medium))
-                    .foregroundStyle(MacBDesign.IslandToken.secondaryText)
-                if let hint, span >= 2 {
-                    Text(hint)
-                        .font(.system(size: MacBDesign.TypeScale.micro))
-                        .foregroundStyle(MacBDesign.IslandToken.tertiaryText)
-                }
-            }
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .lineLimit(1)
+        .minimumScaleFactor(0.8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel([title, hint].compactMap { $0 }.joined(separator: ", "))
     }

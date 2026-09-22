@@ -17,22 +17,13 @@ struct IslandTimerView: View {
                 }
             }
         }
-        .padding(MacBDesign.Space.close)
-        .background {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(LinearGradient(colors: [.white.opacity(0.10), .white.opacity(0.045), .black.opacity(0.10)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-        }
-        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-            .strokeBorder(LinearGradient(colors: [.white.opacity(0.22), MacBDesign.IslandToken.accent.opacity(0.15), .white.opacity(0.05)],
-                                         startPoint: .top, endPoint: .bottom), lineWidth: 0.8))
+
     }
 
 
     private var timerHero: some View {
         ZStack {
-            Circle().fill(MacBDesign.IslandToken.accent.opacity(0.14))
-            Circle().stroke(MacBDesign.IslandToken.Fill.raised, lineWidth: 6)
+            Circle().stroke(MacBDesign.IslandToken.Fill.base, lineWidth: 6)
             Circle()
                 .trim(from: 0, to: timer.isActive ? CGFloat(timer.progress) : CGFloat(max(0.02, timer.selectedMinutes / TimerService.maximumMinutes)))
                 .stroke(MacBDesign.IslandToken.accent, style: StrokeStyle(lineWidth: 6, lineCap: .round))

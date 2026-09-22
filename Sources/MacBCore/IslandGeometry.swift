@@ -169,9 +169,22 @@ public enum IslandGeometry {
 
     public static let agentWidth: CGFloat = 520
 
-    public static func expandedHeight(bodyHeight: CGFloat) -> CGFloat {
+    public static func expandedHeight(bodyHeight: CGFloat, navigationInEars: Bool = false) -> CGFloat {
+        // Beside a camera the tabs sit in its ears, in the row the camera
+        // already takes, and the body starts straight under it.
+        if navigationInEars { return topPadding + max(bodyHeight, 0) + bottomPadding }
         guard bodyHeight > 0 else { return navigationHeight + topPadding + bottomPadding }
         return navigationHeight + gap + bodyHeight + topPadding + bottomPadding
+    }
+
+    /// Room each ear needs for its half of the navigation: five tabs on the
+    /// left, three tools on the right, with the panel's own margin.
+    public static let earNavigationWidth: CGFloat = 214
+
+    /// The narrowest an open panel may be beside a camera `cameraWidth` wide,
+    /// so the tabs always fit in its ears.
+    public static func expandedMinimumWidth(cameraWidth: CGFloat) -> CGFloat {
+        cameraWidth > 0 ? cameraWidth + 2 * earNavigationWidth : navigationMinimumWidth
     }
 
     /// Body heights for the sections that are not the widget strip.

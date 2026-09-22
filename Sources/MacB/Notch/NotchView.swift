@@ -209,6 +209,25 @@ struct NotchView: View {
                                  showsInput: layout.showsAssistantInput, isInteractive: isInteractive,
                                  close: closeAssistant, openSettings: openSettings)
                 .frame(width: layout.width, height: layout.height, alignment: .top).clipped()
+        case .expanded where presentation.cameraHeight > 0 && presentation.cameraWidth > 0:
+            VStack(spacing: 0) {
+                // The tabs live in the camera's ears, the way the hardware
+                // notch leaves room for them: sections left, tools right.
+                HStack(spacing: 0) {
+                    navigation(.sections)
+                    Spacer(minLength: presentation.cameraWidth + 16)
+                    navigation(.tools)
+                }
+                .padding(.horizontal, IslandGeometry.horizontalPadding)
+                .frame(height: presentation.cameraHeight)
+                VStack(spacing: IslandGeometry.gap) {
+                    if presentation.cameraPreviewVisible { cameraCard }
+                    section(layout)
+                }
+                .padding(.horizontal, IslandGeometry.horizontalPadding)
+                .padding(.top, IslandGeometry.topPadding)
+                .padding(.bottom, IslandGeometry.bottomPadding)
+            }.frame(width: layout.width, height: layout.height, alignment: .top).clipped()
         case .expanded:
             VStack(spacing: 0) {
                 Color.clear.frame(height: presentation.cameraHeight)
@@ -278,6 +297,14 @@ struct NotchView: View {
                                 dismiss: dismissAgent)
             }
         }
+    }
+
+    private func navigation(_ part: IslandNavigation.Part) -> some View {
+        // The target section, not this copy's: both copies of the panel are
+        // on screen during a cross-fade.
+        IslandNavigation(selected: presentation.layout.content, part: part, isEditing: widgets.isEditing,
+                         select: select, toggleEditing: { widgets.isEditing.toggle() },
+                         cameraAction: cameraAction, openSettings: openSettings)
     }
 
     /// Whether the orb and status can sit beside the camera: only with a notch

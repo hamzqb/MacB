@@ -766,14 +766,16 @@ struct IslandToast: Equatable {
             layout.showsAssistantInput = showsInput
             return layout
         case .expanded:
+            let ears = camera > 0 && presentation.cameraWidth > 0
+            let minimum = IslandGeometry.expandedMinimumWidth(cameraWidth: ears ? presentation.cameraWidth : 0)
             let width = incomingDragActive
-                ? IslandGeometry.dropWidth(screenWidth: screenWidth)
-                : min(maxWidth, expandedContentWidth(screenWidth: screenWidth))
+                ? max(minimum, IslandGeometry.dropWidth(screenWidth: screenWidth))
+                : min(maxWidth, max(minimum, expandedContentWidth(screenWidth: screenWidth)))
             let body = expandedBodyHeight(width: width)
             let cameraExtra: CGFloat = presentation.cameraPreviewVisible ? 136 : 0
             return NotchLayout(phase: .expanded, content: state.content,
                 width: width,
-                height: camera + IslandGeometry.expandedHeight(bodyHeight: body) + cameraExtra,
+                height: camera + IslandGeometry.expandedHeight(bodyHeight: body, navigationInEars: ears) + cameraExtra,
                 radius: MacBDesign.Island.cornerRadius)
         }
     }

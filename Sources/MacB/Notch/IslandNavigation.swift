@@ -31,7 +31,12 @@ extension NotchContent {
 
 /// The icon row at the top of the expanded panel: sections on the left, tools on the right.
 struct IslandNavigation: View {
+    /// Which half to draw: beside a camera the sections go in the left ear
+    /// and the tools in the right.
+    enum Part { case all, sections, tools }
+
     let selected: NotchContent
+    var part: Part = .all
     var isEditing: Bool
     var select: (NotchContent) -> Void
     var toggleEditing: () -> Void
@@ -43,58 +48,62 @@ struct IslandNavigation: View {
     @Namespace private var puck
 
     var body: some View {
-        HStack(spacing: MacBDesign.Space.close) {
-            IslandGlassShelf(isSelected: true) {
-                HStack(spacing: MacBDesign.Space.tight) {
-                    ForEach(NotchContent.tabs, id: \.rawValue) { section in
-                        circleButton(section.symbol, label: section.title,
-                                     isSelected: section == selected) { select(section) }
-                    }
+        HStack(spacing: MacBDesign.Space.tight) {
+            if part != .tools {
+                ForEach(NotchContent.tabs, id: \.rawValue) { section in
+                    tabButton(section.symbol, label: section.title,
+                              isSelected: section == selected) { select(section) }
                 }
-                .padding(MacBDesign.Space.tight)
             }
-            Spacer(minLength: 12)
-            IslandGlassShelf(isSelected: isEditing) {
-                HStack(spacing: MacBDesign.Space.tight) {
-                    circleButton("square.grid.2x2", label: isEditing ? "Düzenlemeyi bitir" : "Widget'ları düzenle",
-                                 isSelected: isEditing, action: toggleEditing)
-                    circleButton("camera.fill", label: "Kamera", isSelected: false, action: cameraAction)
-                    circleButton("gearshape.fill", label: "Ayarlar", isSelected: false, action: openSettings)
-                }
-                .padding(MacBDesign.Space.tight)
+            if part == .all { Spacer(minLength: 12) }
+            if part != .sections {
+                tabButton(isEditing ? "checkmark" : "square.grid.2x2",
+                          label: isEditing ? "Düzenlemeyi bitir" : "Widget'ları düzenle",
+                          isSelected: isEditing, action: toggleEditing)
+                tabButton("camera.fill", label: "Kamera", isSelected: false, action: cameraAction)
+                tabButton("gearshape.fill", label: "Ayarlar", isSelected: false, action: openSettings)
             }
         }
-        .frame(height: IslandGeometry.navigationHeight)
-        .motion(MacBDesign.Motion.atollFluid, value: selected)
-        .motion(MacBDesign.Motion.atollFluid, value: isEditing)
+        .frame(height: part == .all ? IslandGeometry.navigationHeight : nil)
+        .motion(.smooth(duration: 0.28), value: selected)
+        .motion(.smooth(duration: 0.28), value: isEditing)
     }
 
-    private func circleButton(_ symbol: String, label: String, isSelected: Bool,
-                              action: @escaping () -> Void) -> some View {
+    /// Plain white glyphs with no chrome; the selected one sits on a quiet
+    /// capsule that slides from tab to tab.
+    private func tabButton(_ symbol: String, label: String, isSelected: Bool,
+                           action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: MacBDesign.TypeScale.caption, weight: .bold))
-                .foregroundStyle(isSelected ? Color.black : MacBDesign.IslandToken.primaryText)
-                .frame(width: MacBDesign.IslandToken.navButton, height: MacBDesign.IslandToken.navButton)
-                .scaleEffect(isSelected ? 1.02 : 1)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isSelected ? Color.white : MacBDesign.IslandToken.Ink.secondary)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 34, height: MacBDesign.IslandToken.navButton)
                 .background {
-                    // One puck for the whole row. Only the selected button owns
-                    // it, so SwiftUI moves the same circle rather than drawing a
-                    // second one, and the selection reads as a thing that slid
-                    // rather than two things that blinked.
                     if isSelected {
-                        Circle().fill(MacBDesign.IslandToken.navSelectedFill)
+                        Capsule().fill(MacBDesign.IslandToken.navSelectedFill)
                             .matchedGeometryEffect(id: "navPuck", in: puck)
-                    } else {
-                        Circle().fill(Color.white.opacity(0.055))
                     }
                 }
+                .contentShape(Capsule())
         }
-        .buttonStyle(.plain)
-        .islandFocusRing(in: Circle())
+        .buttonStyle(IslandPressStyle())
+        .islandFocusRing(in: Capsule())
         .help(label)
         .accessibilityLabel(label)
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+/// The press every island control shares: a small dip, no colour change.
+struct IslandPressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.94 : 1)
+            .opacity(configuration.isPressed ? 0.8 : 1)
+            .animation(.spring(response: 0.28, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 

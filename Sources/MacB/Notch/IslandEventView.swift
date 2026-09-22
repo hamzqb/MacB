@@ -47,15 +47,6 @@ struct IslandEventView: View {
                 }
             }
         }
-        .padding(.horizontal, MacBDesign.Space.close)
-        .frame(height: 34)
-        .background {
-            Capsule().fill(LinearGradient(colors: [tint.opacity(0.16), Color.white.opacity(0.055)],
-                                          startPoint: .topLeading, endPoint: .bottomTrailing))
-        }
-        .overlay(Capsule().strokeBorder(LinearGradient(colors: [tint.opacity(0.34), .white.opacity(0.08)],
-                                                       startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.8))
-        .shadow(color: tint.opacity(0.13), radius: 10, y: 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel([event.title, event.detail].compactMap { $0 }.joined(separator: " "))
     }

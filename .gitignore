@@ -4,3 +4,6 @@ dist/
 .DS_Store
 .swiftpm/
 *.xcuserstate
+
+# Locally installed Claude Code skills and settings
+.claude/

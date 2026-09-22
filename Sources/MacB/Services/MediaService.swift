@@ -132,7 +132,33 @@ final class MediaService: ObservableObject {
         }
     }
 
+    /// Set only by the `--preview-playing` probe: a made-up track the real
+    /// players must not overwrite while the island is being looked at.
+    private var isShowingPreviewTrack = false
+
+    /// A made-up track with a generated cover, for checking the island's
+    /// player without playing anything out loud. Development only.
+    func showPreviewTrack() {
+        isShowingPreviewTrack = true
+        let cover = NSImage(size: NSSize(width: 300, height: 300), flipped: false) { rect in
+            NSGradient(colors: [NSColor(calibratedRed: 0.93, green: 0.42, blue: 0.30, alpha: 1),
+                                NSColor(calibratedRed: 0.36, green: 0.12, blue: 0.40, alpha: 1)])?
+                .draw(in: rect, angle: -60)
+            return true
+        }
+        source = .spotify
+        title = "Borderline"
+        artist = "Tame Impala"
+        artwork = cover
+        tint = ArtworkPalette.tint(for: cover)
+        isPlaying = true
+        isRunning = true
+        position = 74
+        duration = 237
+    }
+
     private func sync() {
+        guard !isShowingPreviewTrack else { return }
         let next = bestSource()
         source = next
         let previousArtwork = artwork

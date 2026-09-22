@@ -123,13 +123,16 @@ enum MacBDesign {
     /// the window radii or the system appearance.
     enum IslandToken {
         static let accent = Color(nsColor: .systemOrange)
-        static let widgetRadius: CGFloat = 18
+        /// Cards are flat, quiet shapes on the black: no rim, no gradient, no
+        /// shadow. Depth comes from the island itself, not from each card.
+        static let widgetRadius: CGFloat = 16
         static let widgetFill = Fill.low
-        static let widgetActiveFill = Fill.raised
+        static let widgetActiveFill = Fill.base
         static let widgetStroke = Fill.low
         static let navButton: CGFloat = 26
-        static let navFill = Fill.base
-        static let navSelectedFill = Color.white
+        static let navFill = Color.clear
+        /// A quiet capsule under the selected tab, which slides between tabs.
+        static let navSelectedFill = Fill.raised
         static let pillHeight: CGFloat = 28
         static let dropCardRadius: CGFloat = 20
         static let dropCardFill = Fill.hairline

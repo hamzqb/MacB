@@ -163,7 +163,7 @@ struct IslandPeekView: View {
             ForEach(Array(chips.enumerated()), id: \.element.id) { index, chip in
                 Button(action: chip.id == "media" ? toggleMedia : open) {
                     chipView(chip)
-                        .modifier(PeekEntrance(index: index))
+
                 }
                 .buttonStyle(.plain)
             }
@@ -183,29 +183,10 @@ struct IslandPeekView: View {
             chipRow(chip)
             if let progress = chip.progress { quotaBar(progress) }
         }
-        .padding(.horizontal, chip.id == "media" ? MacBDesign.Space.regular : MacBDesign.Space.comfortable)
-        .frame(height: chip.progress == nil ? 34 : 39, alignment: .center)
-        .background {
-            Capsule()
-                .fill(LinearGradient(colors: [
-                    Color.white.opacity(chip.isAccent ? 0.12 : 0.075),
-                    Color.black.opacity(chip.isAccent ? 0.48 : 0.58),
-                    Color.black.opacity(0.76)
-                ], startPoint: .topLeading, endPoint: .bottomTrailing))
-        }
-        .overlay(alignment: .topLeading) {
-            Capsule()
-                .fill(RadialGradient(colors: [(chip.isAccent ? MacBDesign.IslandToken.accent : Color.white).opacity(chip.isAccent ? 0.26 : 0.10), .clear],
-                                     center: .leading, startRadius: 0, endRadius: 92))
-                .allowsHitTesting(false)
-        }
-        .overlay(Capsule().strokeBorder(LinearGradient(colors: [
-            (chip.isAccent ? MacBDesign.IslandToken.accent : Color.white).opacity(chip.isAccent ? 0.46 : 0.19),
-            Color.white.opacity(0.055),
-            Color.black.opacity(0.32)
-        ], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 0.85))
-        .shadow(color: .black.opacity(0.38), radius: 13, y: 7)
-        .shadow(color: (chip.isAccent ? MacBDesign.IslandToken.accent : Color.clear).opacity(0.16), radius: 12, y: 4)
+        // Flat, on the island's own black: the words carry the chip.
+        .padding(.horizontal, MacBDesign.Space.regular)
+        .frame(height: chip.progress == nil ? 30 : 36, alignment: .center)
+        .background(MacBDesign.IslandToken.Fill.low, in: Capsule())
         // The track is the one chip allowed to shrink, but not to nothing.
         .frame(minWidth: chip.id == "media" ? 122 : nil, alignment: .leading)
         .fixedSize(horizontal: chip.id != "media", vertical: false)
@@ -237,15 +218,15 @@ struct IslandPeekView: View {
                     .frame(width: 16)
             }
             Text(chip.text)
-                .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.94))
+                .font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
+                .foregroundStyle(Color.white)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
             if let detail = chip.detail {
                 Text(detail)
-                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.44))
+                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
+                    .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .layoutPriority(-1)
@@ -254,9 +235,8 @@ struct IslandPeekView: View {
                 if mediaIsPlaying { PeekEqualizer() }
                 Image(systemName: mediaIsPlaying ? "pause.fill" : "play.fill")
                     .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
-                    .foregroundStyle(Color.black.opacity(0.90))
-                    .frame(width: 22, height: 22)
-                    .background(Color.white.opacity(0.92), in: Circle())
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
             }
         }
     }
@@ -304,14 +284,3 @@ private struct PeekEqualizer: View {
     }
 }
 
-
-private struct PeekEntrance: ViewModifier {
-    let index: Int
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func body(content: Content) -> some View {
-        content
-            .transition(.scale(scale: 0.88).combined(with: .opacity))
-            .animation(reduceMotion ? nil : MacBDesign.Motion.atollFluid.delay(Double(index) * 0.025), value: index)
-    }
-}
