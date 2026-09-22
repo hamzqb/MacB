@@ -574,22 +574,56 @@ struct NotchView: View {
             }
             if shelf.items.isEmpty && recentFiles.items.isEmpty {
                 Button(action: shelf.chooseFiles) {
-                    HStack(spacing: MacBDesign.Space.regular) {
-                        Image(systemName: presentation.isDropTarget ? "arrow.down" : "plus").font(.system(size: MacBDesign.TypeScale.title, weight: .semibold))
-                        Text(presentation.isDropTarget ? "Bırak" : "Dosya ekle").font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
-                    }.frame(maxWidth: .infinity).frame(height: 64).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 17))
-                }.buttonStyle(.plain)
+                    VStack(spacing: 8) {
+                        Image(systemName: presentation.isDropTarget ? "arrow.down" : "tray.and.arrow.down")
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.5))
+                        Text(presentation.isDropTarget ? "Bırak" : "Dosyaları buraya sürükle")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.55))
+                        Text("ya da eklemek için tıkla")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 104)
+                    .background(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [6, 5]))
+                        .foregroundStyle(.white.opacity(presentation.isDropTarget ? 0.35 : 0.12)))
+                }.buttonStyle(IslandPressStyle())
             } else {
+                // Rows on the island's own black, a hairline between them:
+                // a list, not a stack of cards.
                 ScrollView {
-                    LazyVStack(spacing: MacBDesign.Space.snug) {
-                        ForEach(shelf.items) { item in fileRow(item) }
-                        if preferences.recentFilesEnabled { ForEach(recentFiles.items) { item in recentFileRow(item) } }
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(shelf.items.enumerated()), id: \.element.id) { index, item in
+                            if index > 0 { rowDivider }
+                            fileRow(item)
+                        }
+                        if preferences.recentFilesEnabled, !recentFiles.items.isEmpty {
+                            if !shelf.items.isEmpty { rowDivider }
+                            Text("Son dosyalar")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.35))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 10)
+                                .padding(.bottom, 4)
+                            ForEach(Array(recentFiles.items.enumerated()), id: \.element.id) { index, item in
+                                if index > 0 { rowDivider }
+                                recentFileRow(item)
+                            }
+                        }
                     }
                 }.frame(maxHeight: 190).scrollIndicators(.hidden)
             }
             HStack {
-                if let error = shelf.errorMessage { Text(error).foregroundStyle(.orange).lineLimit(1) }
-                else { Text("\(shelf.items.count) öğe").foregroundStyle(MacBDesign.IslandToken.Ink.faint) }
+                if let error = shelf.errorMessage {
+                    Text(error).foregroundStyle(.orange).lineLimit(1)
+                } else if shelf.items.isEmpty {
+                    Text("Raf boş — dosyaları çentiğin üstüne bırak").foregroundStyle(.white.opacity(0.3))
+                } else {
+                    Text("Rafta \(shelf.items.count) öğe").foregroundStyle(.white.opacity(0.35))
+                }
                 Spacer()
                 if shelfPDFs.count > 1 {
                     Button { convert("PDF'ler birleştirildi") { try await ShelfConverter.merge(shelfPDFs) } } label: {
@@ -613,7 +647,15 @@ struct NotchView: View {
             rowButton("doc.on.doc", "Kopyala") { shelf.copy(item: item); notify("doc.on.doc", "Kopyalandı") }
             if item.isAvailable, let url = item.url, !item.isDirectory { fileMenu(url) }
             rowButton("xmark", "Raftan kaldır") { shelf.remove(id: item.id) }
-        }.padding(.horizontal, MacBDesign.Space.snug).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 9))
+        }
+        .padding(.horizontal, 6)
+        .frame(height: 38)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.001)))
+    }
+
+    /// A hairline the width of the list, between two rows.
+    private var rowDivider: some View {
+        Rectangle().fill(.white.opacity(0.07)).frame(height: 0.5)
     }
 
     /// Files on the shelf that exist and are not folders, in shelf order.
@@ -665,7 +707,7 @@ struct NotchView: View {
             Text(item.name).font(.system(size: MacBDesign.TypeScale.caption, weight: .medium)).lineLimit(1)
             Spacer()
             rowButton("plus", "Rafa ekle") { shelf.add(urls: [item.url]); notify("plus", "Rafa eklendi") }
-        }.padding(.horizontal, MacBDesign.Space.close).frame(height: 32).background(MacBDesign.IslandToken.Fill.hairline, in: RoundedRectangle(cornerRadius: 9))
+        }.padding(.horizontal, 6).frame(height: 34)
     }
 
     /// The camera fills the panel on its own: a mirror is something to look

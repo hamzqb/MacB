@@ -119,14 +119,19 @@ struct IslandClipboardView: View {
             if visible.isEmpty {
                 emptyState
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: MacBDesign.Space.regular) {
-                        ForEach(visible) { item in
-                            ClipboardCard(item: item, clipboard: clipboard, notify: notify)
+                // A list, not a wall of cards: what was copied is text, and
+                // text is read down a column.
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(visible.enumerated()), id: \.element.id) { index, item in
+                            if index > 0 {
+                                Rectangle().fill(.white.opacity(0.07)).frame(height: 0.5)
+                            }
+                            ClipboardRow(item: item, clipboard: clipboard, notify: notify)
                         }
                     }
-                    .padding(.bottom, MacBDesign.Space.hair)
                 }
+                .frame(height: IslandGeometry.clipboardRowHeight * CGFloat(IslandGeometry.clipboardVisibleRows))
             }
         }
     }
@@ -161,7 +166,7 @@ struct IslandClipboardView: View {
         }
         .padding(.horizontal, MacBDesign.Space.close)
         .frame(height: 26)
-        .background(MacBDesign.IslandToken.Fill.hairline, in: Capsule())
+        .background(Color.white.opacity(0.07), in: Capsule())
     }
 
     /// The filters scroll rather than shrink. A truncated one-word label reads as
@@ -195,12 +200,11 @@ struct IslandClipboardView: View {
                 }
             }
             .fixedSize()
-            .foregroundStyle(isSelected ? Color.black
-                             : (total > 0 ? MacBDesign.IslandToken.primaryText
-                                : MacBDesign.IslandToken.tertiaryText))
+            .foregroundStyle(isSelected ? Color.white
+                             : (total > 0 ? Color.white.opacity(0.7) : Color.white.opacity(0.32)))
             .padding(.horizontal, MacBDesign.Space.comfortable)
             .frame(height: MacBDesign.IslandToken.pillHeight)
-            .background(isSelected ? MacBDesign.IslandToken.navSelectedFill : MacBDesign.IslandToken.navFill,
+            .background(isSelected ? AnyShapeStyle(Color.white.opacity(0.14)) : AnyShapeStyle(Color.clear),
                         in: Capsule())
         }
         .buttonStyle(.plain)
@@ -224,7 +228,7 @@ struct IslandClipboardView: View {
                                  : MacBDesign.IslandToken.tertiaryText)
                 .frame(width: MacBDesign.IslandToken.pillHeight,
                        height: MacBDesign.IslandToken.pillHeight)
-                .background(MacBDesign.IslandToken.navFill, in: Circle())
+                .background(Color.white.opacity(0.08), in: Circle())
         }
         .buttonStyle(.plain)
         .disabled(removableCount == 0)
@@ -234,16 +238,9 @@ struct IslandClipboardView: View {
 
     private var emptyState: some View {
         VStack(spacing: MacBDesign.Space.close) {
-            ZStack {
-                Circle()
-                    .fill(RadialGradient(colors: [MacBDesign.IslandToken.Fill.raised, MacBDesign.IslandToken.Fill.hairline],
-                                         center: .topLeading, startRadius: 1, endRadius: 40))
-                Circle().strokeBorder(MacBDesign.IslandToken.Fill.base, lineWidth: 0.8)
-                Image(systemName: isSearching ? "magnifyingglass" : filter.symbol)
-                    .font(.system(size: MacBDesign.TypeScale.title, weight: .medium))
-                    .foregroundStyle(MacBDesign.IslandToken.secondaryText)
-            }
-            .frame(width: 40, height: 40)
+            Image(systemName: isSearching ? "magnifyingglass" : filter.symbol)
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(.white.opacity(0.28))
             // An empty list during a search is not an empty clipboard, and
             // saying "kopyaladıkların burada birikir" to somebody who has just
             // typed four letters is answering a question they did not ask.
@@ -253,35 +250,69 @@ struct IslandClipboardView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: IslandGeometry.clipboardCardHeight)
-        .background(MacBDesign.IslandToken.widgetFill.opacity(0.6),
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .frame(height: IslandGeometry.clipboardRowHeight * 2)
         .accessibilityElement(children: .combine)
     }
 }
 
-private struct ClipboardCard: View {
+/// One entry: what it is on the left, what it says in the middle, when it was
+/// copied on the right. Clicking copies it back; the star and the bin appear
+/// under the pointer.
+private struct ClipboardRow: View {
     let item: ClipboardShelfItem
     @ObservedObject var clipboard: ClipboardShelfStore
     var notify: (String, String) -> Void
 
     @State private var isHovering = false
 
-    private let size = CGSize(width: 132, height: 104)
-
     var body: some View {
         Button {
             clipboard.copy(item)
             notify("doc.on.clipboard", "Kopyalandı")
         } label: {
-            ZStack(alignment: .bottomLeading) {
-                background
-                badge
-                if isHovering { actions }
-                if item.isFavorite { favoriteMark }
+            HStack(spacing: 12) {
+                thumbnail
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.95))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    HStack(spacing: 5) {
+                        if let icon = sourceIcon {
+                            Image(nsImage: icon).resizable().frame(width: 11, height: 11)
+                        }
+                        Text(subtitle)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.4))
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+                if isHovering {
+                    iconButton(item.isFavorite ? "star.fill" : "star", label: "Favori",
+                               tint: item.isFavorite ? .yellow : .white.opacity(0.6)) {
+                        clipboard.toggleFavorite(item)
+                    }
+                    iconButton("trash", label: "Sil", tint: MacBDesign.IslandToken.destructive) {
+                        clipboard.remove(item)
+                    }
+                } else if item.isFavorite {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.yellow)
+                }
+                Text(relativeTime)
+                    .font(.system(size: 11))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.32))
+                    .frame(width: 46, alignment: .trailing)
             }
-            .frame(width: size.width, height: size.height)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .padding(.horizontal, 8)
+            .frame(height: IslandGeometry.clipboardRowHeight)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(isHovering ? 0.06 : 0)))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
@@ -289,82 +320,53 @@ private struct ClipboardCard: View {
         .accessibilityLabel(accessibilityText)
     }
 
-    @ViewBuilder private var background: some View {
-        if let data = item.imageData, let image = NSImage(data: data) {
-            Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
-        } else if let hex = item.colorHex, let color = Color(hex: hex) {
-            color
-        } else {
-            MacBDesign.IslandToken.widgetFill
-            Text(item.text)
-                .font(.system(size: MacBDesign.TypeScale.micro))
-                .foregroundStyle(MacBDesign.IslandToken.primaryText.opacity(0.8))
-                .lineLimit(6)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(MacBDesign.Space.close)
-        }
-    }
-
-    @ViewBuilder private var badge: some View {
-        HStack(spacing: MacBDesign.Space.tight) {
-            if let icon = sourceIcon {
-                Image(nsImage: icon).resizable().frame(width: 12, height: 12)
+    @ViewBuilder private var thumbnail: some View {
+        Group {
+            if let data = item.imageData, let image = NSImage(data: data) {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else if let hex = item.colorHex, let color = Color(hex: hex) {
+                color
+            } else {
+                Color.white.opacity(0.07)
+                    .overlay(Image(systemName: item.kind.symbol)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.55)))
             }
-            Text(item.colorHex ?? relativeTime)
-                .font(.system(size: MacBDesign.TypeScale.micro, weight: item.colorHex == nil ? .regular : .bold))
         }
-        .foregroundStyle(labelColor)
-        .padding(.horizontal, MacBDesign.Space.snug)
-        .padding(.vertical, MacBDesign.Space.tight)
-        .background(item.colorHex == nil ? AnyShapeStyle(.black.opacity(0.55)) : AnyShapeStyle(.clear), in: Capsule())
-        .padding(MacBDesign.Space.close)
+        .frame(width: 30, height: 30)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
-    private var actions: some View {
-        VStack {
-            HStack {
-                iconButton(item.isFavorite ? "star.fill" : "star", label: "Favori") { clipboard.toggleFavorite(item) }
-                Spacer()
-                iconButton("trash", label: "Sil") { clipboard.remove(item) }
-            }
-            Spacer()
-        }
-        .padding(MacBDesign.Space.snug)
+    private var title: String {
+        if let hex = item.colorHex { return hex.uppercased() }
+        if item.kind == .image { return "Görsel" }
+        let line = item.text.split(whereSeparator: \.isNewline).first.map(String.init) ?? item.text
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return trimmed.isEmpty ? "Boş" : trimmed
     }
 
-    private var favoriteMark: some View {
-        VStack {
-            HStack {
-                Image(systemName: "star.fill")
-                    .font(.system(size: MacBDesign.TypeScale.micro))
-                    .foregroundStyle(.yellow)
-                    .padding(MacBDesign.Space.tight)
-                    .background(.black.opacity(0.45), in: Circle())
-                Spacer()
-            }
-            Spacer()
+    private var subtitle: String {
+        switch item.kind {
+        case .text: return "Metin"
+        case .image: return "Görsel"
+        case .files: return (item.filePaths?.count).map { "\($0) dosya" } ?? "Dosya"
+        case .link: return item.urlString ?? "Bağlantı"
+        case .color: return "Renk"
         }
-        .padding(MacBDesign.Space.snug)
-        .allowsHitTesting(false)
     }
 
-    private func iconButton(_ symbol: String, label: String, action: @escaping () -> Void) -> some View {
+    private func iconButton(_ symbol: String, label: String, tint: Color,
+                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 20, height: 20)
-                .background(.black.opacity(0.55), in: Circle())
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 24, height: 24)
+                .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(IslandPressStyle())
         .help(label)
         .accessibilityLabel(label)
-    }
-
-    private var labelColor: Color {
-        guard let hex = item.colorHex, let color = NSColor(hex: hex) else { return .white }
-        return color.usingColorSpace(.sRGB)?.brightnessComponent ?? 1 > 0.6 ? .black : .white
     }
 
     private var sourceIcon: NSImage? {

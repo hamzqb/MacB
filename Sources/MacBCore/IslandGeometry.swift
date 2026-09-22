@@ -222,22 +222,25 @@ public enum IslandGeometry {
     /// The seven clipboard filters plus the delete button need this much room to
     /// sit on one line. Below it they scroll, which is why it is a floor and not
     /// a requirement.
-    public static let clipboardFilterRowWidth: CGFloat = 690
+    public static let clipboardFilterRowWidth: CGFloat = 620
 
-    /// Width of the clipboard section: wide enough for the filter row, then as
-    /// many cards as fit, then the panel ceiling.
+    /// One clipboard entry: a thumbnail, what it says, and what kind it is.
+    public static let clipboardRowHeight: CGFloat = 46
+    /// How many rows are on screen before the list scrolls.
+    public static let clipboardVisibleRows = 4
+
+    /// The clipboard is a list, so its width is what a line of text wants
+    /// rather than what a row of cards measures.
     public static func clipboardWidth(itemCount: Int, screenWidth: CGFloat) -> CGFloat {
-        let cards = CGFloat(min(6, max(0, itemCount)))
-        let gallery = cards * (clipboardCardWidth + 10) + horizontalPadding * 2
-        return sectionWidth(max(clipboardFilterRowWidth, gallery), screenWidth: screenWidth)
+        sectionWidth(clipboardFilterRowWidth, screenWidth: screenWidth)
     }
 
-    /// Filters, search and one gallery row. The section used to count only the
-    /// filters and cards, so the search field ate the bottom of the cards.
+    /// Filters and search over as many rows as fit.
     public static func clipboardHeight(isEmpty: Bool) -> CGFloat {
-        _ = isEmpty
         let searchHeight: CGFloat = 26
-        return filterRowHeight + gap + searchHeight + gap + clipboardCardHeight + 2
+        let list = isEmpty ? clipboardRowHeight * 2
+                           : clipboardRowHeight * CGFloat(clipboardVisibleRows)
+        return filterRowHeight + gap + searchHeight + gap + list
     }
 
     /// Quick access is a single scrolling row of pinned tiles, so its height is
