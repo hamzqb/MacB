@@ -179,13 +179,21 @@ public enum IslandGeometry {
 
     /// Room each ear needs for its half of the navigation: five tabs on the
     /// left, three tools on the right, with the panel's own margin.
-    public static let earNavigationWidth: CGFloat = 214
+    public static let earNavigationWidth: CGFloat = 240
 
     /// The narrowest an open panel may be beside a camera `cameraWidth` wide,
     /// so the tabs always fit in its ears.
     public static func expandedMinimumWidth(cameraWidth: CGFloat) -> CGFloat {
         cameraWidth > 0 ? cameraWidth + 2 * earNavigationWidth : navigationMinimumWidth
     }
+
+    /// The home player: a large cover beside the title, a progress bar and
+    /// the transport.
+    public static let playerHeight: CGFloat = 132
+    public static let playerWidth: CGFloat = 640
+    /// Three graphs over two.
+    public static let statsHeight: CGFloat = 272
+    public static let statsWidth: CGFloat = 680
 
     /// Body heights for the sections that are not the widget strip.
     /// Each one reports what its current state actually draws, so nothing is clipped

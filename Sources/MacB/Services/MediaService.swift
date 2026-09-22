@@ -138,6 +138,9 @@ final class MediaService: ObservableObject {
         position = seconds
     }
 
+    /// The position now, advancing between updates for the system source.
+    var livePosition: Double { source == .system ? nowPlaying.position : position }
+
     var canSeek: Bool { source == .system && duration > 0 }
 
     private func wire() {

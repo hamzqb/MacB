@@ -4,11 +4,16 @@ public enum NotchPhase: String, Equatable { case collapsed, peek, expanded }
 
 /// Sections reachable from the icon navigation, in display order.
 public enum NotchContent: String, Equatable, CaseIterable {
+    /// The player, large, the way Atoll opens.
     case home
-    case apps
+    /// The editable widget strip that used to be home.
+    case widgets
     case files
-    case clipboard
     case timer
+    /// CPU, memory, GPU, network and disk as running lines.
+    case stats
+    case clipboard
+    case apps
     /// The voice assistant. Not a tab: it appears while a conversation is
     /// running and the island goes back to where it was afterwards.
     case assistant
@@ -22,10 +27,10 @@ public enum NotchContent: String, Equatable, CaseIterable {
     /// The section a drop or an explicit close returns to.
     public static let `default` = NotchContent.home
 
-    /// The sections the navigation row offers.
-    public static var tabs: [NotchContent] {
-        allCases.filter { $0 != .assistant && $0 != .briefing && $0 != .agent }
-    }
+    /// The sections the navigation offers on its left.
+    public static let tabs: [NotchContent] = [.home, .widgets, .files, .timer, .stats]
+    /// Sections that sit with the tools on the right.
+    public static let toolTabs: [NotchContent] = [.clipboard, .apps]
 }
 
 /// Interaction policy is independent of rendering and of animation progress.

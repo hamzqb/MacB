@@ -70,7 +70,9 @@ enum IslandAppearance: String, CaseIterable, Identifiable {
         }
     }
 
-    var usesMaterial: Bool { self == .liquidGlass || self == .blackGlass }
+    /// Whether the transparency slider does anything: Liquid Glass is the
+    /// system's glass as it is, the others let some darkness in.
+    var usesMaterial: Bool { self == .blackGlass || self == .customImage }
 }
 
 enum MediaWidgetStyle: String, CaseIterable, Identifiable {

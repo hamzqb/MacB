@@ -69,8 +69,19 @@ struct NotchView: View {
     /// notch-grown outline. Its size and corners are the only things that
     /// animate for an open or a close, on one spring set by the controller.
     private var island: some View {
+        islandContent
+            .frame(width: presentation.width + 2 * silhouette.shoulder,
+                   height: presentation.height + IslandEnvelope.topBleed, alignment: .top)
+            .clipShape(outline)
+            // The surface sits behind the clipped content, outside any
+            // compositing group: Liquid Glass has to see the desktop behind
+            // the window, and a flattened group would hide it.
+            .background { islandSurface }
+            .overlay(outline.stroke(surfaceStrokeStyle, lineWidth: isCollapsed ? 0 : 0.8))
+    }
+
+    private var islandContent: some View {
         ZStack(alignment: .top) {
-            islandSurface
             Group {
                 if presentation.transition < 1 {
                     content(presentation.previousLayout, isInteractive: false)
@@ -93,15 +104,6 @@ struct NotchView: View {
             .opacity(presentation.isLeaving ? 0 : 1)
             .padding(.top, IslandEnvelope.topBleed)
         }
-        .frame(width: presentation.width + 2 * silhouette.shoulder,
-               height: presentation.height + IslandEnvelope.topBleed, alignment: .top)
-        .clipShape(outline)
-        .overlay(outline.stroke(surfaceStrokeStyle, lineWidth: isCollapsed ? 0 : 0.8))
-        .compositingGroup()
-        // A plain shadow, no coloured glow: the island is an object standing
-        // off the screen, not a light. A collapsed island is flush with the
-        // bezel and casts nothing.
-        .shadow(color: .black.opacity(isCollapsed ? 0 : 0.55), radius: isCollapsed ? 0 : 18, y: isCollapsed ? 0 : 8)
     }
 
     private var silhouette: IslandSilhouette {
@@ -117,57 +119,55 @@ struct NotchView: View {
         return preferences.islandAppearance == .liquidGlass || preferences.islandAppearance == .blackGlass
     }
 
-    /// Pure black by default, like the notch it grows out of. Glass, when
-    /// chosen, is Liquid Glass drawn inside the island's own outline, and
-    /// only once the island is open: the closed strip stays black so it never
-    /// outlines the camera. A gradient keeps the top of the glass black where
-    /// it meets the bezel and lets the lower part show what is behind it.
+    /// Pure black by default, like the notch it grows out of. Liquid Glass
+    /// is Apple's own glass in the island's outline, nothing laid over it;
+    /// Black Glass is the same glass tinted dark, as much as the slider
+    /// says. The closed strip stays black so it never outlines the camera.
     @ViewBuilder private var islandSurface: some View {
         if isCollapsed && collapsedIndicators.isEmpty && presentation.hud == nil {
             // Nothing to show: the island is not there, and the hardware notch
             // is left to be itself.
             Color.clear
-        } else if isCollapsed || reduceTransparency || preferences.islandAppearance == .pureBlack {
-            Color.black
+        } else if isCollapsed || !carriesGlass && preferences.islandAppearance != .customImage {
+            blackSurface
         } else {
             switch preferences.islandAppearance {
             case .pureBlack:
-                Color.black
+                blackSurface
             case .liquidGlass, .blackGlass:
                 glassSurface(dark: preferences.islandAppearance == .blackGlass)
             case .customImage:
                 if let image = background.image {
-                    Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
-                    Color.black.opacity(0.72)
-                    LinearGradient(colors: [.black.opacity(0.5), .clear], startPoint: .top, endPoint: .center)
+                    ZStack {
+                        Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                        Color.black.opacity(0.35 + 0.5 * (1 - preferences.islandTranslucency))
+                    }
+                    .clipShape(outline)
+                    .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
                 } else {
-                    Color.black
+                    blackSurface
                 }
             }
         }
     }
 
-    @ViewBuilder private func glassSurface(dark: Bool) -> some View {
-        if #available(macOS 26.0, *) {
-            ZStack {
-                Color.clear.glassEffect(.clear, in: outline)
-                LinearGradient(stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black.opacity(dark ? 0.86 : 0.74), location: 0.28),
-                    .init(color: .black.opacity(veil(dark: dark)), location: 1)
-                ], startPoint: .top, endPoint: .bottom)
-            }
-        } else {
-            Color.black.opacity(0.94)
-        }
+    /// A plain shadow, no coloured glow: the open island is an object
+    /// standing off the screen. A collapsed island is flush with the bezel
+    /// and casts nothing.
+    private var blackSurface: some View {
+        outline.fill(Color.black)
+            .shadow(color: .black.opacity(isCollapsed ? 0 : 0.5), radius: isCollapsed ? 0 : 18, y: isCollapsed ? 0 : 8)
     }
 
-    /// How much black is left at the bottom of the glass. The slider in
-    /// Settings thins it; it never reaches nothing, because white text needs
-    /// something under it on a white desktop.
-    private func veil(dark: Bool) -> Double {
-        let translucency = min(1, max(0, preferences.islandTranslucency))
-        return (dark ? 0.78 : 0.62) - (dark ? 0.26 : 0.30) * translucency
+    @ViewBuilder private func glassSurface(dark: Bool) -> some View {
+        if #available(macOS 26.0, *) {
+            let glass: Glass = dark
+                ? .regular.tint(.black.opacity(0.25 + 0.6 * (1 - preferences.islandTranslucency)))
+                : .regular
+            Color.clear.glassEffect(glass, in: outline)
+        } else {
+            outline.fill(.ultraThinMaterial)
+        }
     }
 
     /// A faint rim: light along the top edge, almost nothing down the sides.
@@ -236,6 +236,7 @@ struct NotchView: View {
                     // panel are on screen during a cross-fade, and a row that
                     // disagrees with itself shows two pucks at once.
                     IslandNavigation(selected: presentation.layout.content, isEditing: widgets.isEditing,
+                                     battery: batteryReading,
                                      select: select,
                                      toggleEditing: { widgets.isEditing.toggle() },
                                      cameraAction: cameraAction, openSettings: openSettings)
@@ -263,6 +264,10 @@ struct NotchView: View {
         } else {
             switch layout.content {
             case .home:
+                IslandPlayerView(media: media, width: layout.width - 2 * IslandGeometry.horizontalPadding)
+            case .stats:
+                IslandStatsView(monitor: systemMonitor)
+            case .widgets:
                 IslandWidgetStrip(store: widgets, media: media, timer: timer, clipboard: clipboard,
                                   aiActivity: aiActivity, systemMonitor: systemMonitor,
                                   processes: processes, watchers: watchers, recentFiles: recentFiles, tasks: tasks, launcher: launcher,
@@ -303,8 +308,13 @@ struct NotchView: View {
         // The target section, not this copy's: both copies of the panel are
         // on screen during a cross-fade.
         IslandNavigation(selected: presentation.layout.content, part: part, isEditing: widgets.isEditing,
+                         battery: batteryReading,
                          select: select, toggleEditing: { widgets.isEditing.toggle() },
                          cameraAction: cameraAction, openSettings: openSettings)
+    }
+
+    private var batteryReading: (percent: Double, isCharging: Bool)? {
+        systemMonitor.snapshot.batteryPercent.map { ($0, systemMonitor.snapshot.isCharging) }
     }
 
     /// Whether the orb and status can sit beside the camera: only with a notch

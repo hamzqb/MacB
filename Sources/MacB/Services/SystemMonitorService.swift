@@ -24,7 +24,20 @@ struct SystemSnapshot: Equatable {
     @Published private(set) var cpuHistory: [Double] = []
     @Published private(set) var memoryHistory: [Double] = []
 
+    /// The stats page's lines, oldest first. GPU is 0…1; the rates are
+    /// bytes per second. Sampled every second while that page is open and at
+    /// the monitor's slow pace otherwise.
+    @Published private(set) var gpuHistory: [Double] = []
+    @Published private(set) var networkInHistory: [Double] = []
+    @Published private(set) var networkOutHistory: [Double] = []
+    @Published private(set) var diskReadHistory: [Double] = []
+    @Published private(set) var diskWriteHistory: [Double] = []
+
     static let historyLength = 32
+    static let statsHistoryLength = 48
+
+    private var statsVisible = false
+    private var previousCounters: (date: Date, network: (UInt64, UInt64), disk: (UInt64, UInt64))?
 
     private var timer: Timer?
     private var interval: TimeInterval = 8
@@ -42,11 +55,20 @@ struct SystemSnapshot: Equatable {
     /// every eight when it is not. A line that only moves once a minute is not a
     /// line, and polling that fast with nothing on screen is waste.
     func setFastSampling(_ fast: Bool) {
-        let wanted: TimeInterval = fast ? 2 : 8
+        let wanted: TimeInterval = statsVisible ? 1 : (fast ? 2 : 8)
         guard wanted != interval else { return }
         interval = wanted
         guard timer != nil else { return }
         schedule()
+    }
+
+    /// The stats page draws lines a second apart; everything else can wait.
+    func setStatsVisible(_ visible: Bool) {
+        guard visible != statsVisible else { return }
+        statsVisible = visible
+        interval = visible ? 1 : 2
+        if timer != nil { schedule() }
+        if visible { refresh() }
     }
 
     private func schedule() {
@@ -69,6 +91,31 @@ struct SystemSnapshot: Equatable {
         snapshot = next
         append(&cpuHistory, next.cpuUsage / 100)
         append(&memoryHistory, next.totalMemory == 0 ? 0 : Double(next.usedMemory) / Double(next.totalMemory))
+        // Cheap reads (a sysctl and two registry walks), taken at whatever
+        // pace the monitor runs, so the stats page opens onto a full line.
+        sampleCounters()
+    }
+
+    private func sampleCounters() {
+        if let gpu = SystemCounters.gpuUtilization() { appendStat(&gpuHistory, gpu) }
+        let now = Date()
+        let network = SystemCounters.networkBytes()
+        let disk = SystemCounters.diskBytes()
+        defer { previousCounters = (now, (network.received, network.sent), (disk.read, disk.written)) }
+        guard let old = previousCounters else { return }
+        let seconds = max(0.2, now.timeIntervalSince(old.date))
+        func rate(_ new: UInt64, _ previous: UInt64) -> Double {
+            new >= previous ? Double(new - previous) / seconds : 0
+        }
+        appendStat(&networkInHistory, rate(network.received, old.network.0))
+        appendStat(&networkOutHistory, rate(network.sent, old.network.1))
+        appendStat(&diskReadHistory, rate(disk.read, old.disk.0))
+        appendStat(&diskWriteHistory, rate(disk.written, old.disk.1))
+    }
+
+    private func appendStat(_ series: inout [Double], _ value: Double) {
+        series.append(max(0, value))
+        if series.count > Self.statsHistoryLength { series.removeFirst(series.count - Self.statsHistoryLength) }
     }
 
     private func append(_ series: inout [Double], _ value: Double) {

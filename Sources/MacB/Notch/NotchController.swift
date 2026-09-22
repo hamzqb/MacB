@@ -427,7 +427,7 @@ struct IslandToast: Equatable {
         developmentPreviewLocked = false
         deadlineTask?.cancel()
         if preferences.smartNotchEnabled && !media.isPlaying && aiActivity.isActive {
-            state.select(.home)
+            state.select(.widgets)
         } else if preferences.smartNotchEnabled && (shelf.items.isEmpty == false || fileActivity.activeCount > 0) {
             state.select(.files)
         } else {
@@ -475,7 +475,7 @@ struct IslandToast: Equatable {
         case .clipboard: return .clipboard
         case .files: return .shelf
         case .assistant, .briefing, .agent: return nil
-        case .home, .apps, .timer: return nil
+        case .home, .widgets, .stats, .apps, .timer: return nil
         }
     }
 
@@ -510,7 +510,7 @@ struct IslandToast: Equatable {
 
     private func select(_ content: NotchContent) {
         state.select(content)
-        if content == .home { systemMonitor.refresh() }
+        if content == .widgets || content == .stats { systemMonitor.refresh() }
         if content == .files { shelf.refreshAvailability() }
         if let area = protectedArea(for: content), isLocked(area) { requestAccess(area) }
         render()
@@ -788,8 +788,12 @@ struct IslandToast: Equatable {
         }
         switch state.content {
         case .home:
+            return IslandGeometry.sectionWidth(IslandGeometry.playerWidth, screenWidth: screenWidth)
+        case .widgets:
             return IslandGeometry.homeWidth(unitCount: widgets.enabledUnitCount,
                                            isEditing: widgets.isEditing, screenWidth: screenWidth)
+        case .stats:
+            return IslandGeometry.sectionWidth(IslandGeometry.statsWidth, screenWidth: screenWidth)
         case .apps:
             return IslandGeometry.launcherWidth(itemCount: launcher.items.count, screenWidth: screenWidth)
         case .files:
@@ -816,6 +820,10 @@ struct IslandToast: Equatable {
         }
         switch state.content {
         case .home:
+            return IslandGeometry.playerHeight
+        case .stats:
+            return IslandGeometry.statsHeight
+        case .widgets:
             let columns = IslandGeometry.columns(forWidth: width)
             return IslandGeometry.homeHeight(rows: widgets.rows(columns: columns),
                                              isEditing: widgets.isEditing)
@@ -965,8 +973,9 @@ struct IslandToast: Equatable {
         guard panel != nil, let screen = display else { return }
         presentation.indicators = preferences.compactIndicators
         let target = targetLayout()
-        media.setPanelVisible(state.isOpen && (state.content == .home || state.phase == .peek))
-        let homePanelVisible = state.isOpen && state.content == .home
+        media.setPanelVisible(state.isOpen && (state.content == .home || state.content == .widgets || state.phase == .peek))
+        let homePanelVisible = state.isOpen && state.content == .widgets
+        systemMonitor.setStatsVisible(state.isOpen && state.content == .stats)
         systemMonitor.setFastSampling(homePanelVisible)
         processes.setFastSampling(homePanelVisible && widgets.isActive(.topProcesses))
         weather.setPanelVisible(homePanelVisible && widgets.isActive(.weather))

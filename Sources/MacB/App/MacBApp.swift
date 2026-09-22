@@ -438,7 +438,7 @@ private final class Flag: @unchecked Sendable {
             showSettings()
         } else if CommandLine.arguments.contains("--preview-library") {
             widgetLayout.isEditing = true
-            notch.showDevelopmentPreview(phase: .expanded, content: .home)
+            notch.showDevelopmentPreview(phase: .expanded, content: .widgets)
         } else if CommandLine.arguments.contains("--preview-automation") {
             preferences.automationEnabled = true
             UserDefaults.standard.set("Otomasyon", forKey: "settingsPage")
@@ -458,10 +458,10 @@ private final class Flag: @unchecked Sendable {
                 guard let widget = widgetLayout.layout.widgets.first(where: { $0.kind == kind }) else { continue }
                 widgetLayout.setEnabledWithoutSaving(id: widget.id, true)
             }
-            notch.showDevelopmentPreview(phase: .expanded, content: .home)
+            notch.showDevelopmentPreview(phase: .expanded, content: .widgets)
         } else if CommandLine.arguments.contains("--preview-active-timer") {
             islandTimer.start()
-            notch.showDevelopmentPreview(phase: .expanded, content: .home)
+            notch.showDevelopmentPreview(phase: .expanded, content: .timer)
         } else if CommandLine.arguments.contains("--preview-playing") {
             media.showPreviewTrack()
             notch.showDevelopmentPreview(phase: .expanded, content: .home)
@@ -471,6 +471,8 @@ private final class Flag: @unchecked Sendable {
         } else if CommandLine.arguments.contains("--preview-collapsed-timer") {
             islandTimer.start()
             notch.showDevelopmentPreview(phase: .collapsed)
+        } else if CommandLine.arguments.contains("--preview-stats") {
+            notch.showDevelopmentPreview(phase: .expanded, content: .stats)
         } else if CommandLine.arguments.contains("--preview-peek") {
             notch.showDevelopmentPreview(phase: .peek)
         } else if CommandLine.arguments.contains("--preview-files") {
