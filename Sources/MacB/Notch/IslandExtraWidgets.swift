@@ -34,6 +34,8 @@ struct BatteryWidget: View {
                             .font(.system(size: MacBDesign.TypeScale.display, weight: .semibold, design: .rounded))
                             .monospacedDigit()
                             .foregroundStyle(MacBDesign.IslandToken.primaryText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.55)
                         Text("%")
                             .font(.system(size: MacBDesign.TypeScale.body, weight: .medium))
                             .foregroundStyle(MacBDesign.IslandToken.secondaryText)

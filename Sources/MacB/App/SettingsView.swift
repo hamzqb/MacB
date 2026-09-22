@@ -20,6 +20,32 @@ private enum SettingsPage: String, CaseIterable, Identifiable {
         case .doctor: return "stethoscope"
         }
     }
+    /// The sidebar's headings. Ten flat rows read as a list to get through;
+    /// five short groups read as a place with rooms in it.
+    static let groups: [(title: String, pages: [SettingsPage])] = [
+        ("Temel", [.general, .appearance, .widgets]),
+        ("Pencereler", [.windows, .automation]),
+        ("Yapay zekâ", [.watchers]),
+        ("Araçlar", [.tools, .privacy]),
+        ("Sistem", [.permissions, .doctor])
+    ]
+
+    /// What somebody might type looking for this page.
+    var keywords: String {
+        switch self {
+        case .general: return "genel başlangıç kısayol dock menü çubuğu"
+        case .windows: return "pencere yerleşim yarım köşe kısayol düzen"
+        case .widgets: return "widget island ana sayfa kart hava not saat"
+        case .tools: return "araç temizlik önbellek kaldır uygulama pil disk"
+        case .watchers: return "yapay zeka asistan model anahtar takip agent"
+        case .automation: return "otomasyon kural tetikleyici senaryo"
+        case .appearance: return "görünüm cam siyah tema island yüzey ses parlaklık"
+        case .privacy: return "gizlilik yüz kilit pano koruma"
+        case .permissions: return "izin erişilebilirlik kamera ekran kaydı konum"
+        case .doctor: return "doğrulama sağlık sorun tanı"
+        }
+    }
+
     var subtitle: String {
         switch self {
         case .general: return "MacB, çalışma şekline uyum sağlasın."
@@ -121,6 +147,8 @@ struct SettingsView: View {
     /// The name typed for the next scenario.
     @State private var scenarioName = ""
     @AppStorage("settingsPage") private var selectedPage: SettingsPage = .general
+    /// What is typed in the sidebar's search field.
+    @State private var settingsQuery = ""
     @State private var showRemovalConfirmation = false
     @State private var showCacheConfirmation = false
     @State private var processSort: ProcessSort = .memory
@@ -829,7 +857,7 @@ struct SettingsView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 30) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: MacBDesign.Space.regular) {
                 Image(systemName: "rectangle.topthird.inset.filled")
                     .font(.system(size: MacBDesign.TypeScale.heading, weight: .medium))
@@ -840,29 +868,30 @@ struct SettingsView: View {
                 Text("MacB").font(.system(size: MacBDesign.TypeScale.heading, weight: .semibold))
             }
             .padding(.horizontal, MacBDesign.Space.regular)
-            VStack(spacing: MacBDesign.Space.snug) {
-                ForEach(SettingsPage.allCases) { page in
-                    Button { selectedPage = page } label: {
-                        HStack(spacing: MacBDesign.Space.regular) {
-                            Image(systemName: page.icon)
-                                .font(.system(size: MacBDesign.TypeScale.title, weight: .medium))
-                                .foregroundStyle(selectedPage == page ? MacBDesign.accent : MacBDesign.muted)
-                                .frame(width: 19)
-                                .accessibilityHidden(true)
-                            Text(page.rawValue).font(.system(size: MacBDesign.TypeScale.emphasis, weight: selectedPage == page ? .medium : .regular))
-                            Spacer(minLength: 0)
+            searchField
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ForEach(SettingsPage.groups, id: \.title) { group in
+                        let pages = group.pages.filter(matchesSearch)
+                        if !pages.isEmpty {
+                            VStack(alignment: .leading, spacing: MacBDesign.Space.tight) {
+                                Text(group.title)
+                                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+                                    .foregroundStyle(MacBDesign.muted)
+                                    .padding(.horizontal, MacBDesign.Space.comfortable)
+                                ForEach(pages) { page in sidebarRow(page) }
+                            }
                         }
-                        .padding(.horizontal, MacBDesign.Space.comfortable)
-                        .padding(.vertical, MacBDesign.Space.regular)
-                        .contentShape(Rectangle())
-                        .background(selectedPage == page ? MacBDesign.accent.opacity(0.11) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 9))
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selectedPage == page ? [.isSelected] : [])
+                    if SettingsPage.allCases.filter(matchesSearch).isEmpty {
+                        Text("Aramana uyan bir ayar yok.")
+                            .font(.system(size: MacBDesign.TypeScale.caption))
+                            .foregroundStyle(MacBDesign.muted)
+                            .padding(.horizontal, MacBDesign.Space.comfortable)
+                    }
                 }
             }
-            Spacer(minLength: 24)
+            .scrollIndicators(.never)
             VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
                 Text("Ücretsiz ve açık kaynak").font(.system(size: MacBDesign.TypeScale.micro))
                 Text("Sürüm \(AppVersion.current)").font(.system(size: MacBDesign.TypeScale.micro, design: .monospaced))
@@ -1604,29 +1633,95 @@ struct SettingsView: View {
         }
     }
 
+    /// Type what you are looking for rather than open every page in turn.
+    private var searchField: some View {
+        HStack(spacing: MacBDesign.Space.snug) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: MacBDesign.TypeScale.caption))
+                .foregroundStyle(MacBDesign.muted)
+            TextField("Ayarlarda ara", text: $settingsQuery)
+                .textFieldStyle(.plain)
+                .font(.system(size: MacBDesign.TypeScale.caption))
+            if !settingsQuery.isEmpty {
+                Button { settingsQuery = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: MacBDesign.TypeScale.caption))
+                        .foregroundStyle(MacBDesign.muted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Aramayı temizle")
+            }
+        }
+        .padding(.horizontal, MacBDesign.Space.close)
+        .frame(height: 28)
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.horizontal, MacBDesign.Space.tight)
+    }
+
+    private func matchesSearch(_ page: SettingsPage) -> Bool {
+        let query = settingsQuery.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return true }
+        return [page.rawValue, page.subtitle, page.keywords]
+            .contains { $0.lowercased().contains(query) }
+    }
+
+    private func sidebarRow(_ page: SettingsPage) -> some View {
+        Button { selectedPage = page } label: {
+            HStack(spacing: MacBDesign.Space.regular) {
+                Image(systemName: page.icon)
+                    .font(.system(size: MacBDesign.TypeScale.title, weight: .medium))
+                    .foregroundStyle(selectedPage == page ? MacBDesign.accent : MacBDesign.muted)
+                    .frame(width: 19)
+                    .accessibilityHidden(true)
+                Text(page.rawValue)
+                    .font(.system(size: MacBDesign.TypeScale.emphasis,
+                                  weight: selectedPage == page ? .medium : .regular))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, MacBDesign.Space.comfortable)
+            .padding(.vertical, MacBDesign.Space.close)
+            .contentShape(Rectangle())
+            .background(selectedPage == page ? MacBDesign.accent.opacity(0.11) : .clear,
+                        in: RoundedRectangle(cornerRadius: 9))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selectedPage == page ? [.isSelected] : [])
+    }
+
     private var permissionsPage: some View {
         VStack(alignment: .leading, spacing: 22) {
             permissionRow("Erişilebilirlik", detail: "Dock’u algılamak ve seçtiğin pencereyi yönetmek için.",
-                          granted: permissions.accessibility, action: permissions.requestAccessibility)
+                          granted: permissions.accessibility,
+                          usedBy: ["Pencere yerleşimi", "⌘Tab seçici", "Dock önizleme", "Radyal menü", "Otomasyon"],
+                          action: permissions.requestAccessibility)
             rowDivider
             permissionRow("Ekran kaydı", detail: "Açık önizlemelerde pencere görüntülerini göstermek için. Görüntüler diske kaydedilmez.",
-                          granted: permissions.screenCapture, action: permissions.requestScreenCapture)
+                          granted: permissions.screenCapture,
+                          usedBy: ["⌘Tab seçici", "Dock önizleme", "Ekrandaki metni oku"],
+                          action: permissions.requestScreenCapture)
             rowDivider
             permissionRow("Giriş izleme", detail: "⌘ Tab pencere seçicisini çalıştırmak için.",
-                          granted: permissions.inputMonitoring, action: permissions.requestInputMonitoring)
+                          granted: permissions.inputMonitoring,
+                          usedBy: ["⌘Tab seçici", "Kısayollar"],
+                          action: permissions.requestInputMonitoring)
             rowDivider
             permissionRow("Medya denetimi", detail: mediaPermissionDetail,
                           granted: mediaPermissionGranted,
+                          usedBy: ["Oynatıcı", "Şarkı bildirimi"],
                           actionTitle: "Bağlantıları hazırla", action: prepareMediaAccess)
             if let error = [spotify.errorMessage, appleMusic.errorMessage, browserMedia.errorMessage].compactMap({ $0 }).first {
                 message(error, warning: true)
             }
             rowDivider
             permissionRow("Kamera", detail: "Canlı önizleme yalnız sen kamera düğmesine bastığında çalışır.",
-                          granted: camera.isAuthorized, actionTitle: "İzin ver", action: camera.requestAuthorization)
+                          granted: camera.isAuthorized,
+                          usedBy: ["Island'daki ayna", "Yüzle kilit açma"],
+                          actionTitle: "İzin ver", action: camera.requestAuthorization)
             rowDivider
             permissionRow("Konum", detail: "Hava durumu kartında şehir yazmadığında yaklaşık konumu bir kez almak için.",
-                          granted: permissions.location, actionTitle: "İzin ver", action: permissions.requestLocation)
+                          granted: permissions.location,
+                          usedBy: ["Hava durumu widget'ı", "Günaydın brifingi"],
+                          actionTitle: "İzin ver", action: permissions.requestLocation)
             if let error = camera.errorMessage { message(error, warning: true) }
             Text("Bir izin kapalıyken diğer özellikler çalışmaya devam eder. macOS yeniden başlatma isterse MacB’yi kapatıp aç.")
                 .font(.system(size: MacBDesign.TypeScale.caption)).foregroundStyle(MacBDesign.muted)
@@ -2249,11 +2344,20 @@ struct SettingsView: View {
     }
 
     private func permissionRow(_ title: String, detail: String, granted: Bool,
+                               usedBy: [String] = [],
                                actionTitle: String = "İzin ver", action: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
             Text(title).font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
             Text(detail).font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                 .fixedSize(horizontal: false, vertical: true)
+            if !usedBy.isEmpty {
+                // Which parts of MacB stop working without it — an
+                // permission is easier to judge by what it switches off.
+                Text("Kullanan: " + usedBy.joined(separator: ", "))
+                    .font(.system(size: MacBDesign.TypeScale.caption))
+                    .foregroundStyle(MacBDesign.muted.opacity(0.85))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Label(granted ? "İzin verildi" : "İzin bekleniyor",
                       systemImage: granted ? "checkmark.circle.fill" : "circle.dashed")
