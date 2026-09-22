@@ -2251,6 +2251,23 @@ struct CoreTestRunner {
                            "Without a notch the wings should close up")
                 try expect(IslandActivity.allCases.allSatisfy { $0.wing <= 64 }, "A wing is wider than a notch wing should be")
             }),
+            ("SecretDetector: keys and tokens never reach the clipboard history", {
+                // Made-up values in the shapes of real ones.
+                for secret in ["nvapi-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", "sk-proj-abcDEF1234567890ghiJKL",
+                               "AIzaSyA1b2C3d4E5f6G7h8I9j0KlMnOpQrStUv", "ghp_1234567890abcdefABCDEF1234567890ab",
+                               "gsk_Zx8Yw7Vu6Ts5Rq4Po3Nm2Lk1Jh0Gf9Ed8Cb7", "hf_AbCdEfGhIjKlMnOpQrStUvWxYz",
+                               "AKIAIOSFODNN7EXAMPLE", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+                               "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAA\n-----END OPENSSH PRIVATE KEY-----",
+                               "Q2xhdWRlQ29kZVNlY3JldEtleTEyMzQ1Njc4OTBhYmNk"] {
+                    try expect(SecretDetector.looksLikeSecret(secret), "Kept a secret: \(secret.prefix(8))")
+                }
+                for text in ["Merhaba, yarın toplantı saat 10'da.", "https://github.com/Ebullioscopic/Atoll.git",
+                             "68b56f74-f528-8009-8c0b-26a0deaa8829", "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+                             "sk-", "Bu anahtar sk- ile başlıyor, dikkat", "/Users/hamzababal/Desktop/babal projeler/MacB",
+                             "transform:rotate(90deg);", "hamza0babal@gmail.com"] {
+                    try expect(!SecretDetector.looksLikeSecret(text), "Dropped ordinary text: \(text)")
+                }
+            }),
             ("IslandHUD: a level at a glance", {
                 try expect(IslandHUD(kind: .volume, level: 0.8).symbol == "speaker.wave.3.fill", "Loud is not three waves")
                 try expect(IslandHUD(kind: .volume, level: 0.2).symbol == "speaker.wave.1.fill", "Quiet is not one wave")
