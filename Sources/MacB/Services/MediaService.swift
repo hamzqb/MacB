@@ -3,11 +3,12 @@ import SwiftUI
 import Combine
 
 enum MediaSource: String, Identifiable {
-    case none, spotify, appleMusic, browser
+    case none, system, spotify, appleMusic, browser
     var id: String { rawValue }
     var title: String {
         switch self {
         case .none: return "Medya"
+        case .system: return "Şimdi çalıyor"
         case .spotify: return "Spotify"
         case .appleMusic: return "Apple Music"
         case .browser: return "Tarayıcı"
@@ -16,6 +17,7 @@ enum MediaSource: String, Identifiable {
     var symbol: String {
         switch self {
         case .none: return "play.rectangle"
+        case .system: return "play.circle"
         case .spotify: return "music.note"
         case .appleMusic: return "music.quarternote.3"
         case .browser: return "globe"
@@ -43,6 +45,11 @@ final class MediaService: ObservableObject {
     let spotify: SpotifyService
     let appleMusic: AppleMusicService
     let browser: BrowserMediaService
+    /// The system's own Now Playing: every app, browsers included. The
+    /// per-app readers are the fallback for when it cannot answer.
+    let nowPlaying = NowPlayingService()
+    /// The playing app's icon, for the badge on the cover.
+    @Published private(set) var appIcon: NSImage?
     private struct LastPlayable {
         var source: MediaSource
         var title: String
@@ -55,6 +62,7 @@ final class MediaService: ObservableObject {
 
     private var subscriptions: Set<AnyCancellable> = []
     private var lastPlayable: LastPlayable?
+    private var appIconBundle: String?
 
     init(spotify: SpotifyService, appleMusic: AppleMusicService, browser: BrowserMediaService) {
         self.spotify = spotify
@@ -64,6 +72,7 @@ final class MediaService: ObservableObject {
     }
 
     func start() {
+        nowPlaying.start()
         spotify.start()
         appleMusic.start()
         browser.start()
@@ -71,6 +80,7 @@ final class MediaService: ObservableObject {
     }
 
     func stop() {
+        nowPlaying.stop()
         spotify.stop()
         appleMusic.stop()
         browser.stop()
@@ -85,7 +95,7 @@ final class MediaService: ObservableObject {
 
     func requestAuthorization() {
         switch source {
-        case .none, .browser: break
+        case .none, .browser, .system: break
         case .spotify: spotify.requestAuthorization()
         case .appleMusic: appleMusic.requestAuthorization()
         }
@@ -94,6 +104,7 @@ final class MediaService: ObservableObject {
     func playPause() {
         switch source {
         case .none: break
+        case .system: nowPlaying.togglePlayPause()
         case .spotify: spotify.playPause()
         case .appleMusic: appleMusic.playPause()
         case .browser: browser.playPause()
@@ -103,6 +114,7 @@ final class MediaService: ObservableObject {
     func previousTrack() {
         switch source {
         case .none: break
+        case .system: nowPlaying.previousTrack()
         case .spotify: spotify.previousTrack()
         case .appleMusic: appleMusic.previousTrack()
         case .browser: browser.previousTrack()
@@ -112,14 +124,25 @@ final class MediaService: ObservableObject {
     func nextTrack() {
         switch source {
         case .none: break
+        case .system: nowPlaying.nextTrack()
         case .spotify: spotify.nextTrack()
         case .appleMusic: appleMusic.nextTrack()
         case .browser: browser.nextTrack()
         }
     }
 
+    /// Moves playback to `seconds`, where the source allows it.
+    func seek(to seconds: Double) {
+        guard source == .system else { return }
+        nowPlaying.seek(to: seconds)
+        position = seconds
+    }
+
+    var canSeek: Bool { source == .system && duration > 0 }
+
     private func wire() {
         let publishers: [AnyPublisher<Void, Never>] = [
+            nowPlaying.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             spotify.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             appleMusic.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             browser.objectWillChange.map { _ in () }.eraseToAnyPublisher()
@@ -173,6 +196,16 @@ final class MediaService: ObservableObject {
             errorMessage = nil
             position = 0
             duration = 0
+        case .system:
+            title = nowPlaying.title
+            artist = nowPlaying.artist.isEmpty ? (nowPlaying.appName ?? "") : nowPlaying.artist
+            artwork = nowPlaying.artwork
+            isPlaying = nowPlaying.isPlaying
+            isRunning = true
+            isAuthorized = true
+            errorMessage = nil
+            position = nowPlaying.position
+            duration = nowPlaying.duration
         case .spotify:
             title = spotify.trackTitle
             artist = spotify.artist
@@ -207,6 +240,12 @@ final class MediaService: ObservableObject {
         restoreLastPlayableIfNeeded()
         rememberPlayableIfPossible()
         updateTint(previous: previousArtwork)
+        // The icon is looked up once per app, not once per update.
+        let bundle = next == .system ? nowPlaying.bundleID : nil
+        if bundle != appIconBundle {
+            appIconBundle = bundle
+            appIcon = bundle == nil ? nil : nowPlaying.appIcon
+        }
     }
 
 
@@ -235,6 +274,8 @@ final class MediaService: ObservableObject {
     }
 
     private func bestSource() -> MediaSource {
+        // The system knows about every player; it wins whenever it has a track.
+        if nowPlaying.isAvailable, !nowPlaying.title.isEmpty { return .system }
         if spotify.isPlaying { return .spotify }
         if appleMusic.isPlaying { return .appleMusic }
         if browser.isPlaying { return .browser }

@@ -41,6 +41,9 @@ cp Resources/Info.plist "$app_dir/Contents/Info.plist"
 # The local model's GPU kernels, as source: ggml compiles them on this Mac's
 # GPU driver when a model first loads (see scripts/vendor-llama.sh).
 cp -R Vendor/llama-metal "$app_dir/Contents/Resources/ggml-metal"
+# The Now Playing reader /usr/bin/perl loads (see NowPlayingService.swift).
+clang -dynamiclib -fobjc-arc -O2 -mmacosx-version-min=14.0 -framework Foundation \
+    Helpers/NowPlaying/nowplaying.m -o "$app_dir/Contents/Resources/nowplaying.dylib"
 # The build number is the commit count, so every build of a new commit reports a
 # number nobody had to remember to raise. A dirty or gitless tree keeps whatever
 # the checked-in plist says, rather than inventing a number.
@@ -70,6 +73,7 @@ elif security find-certificate -c "MacB Local Signing" >/dev/null 2>&1; then
     default_identity="MacB Local Signing"
 fi
 signing_identity="${MACB_SIGNING_IDENTITY:-$default_identity}"
+codesign --force --sign "$signing_identity" "$app_dir/Contents/Resources/nowplaying.dylib"
 if [[ "$signing_identity" == "-" ]]; then
     # Keep a stable designated requirement for local ad-hoc builds. Without this,
     # every rebuild is identified only by its changing CDHash and macOS drops the
