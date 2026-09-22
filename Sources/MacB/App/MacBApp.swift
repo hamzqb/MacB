@@ -335,7 +335,6 @@ private final class Flag: @unchecked Sendable {
     private lazy var switcher = SwitcherController(windowService: windows, previewService: previews,
                                                    preferences: preferences, favorites: favorites,
                                                    permissions: permissions)
-    private lazy var autoQuit = AutoQuitOnCloseService(preferences: preferences)
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var onboardingWindow: NSWindow?
@@ -398,7 +397,6 @@ private final class Flag: @unchecked Sendable {
             if !granted { self.dock.dismiss(); self.switcher.dismiss() }
             else if self.preferences.switcherEnabled { self.hotKey.register(self.preferences.shortcut) }
             self.windowLayout.setEnabled(granted && self.preferences.windowManagementEnabled)
-            self.autoQuit.setEnabled(granted && self.preferences.quitAppsWhenLastWindowCloses)
         }.store(in: &subscriptions)
         permissions.$inputMonitoring.removeDuplicates().dropFirst().sink { [weak self] granted in
             guard let self, granted, self.preferences.switcherEnabled,
@@ -764,7 +762,6 @@ private final class Flag: @unchecked Sendable {
         if preferences.switcherEnabled { hotKey.register(preferences.shortcut) }
         else { hotKey.unregister(); switcher.dismiss() }
         windowLayout.setEnabled(preferences.windowManagementEnabled)
-        autoQuit.setEnabled(permissions.accessibility && preferences.quitAppsWhenLastWindowCloses)
         radialMenu.setLayout(preferences.radialMenuLayout, perApp: preferences.radialMenuAppLayouts)
         radialMenu.setTranslucency(preferences.radialMenuTranslucency)
         radialMenu.setScale(preferences.radialMenuScale)
@@ -944,7 +941,6 @@ private final class Flag: @unchecked Sendable {
             loginItem: loginItem, aiKey: aiKey, aiCost: aiCost, mail: mail, briefing: briefing, scenarios: scenarios,
             assistant: assistant,
             arrangements: arrangements, keepAwake: keepAwake, watchers: watchers, agentCursor: agentCursor,
-            autoQuit: autoQuit,
             jarvisHotKeyFailed: jarvisHotKey.failed, jarvisMemory: jarvisMemory,
             openPanel: { [weak self] in self?.openNotch() }))
     }

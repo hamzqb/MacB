@@ -673,8 +673,29 @@ struct NotchView: View {
     private var cameraCard: some View {
         Button(action: cameraAction) {
             ZStack(alignment: .bottomTrailing) {
-                if camera.isRunning { CameraPreviewView(service: camera) }
-                else { Color.white.opacity(0.06).overlay(ProgressView().controlSize(.small)) }
+                if camera.isRunning {
+                    CameraPreviewView(service: camera)
+                } else {
+                    Color.white.opacity(0.06).overlay {
+                        if let message = camera.errorMessage {
+                            VStack(spacing: 10) {
+                                Image(systemName: "video.slash")
+                                    .font(.system(size: 22, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.6))
+                                Text(message)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.7))
+                                    .multilineTextAlignment(.center)
+                                Text("Yeniden denemek için dokun")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.white.opacity(0.4))
+                            }
+                            .padding(.horizontal, 24)
+                        } else {
+                            ProgressView().controlSize(.small)
+                        }
+                    }
+                }
                 Label("Büyüt", systemImage: "arrow.up.left.and.arrow.down.right")
                     .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
                     .padding(.horizontal, MacBDesign.Space.close)

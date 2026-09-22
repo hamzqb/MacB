@@ -111,7 +111,6 @@ struct SettingsView: View {
     @ObservedObject var keepAwake: KeepAwakeService
     @ObservedObject var watchers: WatchTaskStore
     @ObservedObject var agentCursor: AgentCursorOverlay
-    @ObservedObject var autoQuit: AutoQuitOnCloseService
     @ObservedObject private var voiceStudio = VoiceStudio.shared
     @ObservedObject private var localModel = LocalModelStore.shared
     var jarvisHotKeyFailed = false
@@ -213,47 +212,6 @@ struct SettingsView: View {
                 if preferences.windowManagementEnabled {
                     message("Erişilebilirlik izni gerekir. Kısayollar her uygulamadaki etkin pencere üzerinde çalışır.")
                 }
-            }
-            section("Son pencere kapanınca çık", "xmark.app") {
-                settingToggle("Seçili uygulamaları Dock'ta açık bırakma",
-                              detail: "Listendeki uygulamanın son penceresi kapanınca MacB onu nazikçe kapatır. Kaydedilmemiş iş varsa macOS yine sorar.",
-                              isOn: $preferences.quitAppsWhenLastWindowCloses)
-                HStack(spacing: MacBDesign.Space.regular) {
-                    Menu("Uygulama ekle") {
-                        let candidates = autoQuit.candidates
-                        if candidates.isEmpty { Text("Eklenebilecek açık uygulama yok") }
-                        ForEach(candidates) { app in
-                            Button(app.name) { autoQuit.add(bundleIdentifier: app.bundleIdentifier, name: app.name) }
-                        }
-                    }
-                    .fixedSize()
-                    .disabled(!permissions.accessibility)
-                    if !permissions.accessibility { Text("Erişilebilirlik izni gerekir.").foregroundStyle(MacBDesign.muted) }
-                    Spacer(minLength: 8)
-                }
-                if autoQuit.trackedApps.isEmpty {
-                    message("Henüz uygulama yok. Otomatik kapansın istediğin uygulamayı açıp buradan ekle.")
-                } else {
-                    VStack(spacing: MacBDesign.Space.snug) {
-                        ForEach(autoQuit.trackedApps) { app in
-                            HStack(spacing: MacBDesign.Space.regular) {
-                                if let icon = app.icon {
-                                    Image(nsImage: icon).resizable().frame(width: 24, height: 24)
-                                } else {
-                                    Image(systemName: "app").frame(width: 24, height: 24)
-                                }
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(app.name).font(.system(size: MacBDesign.TypeScale.body, weight: .semibold))
-                                    Text(app.bundleIdentifier).font(.system(size: MacBDesign.TypeScale.micro, design: .monospaced)).foregroundStyle(MacBDesign.muted)
-                                }
-                                Spacer(minLength: 8)
-                                Button("Çıkar") { autoQuit.remove(app) }
-                            }
-                            .padding(.vertical, MacBDesign.Space.hair)
-                        }
-                    }
-                }
-                if let note = autoQuit.lastMessage { message(note) }
             }
             if preferences.windowManagementEnabled {
                     section("Temel yerleşimler", "rectangle.split.2x1") {

@@ -11,6 +11,7 @@ import SwiftUI
     let session = AVCaptureSession()
     private let queue = DispatchQueue(label: "MacB.CameraPreview", qos: .userInitiated)
     private var generation = 0
+    private var attempts = 0
     private var wantsRunning = false
     private var observers: [NSObjectProtocol] = []
 
@@ -38,9 +39,18 @@ import SwiftUI
     }
 
     /// Invoke only after the user explicitly chooses to open the camera.
+    ///
+    /// A second call while the preview is already up does nothing; a second
+    /// call after a start that never produced a frame — another app had the
+    /// camera, the Mac woke with the session in a bad state — starts over
+    /// from a clean session instead of waiting on the old one forever.
     func start() {
-        guard !wantsRunning else { return }
+        if wantsRunning {
+            guard !isRunning else { return }
+            tearDown()
+        }
         wantsRunning = true
+        attempts = 0
         generation += 1
         let token = generation
         authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
@@ -83,10 +93,21 @@ import SwiftUI
 
     func stop() {
         wantsRunning = false
+        tearDown()
+    }
+
+    /// Stops the session and forgets its inputs, so the next start builds the
+    /// device again rather than reusing one that has gone away.
+    private func tearDown() {
         generation += 1
         isRunning = false
         let session = session
-        queue.async { if session.isRunning { session.stopRunning() } }
+        queue.async {
+            if session.isRunning { session.stopRunning() }
+            session.beginConfiguration()
+            session.inputs.forEach(session.removeInput)
+            session.commitConfiguration()
+        }
     }
 
     private func beginCapture(token: Int) {
@@ -114,7 +135,18 @@ import SwiftUI
                 Task { @MainActor in
                     guard let self, self.generation == token, self.wantsRunning else { return }
                     self.isRunning = running
-                    if !running { self.wantsRunning = false; self.errorMessage = "Kamera başlatılamadı. Tekrar deneyebilirsin." }
+                    guard !running else { self.attempts = 0; return }
+                    // One silent retry: the camera is often busy for a moment
+                    // after another app lets go of it.
+                    if self.attempts < 1 {
+                        self.attempts += 1
+                        self.wantsRunning = false
+                        self.stop()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.start() }
+                    } else {
+                        self.wantsRunning = false
+                        self.errorMessage = "Kamera başlatılamadı. Başka bir uygulama kullanıyor olabilir."
+                    }
                 }
             } catch {
                 let message = error.localizedDescription
