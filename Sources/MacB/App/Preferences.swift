@@ -105,6 +105,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     @Published var notchEnabled: Bool { didSet { defaults.set(notchEnabled, forKey: "notchEnabled") } }
     @Published var switcherEnabled: Bool { didSet { defaults.set(switcherEnabled, forKey: "switcherEnabled") } }
     @Published var windowManagementEnabled: Bool { didSet { defaults.set(windowManagementEnabled, forKey: "windowManagementEnabled") } }
+    @Published var quitAppsWhenLastWindowCloses: Bool { didSet { defaults.set(quitAppsWhenLastWindowCloses, forKey: "quitAppsWhenLastWindowCloses") } }
+    @Published var quitOnCloseBundleIDs: [String] { didSet { defaults.set(quitOnCloseBundleIDs, forKey: "quitOnCloseBundleIDs") } }
     @Published var compactIndicators: Bool { didSet { defaults.set(compactIndicators, forKey: "compactIndicators") } }
     @Published var animationsEnabled: Bool { didSet { defaults.set(animationsEnabled, forKey: "animationsEnabled") } }
     @Published var smartNotchEnabled: Bool { didSet { defaults.set(smartNotchEnabled, forKey: "smartNotchEnabled") } }
@@ -320,6 +322,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         self.defaults = defaults
         defaults.register(defaults: ["dockEnabled": true, "notchEnabled": true, "switcherEnabled": true,
                                     "windowManagementEnabled": false,
+                                    "quitAppsWhenLastWindowCloses": false,
+                                    "quitOnCloseBundleIDs": [],
                                     "compactIndicators": true, "animationsEnabled": true,
                                     "smartNotchEnabled": true, "favoriteWindowsEnabled": true,
                                     "recentFilesEnabled": false, "peekEnabled": true,
@@ -359,6 +363,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         notchEnabled = defaults.bool(forKey: "notchEnabled")
         switcherEnabled = defaults.bool(forKey: "switcherEnabled")
         windowManagementEnabled = defaults.bool(forKey: "windowManagementEnabled")
+        quitAppsWhenLastWindowCloses = defaults.bool(forKey: "quitAppsWhenLastWindowCloses")
+        quitOnCloseBundleIDs = defaults.stringArray(forKey: "quitOnCloseBundleIDs") ?? []
         compactIndicators = defaults.bool(forKey: "compactIndicators")
         animationsEnabled = defaults.bool(forKey: "animationsEnabled")
         smartNotchEnabled = defaults.bool(forKey: "smartNotchEnabled")

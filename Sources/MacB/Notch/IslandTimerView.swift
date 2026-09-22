@@ -9,30 +9,66 @@ struct IslandTimerView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
-            ruler
             HStack(spacing: MacBDesign.Space.comfortable) {
-                Text(timer.isActive ? timer.remainingText : timer.selectionText)
-                    .font(.system(size: MacBDesign.TypeScale.display, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(MacBDesign.IslandToken.accent)
-                    .frame(minWidth: 120, alignment: .leading)
-                    .accessibilityLabel(timer.isActive ? "Kalan süre \(timer.remainingText)" : "Seçilen süre \(timer.selectionText)")
-                ForEach(TimerService.presets, id: \.self) { minutes in
-                    Button { timer.selectedMinutes = Double(minutes) } label: {
-                        Text("\(minutes) dk")
-                            .font(.system(size: MacBDesign.TypeScale.caption, weight: .medium))
-                            .foregroundStyle(Int(timer.selectedMinutes) == minutes ? Color.black : .white)
-                            .padding(.horizontal, MacBDesign.Space.comfortable)
-                            .frame(height: MacBDesign.IslandToken.pillHeight)
-                            .background(Int(timer.selectedMinutes) == minutes ? Color.white : MacBDesign.IslandToken.navFill,
-                                        in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(minutes) dakika")
+                timerHero
+                VStack(alignment: .leading, spacing: MacBDesign.Space.close) {
+                    ruler
+                    presetRow
                 }
-                Spacer(minLength: 0)
-                primaryAction
             }
+        }
+        .padding(MacBDesign.Space.close)
+        .background {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(LinearGradient(colors: [.white.opacity(0.10), .white.opacity(0.045), .black.opacity(0.10)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+        }
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .strokeBorder(LinearGradient(colors: [.white.opacity(0.22), MacBDesign.IslandToken.accent.opacity(0.15), .white.opacity(0.05)],
+                                         startPoint: .top, endPoint: .bottom), lineWidth: 0.8))
+    }
+
+
+    private var timerHero: some View {
+        ZStack {
+            Circle().fill(MacBDesign.IslandToken.accent.opacity(0.14))
+            Circle().stroke(MacBDesign.IslandToken.Fill.raised, lineWidth: 6)
+            Circle()
+                .trim(from: 0, to: timer.isActive ? CGFloat(timer.progress) : CGFloat(max(0.02, timer.selectedMinutes / TimerService.maximumMinutes)))
+                .stroke(MacBDesign.IslandToken.accent, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .motion(MacBDesign.Motion.progress, value: timer.progress)
+            VStack(spacing: MacBDesign.Space.hair) {
+                Text(timer.isActive ? timer.remainingText : timer.selectionText)
+                    .font(.system(size: MacBDesign.TypeScale.title, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(MacBDesign.IslandToken.primaryText)
+                Text(timer.isActive ? (timer.isRunning ? "akıyor" : "durdu") : "seç")
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+                    .foregroundStyle(MacBDesign.IslandToken.accent)
+            }
+        }
+        .frame(width: 94, height: 94)
+        .accessibilityLabel(timer.isActive ? "Kalan süre \(timer.remainingText)" : "Seçilen süre \(timer.selectionText)")
+    }
+
+    private var presetRow: some View {
+        HStack(spacing: MacBDesign.Space.snug) {
+            ForEach(TimerService.presets, id: \.self) { minutes in
+                Button { timer.selectedMinutes = Double(minutes) } label: {
+                    Text("\(minutes) dk")
+                        .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                        .foregroundStyle(Int(timer.selectedMinutes) == minutes ? Color.black : .white)
+                        .padding(.horizontal, MacBDesign.Space.comfortable)
+                        .frame(height: MacBDesign.IslandToken.pillHeight)
+                        .background(Int(timer.selectedMinutes) == minutes ? Color.white : MacBDesign.IslandToken.navFill,
+                                    in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(minutes) dakika")
+            }
+            Spacer(minLength: 0)
+            primaryAction
         }
     }
 
@@ -100,7 +136,7 @@ struct IslandTimerView: View {
                     }
             )
         }
-        .frame(height: 56)
+        .frame(height: 46)
         .accessibilityElement()
         .accessibilityLabel("Süre cetveli")
         .accessibilityValue(timer.selectionText)

@@ -54,6 +54,10 @@ struct NotchView: View {
     var body: some View {
         ZStack(alignment: .top) {
             islandSurface
+            IslandAmbientGlow(phase: presentation.layout.phase,
+                              tint: media.tint,
+                              isActive: media.isPlaying || assistant.isActive || timer.isActive)
+                .clipShape(islandShape)
             if presentation.transition < 1 {
                 content(presentation.previousLayout, isInteractive: false)
                     .opacity(1 - presentation.transition)
@@ -134,7 +138,7 @@ struct NotchView: View {
                 if let image = background.image {
                     Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
                     // Widgets and labels are white; the picture has to stay behind them.
-                    Color.black.opacity(0.55)
+                    Color.black.opacity(0.76)
                     glassSheen
                 } else {
                     Color.black
@@ -163,8 +167,11 @@ struct NotchView: View {
     /// and anything added on top of that was the reason the "glass" still read
     /// as a black bar over a dark desktop.
     private func veilOpacity(tinted: Bool) -> Double {
-        let heaviest: Double = tinted ? 0.62 : 0.46
-        return heaviest * (1 - translucency)
+        // The island can feel like glass without letting the page behind it bleed
+        // through every card. Keep a real OLED veil even at high translucency.
+        let heaviest: Double = tinted ? 0.88 : 0.76
+        let floor: Double = tinted ? 0.42 : 0.34
+        return max(floor, heaviest * (1 - translucency * 0.55))
     }
 
     private var translucency: Double {
@@ -181,10 +188,10 @@ struct NotchView: View {
     /// that, and the fraction shrinks as the sheet gets thinner.
     private var glassSheen: some View {
         LinearGradient(stops: [
-            .init(color: .white.opacity(0.16 - 0.05 * translucency), location: 0),
-            .init(color: .white.opacity(0.05 - 0.02 * translucency), location: 0.22),
-            .init(color: .clear, location: 0.55),
-            .init(color: .black.opacity(0.22 * (1 - translucency) + 0.03), location: 1)
+            .init(color: .white.opacity(0.10 - 0.03 * translucency), location: 0),
+            .init(color: .white.opacity(0.035 - 0.01 * translucency), location: 0.24),
+            .init(color: .clear, location: 0.58),
+            .init(color: .black.opacity(0.30 * (1 - translucency) + 0.10), location: 1)
         ], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
@@ -330,33 +337,58 @@ struct NotchView: View {
             Color.clear.allowsHitTesting(false).accessibilityHidden(true)
         } else {
             Button(action: open) {
-                HStack(spacing: MacBDesign.Space.regular) {
+                HStack(spacing: MacBDesign.Space.snug) {
                     Spacer(minLength: 0)
                     ForEach(collapsedIndicators, id: \.label) { indicator in
-                        HStack(spacing: MacBDesign.Space.tight) {
-                            if indicator.isAssistant {
-                                JarvisMiniOrb(state: assistant.state,
-                                              level: assistant.state == .speaking ? assistant.outputLevel
-                                                                                  : assistant.inputLevel)
-                            } else if indicator.isPlayingMedia {
-                                EqualizerBars(tint: indicator.tint, isPlaying: media.isPlaying, height: 10)
-                            } else {
-                                Image(systemName: indicator.symbol).font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
-                            }
-                            Text(indicator.value).font(.system(size: MacBDesign.TypeScale.micro, weight: .medium)).monospacedDigit()
-                        }
-                        .foregroundStyle(indicator.tint)
+                        collapsedPill(indicator)
+                            .transition(.scale(scale: 0.82).combined(with: .opacity))
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(.horizontal, MacBDesign.Space.regular)
+                .padding(.horizontal, MacBDesign.Space.snug)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background {
+                    Capsule()
+                        .fill(LinearGradient(colors: [Color.white.opacity(0.07), Color.white.opacity(0.025), .black.opacity(0.08)],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .padding(.horizontal, MacBDesign.Space.tight)
+                        .padding(.vertical, MacBDesign.Space.hair)
+                }
                 .overlay(alignment: .bottom) { statusLine }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(collapsedIndicators.map { "\($0.label) \($0.value)" }.joined(separator: ", "))
         }
+    }
+
+
+    private func collapsedPill(_ indicator: CollapsedIndicator) -> some View {
+        HStack(spacing: MacBDesign.Space.tight) {
+            if indicator.isAssistant {
+                JarvisMiniOrb(state: assistant.state,
+                              level: assistant.state == .speaking ? assistant.outputLevel : assistant.inputLevel)
+                    .frame(width: 13, height: 13)
+            } else if indicator.isPlayingMedia {
+                EqualizerBars(tint: indicator.tint, isPlaying: media.isPlaying, height: 10)
+                    .frame(width: 13)
+            } else {
+                Image(systemName: indicator.symbol)
+                    .font(.system(size: MacBDesign.TypeScale.micro, weight: .bold))
+            }
+            Text(indicator.value)
+                .font(.system(size: MacBDesign.TypeScale.micro, weight: .semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
+        .foregroundStyle(indicator.tint)
+        .padding(.horizontal, MacBDesign.Space.snug)
+        .frame(height: 22)
+        .background(indicator.tint.opacity(0.12), in: Capsule())
+        .overlay(Capsule().strokeBorder(indicator.tint.opacity(0.20), lineWidth: 0.7))
+        .shadow(color: indicator.tint.opacity(0.12), radius: 7, y: 3)
+        .motion(MacBDesign.Motion.atollFluid, value: indicator.value)
     }
 
     /// A hairline along the bottom of the closed island, filled as far as

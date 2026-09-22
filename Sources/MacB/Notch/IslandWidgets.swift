@@ -348,7 +348,6 @@ struct WidgetCard<Content: View>: View {
     var isActive = false
     @ViewBuilder var content: Content
     @Environment(\.islandWidgetSpan) private var span
-    @Environment(\.islandUsesGlass) private var usesGlass
 
     var body: some View {
         content
@@ -357,28 +356,34 @@ struct WidgetCard<Content: View>: View {
             .padding(.vertical, MacBDesign.Space.regular)
             .background(cardSurface)
             .clipShape(RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous))
+            .overlay(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
+                    .fill(RadialGradient(colors: [.white.opacity(isActive ? 0.13 : 0.075), .clear],
+                                         center: .topLeading, startRadius: 0, endRadius: 145))
+                    .allowsHitTesting(false)
+            }
             .overlay(RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius, style: .continuous)
-                .strokeBorder(MacBDesign.IslandToken.Fill.raised.opacity(isActive ? 0.9 : 0.45), lineWidth: 0.7))
-            .shadow(color: .black.opacity(isActive ? 0.28 : 0.16), radius: isActive ? 12 : 7, y: isActive ? 5 : 3)
+                .strokeBorder(LinearGradient(colors: [.white.opacity(isActive ? 0.34 : 0.20),
+                                                      .white.opacity(0.055),
+                                                      .black.opacity(0.28)],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing),
+                              lineWidth: 0.85))
+            .shadow(color: .black.opacity(isActive ? 0.42 : 0.30), radius: isActive ? 18 : 12, y: isActive ? 9 : 6)
     }
 
-    /// Real glass where the system has it, a flat fill where it does not.
-    ///
-    /// Clear glass rather than regular: regular frosts, and a frosted card on a
-    /// frosted panel is two sheets of fog with nothing to see through. Clear
-    /// refracts instead, so the card takes an edge and a highlight from whatever
-    /// the panel is showing and the text on it stays sharp.
-    ///
-    /// The glass goes behind the content rather than around it. Wrapping the
-    /// card in it pulls the card's own text into the material and smears it.
+    /// A dark card with a lit top edge. It used to be clear Liquid Glass,
+    /// which let whatever was behind the island show through every card and
+    /// fight the white text; a painted gradient keeps the depth and the text
+    /// stays readable on any wallpaper.
     @ViewBuilder private var cardSurface: some View {
-        if usesGlass, #available(macOS 26.0, *) {
-            Color.clear.glassEffect(
-                Glass.clear.tint(.white.opacity(isActive ? 0.12 : 0.06)).interactive(),
-                in: RoundedRectangle(cornerRadius: MacBDesign.IslandToken.widgetRadius,
-                                     style: .continuous))
-        } else {
-            isActive ? MacBDesign.IslandToken.widgetActiveFill : MacBDesign.IslandToken.widgetFill
+        ZStack {
+            LinearGradient(colors: [
+                Color.white.opacity(isActive ? 0.105 : 0.060),
+                Color.black.opacity(isActive ? 0.50 : 0.58),
+                Color.black.opacity(0.72)
+            ], startPoint: .topLeading, endPoint: .bottomTrailing)
+            LinearGradient(colors: [Color.clear, MacBDesign.IslandToken.accent.opacity(isActive ? 0.12 : 0.035)],
+                           startPoint: .top, endPoint: .bottomTrailing)
         }
     }
 }

@@ -44,27 +44,39 @@ struct IslandNavigation: View {
 
     var body: some View {
         HStack(spacing: MacBDesign.Space.close) {
-            ForEach(NotchContent.tabs, id: \.rawValue) { section in
-                circleButton(section.symbol, label: section.title,
-                             isSelected: section == selected) { select(section) }
+            IslandGlassShelf(isSelected: true) {
+                HStack(spacing: MacBDesign.Space.tight) {
+                    ForEach(NotchContent.tabs, id: \.rawValue) { section in
+                        circleButton(section.symbol, label: section.title,
+                                     isSelected: section == selected) { select(section) }
+                    }
+                }
+                .padding(MacBDesign.Space.tight)
             }
             Spacer(minLength: 12)
-            circleButton("square.grid.2x2", label: isEditing ? "Düzenlemeyi bitir" : "Widget'ları düzenle",
-                         isSelected: isEditing, action: toggleEditing)
-            circleButton("camera.fill", label: "Kamera", isSelected: false, action: cameraAction)
-            circleButton("gearshape.fill", label: "Ayarlar", isSelected: false, action: openSettings)
+            IslandGlassShelf(isSelected: isEditing) {
+                HStack(spacing: MacBDesign.Space.tight) {
+                    circleButton("square.grid.2x2", label: isEditing ? "Düzenlemeyi bitir" : "Widget'ları düzenle",
+                                 isSelected: isEditing, action: toggleEditing)
+                    circleButton("camera.fill", label: "Kamera", isSelected: false, action: cameraAction)
+                    circleButton("gearshape.fill", label: "Ayarlar", isSelected: false, action: openSettings)
+                }
+                .padding(MacBDesign.Space.tight)
+            }
         }
         .frame(height: IslandGeometry.navigationHeight)
-        .motion(MacBDesign.Motion.snap, value: selected)
+        .motion(MacBDesign.Motion.atollFluid, value: selected)
+        .motion(MacBDesign.Motion.atollFluid, value: isEditing)
     }
 
     private func circleButton(_ symbol: String, label: String, isSelected: Bool,
                               action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .bold))
                 .foregroundStyle(isSelected ? Color.black : MacBDesign.IslandToken.primaryText)
                 .frame(width: MacBDesign.IslandToken.navButton, height: MacBDesign.IslandToken.navButton)
+                .scaleEffect(isSelected ? 1.02 : 1)
                 .background {
                     // One puck for the whole row. Only the selected button owns
                     // it, so SwiftUI moves the same circle rather than drawing a
@@ -74,7 +86,7 @@ struct IslandNavigation: View {
                         Circle().fill(MacBDesign.IslandToken.navSelectedFill)
                             .matchedGeometryEffect(id: "navPuck", in: puck)
                     } else {
-                        Circle().fill(MacBDesign.IslandToken.navFill)
+                        Circle().fill(Color.white.opacity(0.055))
                     }
                 }
         }
