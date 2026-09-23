@@ -357,6 +357,12 @@ import Security
                     print("browser: \(page.browser) title: \(page.title)")
                     print("fields: \(page.fields.count) buttons: \(page.buttons.count) links: \(page.links.count)")
                     for button in page.buttons.prefix(8) { print("  [button] \(button.text)") }
+                    for link in page.links.prefix(8) { print("  [link] \(link.text)") }
+                    if let target = value(after: "--click") {
+                        let result = try await BrowserAgentService().perform(action: "click", target: target,
+                                                                            value: nil)
+                        print("click “\(target)”: \(result.ok ? "ok" : "MISS") — \(result.message)")
+                    }
                 } catch {
                     print("MISS: \(error.localizedDescription)")
                 }

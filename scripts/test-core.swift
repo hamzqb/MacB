@@ -2610,6 +2610,16 @@ struct CoreTestRunner {
                 try expect(function?["arguments"] as? String == "{\"number\":7}", "The arguments were lost")
                 try expect(clean[2]["tool_call_id"] as? String == "call_1", "The answer lost the call it belongs to")
             }),
+            ("A name going into a browser script stays text, never code", {
+                try expect(JavaScriptLiteral.string("Learn more") == "\"Learn more\"",
+                           "An ordinary name was mangled")
+                let quoted = JavaScriptLiteral.string("say \"hi\"")
+                try expect(quoted == "\"say \\\"hi\\\"\"", "A quote was left to close the string: \(quoted)")
+                try expect(JavaScriptLiteral.string("a\\b") == "\"a\\\\b\"", "A backslash was left as an escape")
+                try expect(!JavaScriptLiteral.string("</script>").contains("<"), "A tag could close the script")
+                try expect(!JavaScriptLiteral.string("line\nbreak").contains("\n"), "A newline broke the literal")
+                try expect(JavaScriptLiteral.string("ğüşiİı") == "\"ğüşiİı\"", "Turkish letters were escaped needlessly")
+            }),
             ("Nemotron models are asked not to think out loud", {
                 let body = AIChatStream.requestBody(question: "merhaba", model: "nvidia/nemotron-3-super-120b-a12b")
                 let options = body["chat_template_kwargs"] as? [String: Any]

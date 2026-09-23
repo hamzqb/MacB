@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Foundation
+import MacBCore
 
 private enum AgentBrowserKind: Sendable { case chromium, safari }
 
@@ -170,10 +171,7 @@ final class BrowserAgentService {
         "\"" + value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
     }
 
-    private static func jsString(_ value: String) -> String {
-        let data = try? JSONSerialization.data(withJSONObject: value)
-        return data.flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
-    }
+    private static func jsString(_ value: String) -> String { JavaScriptLiteral.string(value) }
 
     private static func readJavaScript(limit: Int) -> String {
         """
