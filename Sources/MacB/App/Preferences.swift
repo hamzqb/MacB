@@ -165,6 +165,10 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     /// The free engine thinks with the downloaded local model first, when
     /// there is one. On by default: it is free, private and needs no internet.
     /// Volume and brightness changes shown in the island.
+    /// Whether macOS's own volume and brightness panel stays quiet while
+    /// MacB shows the same level in the island. Restored whenever MacB is not
+    /// running, so nothing is ever left switched off behind the user's back.
+    @Published var hideSystemHUD: Bool { didSet { defaults.set(hideSystemHUD, forKey: "hideSystemHUD") } }
     @Published var islandHUDEnabled: Bool { didSet { defaults.set(islandHUDEnabled, forKey: "islandHUDEnabled") } }
     @Published var localModelEnabled: Bool { didSet { defaults.set(localModelEnabled, forKey: "localModelEnabled") } }
 
@@ -380,6 +384,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         freeEngineReadsScreen = defaults.bool(forKey: "freeEngineReadsScreen")
         localModelEnabled = defaults.object(forKey: "localModelEnabled") as? Bool ?? true
         islandHUDEnabled = defaults.object(forKey: "islandHUDEnabled") as? Bool ?? true
+        hideSystemHUD = defaults.object(forKey: "hideSystemHUD") as? Bool ?? true
         briefingVoice = defaults.string(forKey: "briefingVoice") ?? ""
         mailEnabled = defaults.bool(forKey: "mailEnabled")
         returnSummaryEnabled = defaults.object(forKey: "returnSummaryEnabled") as? Bool ?? true

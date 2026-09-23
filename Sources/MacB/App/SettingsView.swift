@@ -1350,6 +1350,9 @@ struct SettingsView: View {
                 settingToggle("Sistem değişikliklerini göster",
                               detail: "Şarkı geçince ya da şarj takılınca island kısa süre açılıp gösterir.",
                               isOn: $preferences.islandEventsEnabled)
+                settingToggle("macOS'un kendi göstergesini gizle",
+                              detail: "Ses ve parlaklık yalnız island'da görünür. MacB kapalıyken macOS'un göstergesi kendiliğinden geri gelir.",
+                              isOn: $preferences.hideSystemHUD)
                 settingToggle("Ses ve parlaklığı island'da göster",
                               detail: "Ses ya da parlaklık değişince çentik iki yana açılıp seviyeyi gösterir. macOS'un kendi göstergesi de görünmeye devam eder.",
                               isOn: $preferences.islandHUDEnabled)

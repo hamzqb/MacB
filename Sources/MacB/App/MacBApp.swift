@@ -345,6 +345,7 @@ private final class Flag: @unchecked Sendable {
     private var updateMenuItem: NSMenuItem?
     private var subscriptions: Set<AnyCancellable> = []
     private var workspaceObservers: [NSObjectProtocol] = []
+    private var signalSources: [DispatchSourceSignal] = []
     private var isSleeping = false
     private var isSessionInactive = false
 
@@ -360,6 +361,7 @@ private final class Flag: @unchecked Sendable {
         // An older MacB could leave the macOS indicator helper stopped. Undo it
         // once, before anything else, so nobody is left without indicators.
         SystemHUDRepair.resumeIndicatorHelper()
+        installTerminationSafetyNet()
         buildMainMenu()
         buildMenu()
         hotKey.onPress = { [weak self] backwards in
@@ -1114,7 +1116,26 @@ private final class Flag: @unchecked Sendable {
         deliverAgentReports()
     }
 
+    /// macOS's own volume panel must come back even when MacB is killed
+    /// rather than quit. AppKit does not run `applicationWillTerminate` for a
+    /// signal, so the signal is handled here as well.
+    private func installTerminationSafetyNet() {
+        for number in [SIGTERM, SIGINT, SIGHUP] {
+            signal(number, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+            source.setEventHandler {
+                SystemHUDRepair.resumeIndicatorHelper()
+                NSApp.terminate(nil)
+            }
+            source.resume()
+            signalSources.append(source)
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
+        // Whatever else happens on the way out, macOS gets its own volume and
+        // brightness panel back.
+        SystemHUDRepair.resumeIndicatorHelper()
         speech.cancel()
         jarvis.stop()
         keepAwake.stop()

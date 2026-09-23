@@ -208,10 +208,12 @@ struct IslandToast: Equatable {
         }
         levels.onChange = { [weak self] hud in self?.showHUD(hud) }
         if preferences.islandHUDEnabled { levels.start() }
+        levels.hidesSystemIndicator = preferences.islandHUDEnabled && preferences.hideSystemHUD
         preferences.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self else { return }
                 if self.preferences.islandHUDEnabled { self.levels.start() } else { self.levels.stop() }
+                self.levels.hidesSystemIndicator = self.preferences.islandHUDEnabled && self.preferences.hideSystemHUD
                 self.render()
             }
         }.store(in: &subscriptions)

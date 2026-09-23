@@ -10,6 +10,10 @@ enum MacBDesign {
     static let accent = Color(nsColor: .systemOrange)
     static let cardFill = Color.primary.opacity(0.04)
     static let cardStroke = Color.primary.opacity(0.06)
+    /// A settings group: enough fill to read as one container, not enough to
+    /// read as a raised card.
+    static let groupFill = Color.primary.opacity(0.045)
+    static let groupStroke = Color.primary.opacity(0.055)
     static let controlBackground = Color(nsColor: .controlBackgroundColor)
     static let selectedBackground = Color(nsColor: .selectedContentBackgroundColor)
     static let separator = Color(nsColor: .separatorColor)

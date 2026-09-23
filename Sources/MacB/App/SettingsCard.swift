@@ -2,47 +2,31 @@ import SwiftUI
 
 /// One titled group on a settings page.
 ///
-/// Lives on its own so every page draws the same card. The heading carries a
-/// glyph in a tinted tile, which is what turns a page of stacked grey boxes
-/// into a list somebody can scan; the glyph is passed in rather than looked up
-/// from the title, so a renamed section cannot quietly lose it.
+/// The heading sits above the group in quiet type, and the controls sit in one
+/// flat container: no tinted glyph tile, no gradient, no shadow. A page of
+/// settings is a list to be scanned, and every box that decorates itself is
+/// one more thing between somebody and the switch they came for.
 struct SettingsCard<Content: View>: View {
     let title: String
     var symbol: String = "square.grid.2x2"
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: MacBDesign.Space.regular) {
-            HStack(spacing: MacBDesign.Space.close) {
-                Image(systemName: symbol)
-                    .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
-                    .foregroundStyle(MacBDesign.accent)
-                    .frame(width: 22, height: 22)
-                    .background(MacBDesign.accent.opacity(0.13),
-                                in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                Text(title)
-                    .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-            }
+        VStack(alignment: .leading, spacing: MacBDesign.Space.close) {
+            Text(title)
+                .font(.system(size: MacBDesign.TypeScale.caption, weight: .semibold))
+                .foregroundStyle(MacBDesign.muted)
+                .textCase(.uppercase)
+                .kerning(0.4)
+                .padding(.leading, MacBDesign.Space.tight)
+                .accessibilityAddTraits(.isHeader)
             VStack(alignment: .leading, spacing: 14) { content }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(MacBDesign.Space.loose)
-                .background(
-                    LinearGradient(colors: [MacBDesign.cardFill.opacity(1.35), MacBDesign.cardFill.opacity(0.72)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
-                )
-                // A light fall from the top edge, the same idea as the island
-                // cards, so the two halves of MacB read as one product.
+                .background(MacBDesign.groupFill,
+                            in: RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
-                    .fill(LinearGradient(colors: [.white.opacity(0.065), .clear],
-                                         startPoint: .top, endPoint: .center))
-                    .allowsHitTesting(false))
-                .overlay(RoundedRectangle(cornerRadius: MacBDesign.Radius.card, style: .continuous)
-                    .strokeBorder(MacBDesign.cardStroke))
-                .shadow(color: Color.black.opacity(0.035), radius: 14, y: 7)
+                    .strokeBorder(MacBDesign.groupStroke))
         }
     }
 }

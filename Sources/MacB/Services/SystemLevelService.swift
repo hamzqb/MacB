@@ -16,8 +16,11 @@ import MacBCore
 /// and the built-in display's level is read just after, through
 /// DisplayServices, loaded at run time (a private framework, only read from).
 ///
-/// Nothing is intercepted or suppressed: the keys still do exactly what they
-/// did, and macOS still shows its own HUD.
+/// The keys are never intercepted: they still do exactly what they did. What
+/// MacB can do, when the setting asks for it, is pause the process that draws
+/// the system's own panel while the island shows the same thing — see
+/// `SystemHUDRepair` — and resume it the moment the setting goes off or MacB
+/// quits.
 @MainActor final class SystemLevelService {
     var onChange: ((IslandHUD) -> Void)?
 
@@ -25,6 +28,17 @@ import MacBCore
     private var listeners: [(AudioObjectID, AudioObjectPropertyAddress, AudioObjectPropertyListenerBlock)] = []
     private var monitors: [Any] = []
     private var isRunning = false
+    private var suppressionTimer: Timer?
+    private var burstTask: Task<Void, Never>?
+
+    /// Whether macOS's own volume and brightness panel should stay quiet while
+    /// the island shows the level instead.
+    var hidesSystemIndicator = false {
+        didSet {
+            guard hidesSystemIndicator != oldValue else { return }
+            hidesSystemIndicator ? startSuppressing() : stopSuppressing()
+        }
+    }
 
     func start() {
         guard !isRunning else { return }
@@ -49,6 +63,7 @@ import MacBCore
     func stop() {
         guard isRunning else { return }
         isRunning = false
+        stopSuppressing()
         for (object, address, block) in listeners {
             var address = address
             AudioObjectRemovePropertyListenerBlock(object, &address, .main, block)
@@ -57,6 +72,45 @@ import MacBCore
         monitors.forEach(NSEvent.removeMonitor)
         monitors.removeAll()
         device = AudioObjectID(kAudioObjectUnknown)
+    }
+
+    // MARK: - The system's own panel
+
+    /// The helper is paused only around a key press — never left paused while
+    /// nothing is happening.
+    ///
+    /// It draws only when a key is pressed, so pausing it for the second or
+    /// two around the press is enough to leave the island alone with the job.
+    /// Keeping it paused for the whole session would be simpler, but then a
+    /// crash or a force quit would leave a Mac with no indicator at all and
+    /// nothing on screen to explain it. Holding the pause for a couple of
+    /// seconds at a time means the worst case repairs itself.
+    private func startSuppressing() {}
+
+    private func stopSuppressing() {
+        suppressionTimer?.invalidate()
+        suppressionTimer = nil
+        burstTask?.cancel()
+        burstTask = nil
+        SystemHUDRepair.resumeIndicatorHelper()
+    }
+
+    /// A key press is when the helper wakes up, so that is when to catch it:
+    /// a burst of attempts over the moment the panel would appear — macOS
+    /// starts it on demand and can restart it with a new process id mid-press.
+    private func suppressAroundKeyPress() {
+        guard hidesSystemIndicator else { return }
+        burstTask?.cancel()
+        suppressionTimer?.invalidate()
+        burstTask = Task { @MainActor in
+            for _ in 0..<50 {
+                SystemHUDRepair.pauseIndicatorHelper()
+                try? await Task.sleep(for: .milliseconds(50))
+                if Task.isCancelled { return }
+            }
+            // Quiet again: hand the helper back until the next press.
+            SystemHUDRepair.resumeIndicatorHelper()
+        }
     }
 
     // MARK: - Volume
@@ -119,6 +173,10 @@ import MacBCore
         let key = Int((event.data1 & 0xFFFF_0000) >> 16)
         let isDown = ((event.data1 & 0xFF00) >> 8) == 0xA
         guard isDown else { return }
+        switch key {
+        case 0, 1, 2, 3, 7: suppressAroundKeyPress()
+        default: break
+        }
         switch key {
         case 0, 1, 7:
             // Sound up, down, mute: Core Audio reports real changes; this is
