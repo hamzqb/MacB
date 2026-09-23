@@ -169,6 +169,8 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     /// MacB shows the same level in the island. Restored whenever MacB is not
     /// running, so nothing is ever left switched off behind the user's back.
     @Published var hideSystemHUD: Bool { didSet { defaults.set(hideSystemHUD, forKey: "hideSystemHUD") } }
+    /// Whether MacB's widgets are also shown on the desktop.
+    @Published var desktopWidgetsEnabled: Bool { didSet { defaults.set(desktopWidgetsEnabled, forKey: "desktopWidgetsEnabled") } }
     @Published var islandHUDEnabled: Bool { didSet { defaults.set(islandHUDEnabled, forKey: "islandHUDEnabled") } }
     @Published var localModelEnabled: Bool { didSet { defaults.set(localModelEnabled, forKey: "localModelEnabled") } }
 
@@ -384,6 +386,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         freeEngineReadsScreen = defaults.bool(forKey: "freeEngineReadsScreen")
         localModelEnabled = defaults.object(forKey: "localModelEnabled") as? Bool ?? true
         islandHUDEnabled = defaults.object(forKey: "islandHUDEnabled") as? Bool ?? true
+        desktopWidgetsEnabled = defaults.object(forKey: "desktopWidgetsEnabled") as? Bool ?? true
         hideSystemHUD = defaults.object(forKey: "hideSystemHUD") as? Bool ?? true
         briefingVoice = defaults.string(forKey: "briefingVoice") ?? ""
         mailEnabled = defaults.bool(forKey: "mailEnabled")

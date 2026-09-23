@@ -1,3 +1,4 @@
+import ScreenCaptureKit
 import AVFoundation
 import AppKit
 import ApplicationServices

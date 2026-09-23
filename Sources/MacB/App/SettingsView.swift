@@ -121,6 +121,7 @@ struct SettingsView: View {
     @ObservedObject var keyboardCleaning: KeyboardCleaningService
     @ObservedObject var updates: UpdateService
     @ObservedObject var widgets: IslandLayoutStore
+    @ObservedObject var desktopWidgets: DesktopWidgetStore
     @ObservedObject var background: IslandBackgroundStore
     @ObservedObject var weather: WeatherService
     @ObservedObject var faceUnlock: FaceUnlockService
@@ -1002,6 +1003,7 @@ struct SettingsView: View {
 
     private var widgetsPage: some View {
         VStack(alignment: .leading, spacing: 22) {
+            desktopSection
             section("Şeritte (\(widgets.layout.enabledWidgets.count))", "rectangle.grid.1x2") {
                 if widgets.layout.enabledWidgets.isEmpty {
                     Text("Şerit boş. Aşağıdaki kütüphaneden widget ekle.")
@@ -1341,6 +1343,54 @@ struct SettingsView: View {
         case .small: return "Küçük"
         case .medium: return "Orta"
         case .wide: return "Geniş"
+        }
+    }
+
+    /// Widgets that live on the desktop rather than in the island.
+    private var desktopSection: some View {
+        section("Masaüstü", "menubar.dock.rectangle") {
+            settingToggle("Widget'ları masaüstünde göster",
+                          detail: "Seçtiğin widget'lar masaüstünde durur: pencerelerin altında, her Space'te. Sürükleyerek istediğin yere koyabilirsin.",
+                          isOn: $preferences.desktopWidgetsEnabled)
+            HStack(spacing: MacBDesign.Space.regular) {
+                Menu("Widget ekle") {
+                    ForEach(DesktopWidgetLayout.offered, id: \.self) { kind in
+                        Button(kind.title) { desktopWidgets.add(kind) }
+                    }
+                }
+                .fixedSize()
+                .disabled(!preferences.desktopWidgetsEnabled)
+                if !desktopWidgets.widgets.isEmpty {
+                    Button("Hepsini kaldır", role: .destructive) { desktopWidgets.removeAll() }
+                        .controlSize(.small)
+                }
+                Spacer(minLength: 0)
+            }
+            if desktopWidgets.widgets.isEmpty {
+                message("Masaüstünde widget yok. Yukarıdan ekle; eklediğin widget'ı masaüstünde sürükleyerek taşıyabilir, sağ tıklayıp boyutunu değiştirebilirsin.")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(desktopWidgets.widgets.enumerated()), id: \.element.id) { index, widget in
+                        if index > 0 { rowDivider }
+                        HStack(spacing: MacBDesign.Space.regular) {
+                            Text(widget.kind.title)
+                                .font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                            Spacer(minLength: 8)
+                            Picker("", selection: Binding(
+                                get: { widget.size },
+                                set: { desktopWidgets.setSize($0, for: widget.id) })) {
+                                    ForEach(DesktopWidget.Size.allCases, id: \.self) { Text($0.title).tag($0) }
+                                }
+                                .labelsHidden()
+                                .pickerStyle(.segmented)
+                                .fixedSize()
+                            Button("Kaldır") { desktopWidgets.remove(widget.id) }
+                                .controlSize(.small)
+                        }
+                        .padding(.vertical, MacBDesign.Space.snug)
+                    }
+                }
+            }
         }
     }
 

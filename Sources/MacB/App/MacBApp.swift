@@ -1,4 +1,5 @@
 import AppKit
+import ScreenCaptureKit
 import SwiftUI
 import Combine
 import ApplicationServices
@@ -240,6 +241,17 @@ private final class Flag: @unchecked Sendable {
         directory: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MacB"))
     private let quickNote = QuickNoteStore()
+    private let desktopWidgets = DesktopWidgetStore()
+    private lazy var desktopWidgetController = DesktopWidgetController(
+        store: desktopWidgets,
+        services: DesktopWidgetServices(
+            media: media, timer: islandTimer, clipboard: clipboardShelf, aiActivity: aiActivity,
+            systemMonitor: systemMonitor, processes: processes, watchers: watchers,
+            recentFiles: recentFiles, tasks: tasks, launcher: launcher, weather: weather,
+            shelf: shelf, note: quickNote, preferences: preferences,
+            openIsland: { [weak self] content in self?.openIsland(showing: content) },
+            openSettings: { [weak self] in self?.showSettings() },
+            notify: { [weak self] symbol, message in self?.notch.notify(symbol: symbol, message: message) }))
     private let updates = UpdateService()
     private let loginItem = LoginItemService()
     private let aiKey = AIKeyStore()
@@ -362,6 +374,13 @@ private final class Flag: @unchecked Sendable {
         // once, before anything else, so nobody is left without indicators.
         SystemHUDRepair.resumeIndicatorHelper()
         installTerminationSafetyNet()
+        if let index = CommandLine.arguments.firstIndex(of: "--shoot"),
+           CommandLine.arguments.count > index + 1 {
+            let directory = CommandLine.arguments[index + 1]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                self?.shootOwnWindows(into: directory)
+            }
+        }
         buildMainMenu()
         buildMenu()
         hotKey.onPress = { [weak self] backwards in
@@ -764,6 +783,7 @@ private final class Flag: @unchecked Sendable {
         if preferences.switcherEnabled { hotKey.register(preferences.shortcut) }
         else { hotKey.unregister(); switcher.dismiss() }
         windowLayout.setEnabled(preferences.windowManagementEnabled)
+        desktopWidgetController.setEnabled(preferences.desktopWidgetsEnabled)
         radialMenu.setLayout(preferences.radialMenuLayout, perApp: preferences.radialMenuAppLayouts)
         radialMenu.setTranslucency(preferences.radialMenuTranslucency)
         radialMenu.setScale(preferences.radialMenuScale)
@@ -938,7 +958,8 @@ private final class Flag: @unchecked Sendable {
             spotify: spotify, appleMusic: appleMusic, browserMedia: browserMedia, camera: camera, shelf: shelf, hotKey: hotKey,
             utilities: utilities, aiActivity: aiActivity, systemMonitor: systemMonitor,
             processes: processes, lid: lid, keyboardCleaning: keyboardCleaning,
-            updates: updates, widgets: widgetLayout, background: islandBackground, weather: weather,
+            updates: updates, widgets: widgetLayout, desktopWidgets: desktopWidgets,
+            background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher, automation: automation,
             loginItem: loginItem, aiKey: aiKey, aiCost: aiCost, mail: mail, briefing: briefing, scenarios: scenarios,
             assistant: assistant,
@@ -1119,6 +1140,36 @@ private final class Flag: @unchecked Sendable {
     /// macOS's own volume panel must come back even when MacB is killed
     /// rather than quit. AppKit does not run `applicationWillTerminate` for a
     /// signal, so the signal is handled here as well.
+    /// Draws MacB's own windows into PNG files when a development flag asks.
+    ///
+    /// The views draw themselves into a bitmap — nothing is captured from the
+    /// screen, so no recording permission is involved and nothing but MacB's
+    /// own interface can end up in the file. Materials behind the content
+    /// render as transparent, since there is no desktop behind a bitmap.
+    private func shootOwnWindows(into directory: String) {
+        let base = URL(fileURLWithPath: directory, isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        for (index, window) in NSApp.windows.enumerated() {
+            guard window.isVisible, let view = window.contentView, view.bounds.width > 40 else { continue }
+            guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            // Over black, so white text on a transparent material is legible
+            // in the file rather than white on white.
+            let canvas = NSImage(size: view.bounds.size)
+            canvas.lockFocus()
+            NSColor.black.setFill()
+            NSRect(origin: .zero, size: view.bounds.size).fill()
+            rep.draw(in: NSRect(origin: .zero, size: view.bounds.size))
+            canvas.unlockFocus()
+            guard let tiff = canvas.tiffRepresentation,
+                  let flattened = NSBitmapImageRep(data: tiff),
+                  let data = flattened.representation(using: .png, properties: [:]) else { continue }
+            let name = "window-\(index)-\(Int(view.bounds.width))x\(Int(view.bounds.height)).png"
+            try? data.write(to: base.appendingPathComponent(name))
+        }
+        NSLog("MacB shoot: %d windows into %@", NSApp.windows.count, directory)
+    }
+
     private func installTerminationSafetyNet() {
         for number in [SIGTERM, SIGINT, SIGHUP] {
             signal(number, SIG_IGN)
@@ -1136,6 +1187,7 @@ private final class Flag: @unchecked Sendable {
         // Whatever else happens on the way out, macOS gets its own volume and
         // brightness panel back.
         SystemHUDRepair.resumeIndicatorHelper()
+        desktopWidgetController.stop()
         speech.cancel()
         jarvis.stop()
         keepAwake.stop()
