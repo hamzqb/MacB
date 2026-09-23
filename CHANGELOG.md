@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+- The island is Atoll's shape: home is the player alone — a large cover with the
+  playing app's icon, the artist in the cover's colour, a progress bar that can
+  be dragged — and a new stats page draws CPU, memory, GPU, network and disk as
+  running lines. The widget strip moved to its own tab and the battery sits at
+  the end of the navigation row.
+- What is playing now comes from the system, so a YouTube tab in Chrome, a
+  podcast or anything else shows up with its cover, not only Spotify and Music.
+- Liquid Glass is Apple's glass with nothing over it: the black gradient is gone
+  and the glass can see the desktop again.
+- The island can be the only volume and brightness indicator: MacB takes those
+  keys, sets the level itself and macOS has nothing to announce. Never at the
+  lock screen, and the switch is in Settings.
+- Widgets can live on the desktop, in Apple's three sizes, dragged anywhere.
+- The hover strip carries the track, the running timer, the last thing copied
+  and the shelf — each only while it exists — and three buttons: ask MacB, take
+  a selection screenshot, keep the Mac awake.
+- The shelf and the clipboard are lists rather than walls of cards, and the
+  settings window trades its card chrome for grouped rows, a search field and a
+  note under each permission saying which features use it.
+- The camera preview fills the panel instead of sitting above a list, and
+  recovers by itself when another app had the camera.
+- NVIDIA joins the AI providers, and MacB can look at the window in front and
+  answer about it with a vision model.
+- MacB looks things up before answering a question about now, and names its
+  sources — for every provider, not just the one that can search.
+- Face unlock uses a real face model, SFace under Apache 2.0, shipped with the
+  app and compiled by Core ML on the Mac at first use.
+- Removed: "quit when the last window closes". The close button closes a
+  window; Command-Q quits, as macOS intends.
+
 ## 0.4.0
 
 - Radial shortcut ring (Fn + two-finger click or three-finger tap) with app, file and per-application slices.
