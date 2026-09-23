@@ -52,6 +52,23 @@ Two Glance capabilities are intentionally absent from MacB:
   prompt, where Touch ID, Apple Watch or the password are handled entirely by
   macOS.
 
+## SFace — the face model MacB ships
+
+- Model: SFace, a MobileFaceNet trained with the SFace loss, as published in
+  [OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)
+- Licence: **Apache 2.0**, in `Vendor/face-sface/LICENSE`
+- Paper: Zhong et al., [SFace: Sigmoid-Constrained Hypersphere Loss for Robust
+  Face Recognition](https://arxiv.org/abs/2205.12010)
+- Where: `Vendor/face-sface/FaceEmbedding.mlpackage`, copied into the app and
+  compiled by Core ML on the user's own Mac at first use
+- How it got there: the published ONNX file was converted to Core ML with
+  coremltools; `Vendor/face-sface/README.md` records the exact steps, the
+  source file's SHA-256 and the check that the conversion did not change the
+  model's output.
+
+It turns an aligned face into 128 numbers on this Mac. No image is written to
+disk and nothing about a face leaves the Mac.
+
 ## InsightFace ArcFace weights — deliberately not bundled
 
 Glance bundles an ArcFace Core ML model converted from the InsightFace
@@ -59,10 +76,10 @@ Glance bundles an ArcFace Core ML model converted from the InsightFace
 use only**, so they are not redistributable inside MacB and are not present in
 this repository or in any MacB build.
 
-MacB's shipping embedder is Apple's own `VNGenerateImageFeaturePrintRequest`,
-which carries no third-party weights. It separates faces less sharply than a
-dedicated face-recognition model, which is one reason face unlock guards MacB's
-own surfaces and never the macOS login.
+MacB ships SFace instead, which is Apache 2.0 and may be redistributed. Apple's
+own `VNGenerateImageFeaturePrintRequest` remains as the fallback for a Mac where
+the model cannot be loaded; it separates faces less sharply, which is one reason
+face unlock guards MacB's own surfaces and never the macOS login.
 
 If a user installs their own compiled Core ML face model at
 `~/Library/Application Support/MacB/Models/FaceEmbedding.mlmodelc`, MacB can use

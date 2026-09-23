@@ -41,6 +41,9 @@ cp Resources/Info.plist "$app_dir/Contents/Info.plist"
 # The local model's GPU kernels, as source: ggml compiles them on this Mac's
 # GPU driver when a model first loads (see scripts/vendor-llama.sh).
 cp -R Vendor/llama-metal "$app_dir/Contents/Resources/ggml-metal"
+# The face model, as an ML program. Core ML compiles it on the user's own Mac
+# the first time face unlock runs, so no developer tools are needed there.
+cp -R Vendor/face-sface/FaceEmbedding.mlpackage "$app_dir/Contents/Resources/FaceEmbedding.mlpackage"
 # The Now Playing reader /usr/bin/perl loads (see NowPlayingService.swift).
 clang -dynamiclib -fobjc-arc -O2 -mmacosx-version-min=14.0 -framework Foundation \
     Helpers/NowPlaying/nowplaying.m -o "$app_dir/Contents/Resources/nowplaying.dylib"

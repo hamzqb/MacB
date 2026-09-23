@@ -128,8 +128,8 @@ struct PrivacySettingsView: View {
                     set: { value in faceUnlock.update { $0.allowsExperimentalModel = value } }
                 )) {
                     VStack(alignment: .leading, spacing: MacBDesign.Space.snug) {
-                        Text("Deneysel: kendi modelimi kullan").font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
-                        Text("MacB yüz tanıma modeli dağıtmaz. Kendi derlediğin Core ML modelini Application Support/MacB/Models içine koyarsan burada açabilirsin. Lisansı senin sorumluluğunda.")
+                        Text("Kendi modelimi kullan").font(.system(size: MacBDesign.TypeScale.emphasis, weight: .medium))
+                        Text("MacB, SFace adlı açık lisanslı (Apache 2.0) bir yüz tanıma modeliyle geliyor ve varsayılan olarak onu kullanıyor. Kendi derlediğin Core ML modelini Application Support/MacB/Models içine koyup burayı açarsan onun yerine seninki çalışır; lisansı senin sorumluluğunda.")
                             .font(.system(size: MacBDesign.TypeScale.body)).foregroundStyle(MacBDesign.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }

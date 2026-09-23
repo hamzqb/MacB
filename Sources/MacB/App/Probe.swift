@@ -67,6 +67,27 @@ import Security
                 print("pressed: \(key)")
             }
         }
+        // Checks the shipped face model end to end: loads it, embeds a given
+        // picture, and prints the first numbers so they can be compared with
+        // the model's own reference output.
+        if let index = arguments.firstIndex(of: "--face-model-probe"), arguments.count > index + 1 {
+            let path = arguments[index + 1]
+            return {
+                do {
+                    let embedder = try BundledSFaceEmbedder()
+                    guard let image = NSImage(contentsOfFile: path)?
+                        .cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+                        return print("error: görüntü okunamadı")
+                    }
+                    let vector = try embedder.embedding(for: image)
+                    let norm = sqrt(vector.reduce(0) { $0 + $1 * $1 })
+                    print("model: \(embedder.identifier) dims: \(vector.count) norm: \(String(format: "%.3f", norm))")
+                    print("first: " + vector.prefix(8).map { String(format: "%.4f", $0) }.joined(separator: " "))
+                } catch {
+                    print("error: \(error.localizedDescription)")
+                }
+            }
+        }
         if arguments.contains("--ocr-probe") {
             // Checks the recogniser against a picture MacB draws itself. The
             // user's own screen is never captured for a test.
