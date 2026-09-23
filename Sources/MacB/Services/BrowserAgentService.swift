@@ -82,6 +82,14 @@ final class BrowserAgentService {
         AgentBrowser(bundleID: "company.thebrowser.Browser", name: "Arc", kind: .chromium)
     ]
 
+    /// Whether an application is one of the browsers this can read. Asked by
+    /// the screen tools, because a browser's page is the one place where the
+    /// Accessibility API sees nothing and the page itself has to be asked.
+    static func isBrowser(_ bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return supportedBrowsers.contains { $0.bundleID == bundleID }
+    }
+
     func readActivePage(maxTextCharacters: Int = 8_000) async throws -> BrowserAgentPage {
         let browser = try activeBrowser(prompt: true)
         let limit = max(500, min(12_000, maxTextCharacters))
@@ -114,7 +122,9 @@ final class BrowserAgentService {
             !NSRunningApplication.runningApplications(withBundleIdentifier: $0.bundleID).isEmpty
         }
         guard !running.isEmpty else { throw Failure.noBrowser }
-        let frontID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        // The application the user is in, which is not always the one macOS
+        // calls frontmost: MacB's own panel takes the keyboard while they ask.
+        let frontID = ScreenControlService.frontApplication()?.bundleIdentifier
         let browser = running.first(where: { $0.bundleID == frontID }) ?? running[0]
         guard Self.permissionStatus(for: browser, prompt: prompt) == noErr else {
             throw Failure.noPermission(browser.name)

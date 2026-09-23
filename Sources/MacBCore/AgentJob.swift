@@ -152,7 +152,7 @@ public enum AgentPolicy {
         case .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .powerAction, .endConversation,
              .startBackgroundJob, .backgroundJobs,
              // Hands on the keyboard and pointer of a Mac nobody is watching.
-             .screenControls, .clickControl, .typeText, .pressKeys:
+             .screenControls, .clickControl, .clickPoint, .scrollScreen, .typeText, .pressKeys:
             return true
         default:
             return false
