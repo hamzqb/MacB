@@ -35,6 +35,9 @@
   nothing, as in a browser's page, the page itself is read and appears in the
   same list; where something has no name at all, the numbers are drawn on the
   screenshot it is looking at.
+- Clicking or filling something in a web page no longer takes MacB down with
+  it: the name was being escaped with a call that raises rather than returns,
+  so every attempt crashed the application instead of pressing the button.
 - When a name is not found, the answer says what is there, so the next try is
   right instead of another guess.
 - Each question goes to the provider and model that suit it — a chat, a hard
