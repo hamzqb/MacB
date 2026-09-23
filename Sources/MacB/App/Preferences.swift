@@ -170,6 +170,9 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
     /// running, so nothing is ever left switched off behind the user's back.
     @Published var hideSystemHUD: Bool { didSet { defaults.set(hideSystemHUD, forKey: "hideSystemHUD") } }
     /// Whether MacB's widgets are also shown on the desktop.
+    /// Whether MacB may search the web before answering a question that is
+    /// about now. Only the question's words leave; nothing about the Mac does.
+    @Published var assistantWebSearch: Bool { didSet { defaults.set(assistantWebSearch, forKey: "assistantWebSearch") } }
     @Published var desktopWidgetsEnabled: Bool { didSet { defaults.set(desktopWidgetsEnabled, forKey: "desktopWidgetsEnabled") } }
     @Published var islandHUDEnabled: Bool { didSet { defaults.set(islandHUDEnabled, forKey: "islandHUDEnabled") } }
     @Published var localModelEnabled: Bool { didSet { defaults.set(localModelEnabled, forKey: "localModelEnabled") } }
@@ -387,6 +390,7 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         localModelEnabled = defaults.object(forKey: "localModelEnabled") as? Bool ?? true
         islandHUDEnabled = defaults.object(forKey: "islandHUDEnabled") as? Bool ?? true
         desktopWidgetsEnabled = defaults.object(forKey: "desktopWidgetsEnabled") as? Bool ?? true
+        assistantWebSearch = defaults.object(forKey: "assistantWebSearch") as? Bool ?? true
         hideSystemHUD = defaults.object(forKey: "hideSystemHUD") as? Bool ?? true
         briefingVoice = defaults.string(forKey: "briefingVoice") ?? ""
         mailEnabled = defaults.bool(forKey: "mailEnabled")

@@ -55,22 +55,29 @@ import MacBCore
     private let model: (AIProvider) -> String
     private let preferredProvider: () -> AIProvider?
     private let cost: AICostMeter?
+    /// Whether MacB may look something up before answering. The question's
+    /// own words go to the search engine and nothing else.
+    private let searchesWebSetting: () -> Bool
     private var task: Task<Void, Never>?
     private var keyObserver: AnyCancellable?
 
     init(keys: AIKeyStore, model: @escaping (AIProvider) -> String,
          preferredProvider: @escaping () -> AIProvider? = { nil },
-         cost: AICostMeter? = nil) {
+         cost: AICostMeter? = nil,
+         searchesWeb: @escaping () -> Bool = { true }) {
         self.keys = keys
         self.model = model
         self.preferredProvider = preferredProvider
         self.cost = cost
+        self.searchesWebSetting = searchesWeb
         // A key entered in Settings while the panel is open has to unlock the
         // question field at once, not the next time something else changes.
         keyObserver = keys.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }
     }
 
     var hasKey: Bool { keys.hasKey }
+
+    var searchesWeb: Bool { searchesWebSetting() }
 
     /// Which provider a question goes to: the one chosen in Settings when it
     /// has a key, otherwise the best free one that does.
@@ -184,11 +191,25 @@ import MacBCore
         isSearching = false
 
         let name = model(provider)
-        let body = provider.canSearchWeb
-            ? AIResponseStream.requestBody(question: turn.prompt, model: name, history: history)
-            : AIChatStream.requestBody(question: turn.prompt, model: name, history: history)
         task = Task { [weak self] in
-            await self?.stream(body: body, provider: provider, model: name, key: key, turnID: turn.id)
+            guard let self else { return }
+            var question = turn.prompt
+            // Only OpenAI's own models can search while they answer. For the
+            // others MacB searches first and hands over what it found, so an
+            // answer about today is about today.
+            if !provider.canSearchWeb, self.searchesWeb, WebGrounding.needsSearch(turn.prompt) {
+                await MainActor.run { self.isSearching = true }
+                let results = await WebSearchService.search(WebGrounding.query(from: turn.prompt))
+                await MainActor.run { self.isSearching = false }
+                if Task.isCancelled { return }
+                if !results.isEmpty {
+                    question = WebGrounding.prompt(question: turn.prompt, results: results)
+                }
+            }
+            let body = provider.canSearchWeb
+                ? AIResponseStream.requestBody(question: question, model: name, history: history)
+                : AIChatStream.requestBody(question: question, model: name, history: history)
+            await self.stream(body: body, provider: provider, model: name, key: key, turnID: turn.id)
         }
     }
 

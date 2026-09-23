@@ -390,6 +390,13 @@ struct SettingsView: View {
             }
             }
             if selectedToolsArea == .assistant {
+            section("İnternet", "globe") {
+                settingToggle("Gerekince internette ara",
+                              detail: "Güncel bir soru sorduğunda MacB önce arar, bulduğu sayfaları okur ve cevabın altında kaynakları verir. Aramaya yalnız sorunun kelimeleri gider; Mac'inle ilgili hiçbir şey gitmez.",
+                              isOn: $preferences.assistantWebSearch)
+            }
+            }
+            if selectedToolsArea == .assistant {
             section("Yapay zekâ anahtarları", "key.horizontal") {
                 intro("Halkadaki Yapay zekâ dilimi, menüdeki “Yapay zekâya sor” ve seçili metin işleri bu anahtarlarla çalışır. Anahtarlar Keychain'e yazılır, ekranda tekrar gösterilmez ve yalnız ait olduğu servise gider.")
                 aiProviderHeader

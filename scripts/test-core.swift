@@ -33,6 +33,13 @@ struct CoreTestRunner {
         func candidate(_ id: UInt32, pid: Int32 = 10, title: String = "Document", bounds: CGRect? = nil) -> WindowDescriptor {
             WindowDescriptor(id: id, pid: pid, title: title, frame: bounds ?? frame)
         }
+        let webFixture = """
+<div class="result results_links"><h2 class="result__title"><a rel="nofollow" class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fhaber&amp;rut=1">Bir <b>haber</b> başlığı</a></h2></div>
+<div class="result results_links"><h2><a class="result__a" href="https://ikinci.example.org/sayfa">İkinci sonuç</a></h2></div>
+"""
+        let webPageFixture = """
+<html><head><title>x</title><style>.a{color:red}</style></head><body><script>var a = 1;</script><h1>Başlık</h1><p>Birinci paragraf.</p><p>İkinci &amp; paragraf</p></body></html>
+"""
         let tests: [(String, () throws -> Void)] = [
             ("VersionNumber: compares release versions numerically", {
                 try expect(VersionNumber.isNewer("v0.2.0", than: "0.1.9"), "New minor release was missed")
@@ -2486,6 +2493,44 @@ struct CoreTestRunner {
                            "Opening System Settings needed a yes")
                 try expect(!JarvisTool.openSettings.needsConfirmation, "Opening a settings page needed a yes")
             }),
+            ("WebGrounding: only questions about now go to the web", {
+                try expect(WebGrounding.needsSearch("dolar bugün kaç TL"), "A question about today was answered from memory")
+                try expect(WebGrounding.needsSearch("https://example.com nedir"), "A link was not looked up")
+                try expect(WebGrounding.needsSearch("Elraenn kimdir"), "A question about a person was not looked up")
+                try expect(!WebGrounding.needsSearch("bu metni düzelt"), "An instruction was sent to a search engine")
+                try expect(!WebGrounding.needsSearch("ok"), "A word was sent to a search engine")
+            }),
+            ("WebGrounding: the search terms drop what only addresses MacB", {
+                let query = WebGrounding.query(from: "MacB lütfen bana dolar kuru bugün ne kadar?")
+                try expect(!query.lowercased().contains("macb"), "MacB's own name went to the search engine")
+                try expect(!query.contains("lütfen"), "Filler went to the search engine")
+                try expect(query.contains("dolar kuru"), "The question itself was lost")
+            }),
+            ("WebGrounding: results come back as real addresses", {
+                let results = WebGrounding.parseResults(webFixture)
+                try expect(results.count == 2, "Expected both results, got \(results.count)")
+                try expect(results[0].url.absoluteString == "https://example.com/haber",
+                           "The redirector was kept instead of the address: \(results[0].url)")
+                try expect(results[0].title == "Bir haber başlığı", "Title kept its markup: \(results[0].title)")
+                try expect(results[1].url.host == "ikinci.example.org", "A plain link was dropped")
+            }),
+            ("WebGrounding: a page becomes text without its scripts", {
+                let text = WebGrounding.readableText(from: webPageFixture)
+                try expect(!text.contains("var a"), "Script source ended up in the prompt")
+                try expect(!text.contains("color:red"), "Stylesheet ended up in the prompt")
+                try expect(text.contains("Birinci paragraf."), "The page's own words were lost")
+                try expect(text.contains("İkinci & paragraf"), "Entities were left encoded")
+            }),
+            ("WebGrounding: the prompt carries the sources and the rule about them", {
+                let result = WebResult(title: "Kaynak", url: URL(string: "https://example.com/a")!,
+                                       snippet: "kısa", text: "uzun metin")
+                let prompt = WebGrounding.prompt(question: "soru nedir", results: [result])
+                try expect(prompt.contains("[1] Kaynak — https://example.com/a"), "The source was not listed")
+                try expect(prompt.contains("uzun metin"), "The page text was not included")
+                try expect(prompt.contains("Soru: soru nedir"), "The question was lost")
+                try expect(prompt.contains("uydurma"), "Nothing told the model to stay with the sources")
+            })
+            ,
             ("RadialAction: text and arrangement slices need Accessibility, voice does not", {
                 for action in [RadialAction.summarizeSelection, .fixSelection, .translateSelection, .applyArrangement] {
                     try expect(action.requiresAccessibility, "\(action) was offered without Accessibility")

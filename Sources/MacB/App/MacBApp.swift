@@ -260,7 +260,8 @@ private final class Flag: @unchecked Sendable {
         keys: aiKey,
         model: { [weak self] provider in self?.preferences.model(for: provider) ?? provider.defaultModel },
         preferredProvider: { [weak self] in self?.preferences.preferredProvider },
-        cost: aiCost)
+        cost: aiCost,
+        searchesWeb: { [weak self] in self?.preferences.assistantWebSearch ?? true })
     private let speech = SpeechInputService()
     private let selectedText = SelectedTextService()
     private let translator = OfflineTranslator()
