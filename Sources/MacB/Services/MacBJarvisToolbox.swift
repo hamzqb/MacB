@@ -560,7 +560,12 @@ import ScreenCaptureKit
         do {
             page = try await browserAgent.readActivePage(maxTextCharacters: 500)
         } catch {
-            return ([], "The page itself could not be read: \(error.localizedDescription)")
+            // Worth saying plainly: the list above is the browser's own
+            // buttons and tabs, and the page is missing from it. In Chrome
+            // this is one switch the user has to turn on themselves.
+            return ([], "The list above is only the browser's own window. The page could not be read: "
+                    + error.localizedDescription
+                    + " Tell the user this in one sentence, in their language, and ask them to switch it on.")
         }
         var entries: [[String: Any]] = []
         var number = start

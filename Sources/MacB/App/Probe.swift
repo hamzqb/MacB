@@ -347,6 +347,21 @@ import Security
                 print("gave up after four rounds")
             }
         }
+        if arguments.contains("--browser-probe") {
+            // Whether the page in front can be read at all: the Apple Events
+            // permission, and Chrome's own "Allow JavaScript from Apple
+            // Events", are both needed and neither is on by default.
+            return {
+                do {
+                    let page = try await BrowserAgentService().readActivePage(maxTextCharacters: 500)
+                    print("browser: \(page.browser) title: \(page.title)")
+                    print("fields: \(page.fields.count) buttons: \(page.buttons.count) links: \(page.links.count)")
+                    for button in page.buttons.prefix(8) { print("  [button] \(button.text)") }
+                } catch {
+                    print("MISS: \(error.localizedDescription)")
+                }
+            }
+        }
         if arguments.contains("--controls-probe") {
             // Read-only: what the assistant sees in the app in front, with the
             // numbers it would press them by. Touches nothing.
