@@ -181,6 +181,42 @@ public enum AIChatStream {
         return message
     }
 
+    /// The conversation as a different provider can accept it.
+    ///
+    /// An assistant message is echoed back exactly as its provider sent it,
+    /// because providers attach things to it that they then require to come
+    /// back — Gemini signs each function call and refuses the next turn
+    /// without the signature. The other side of that is what happens when the
+    /// conversation moves to a second provider after the first fails: the new
+    /// one is handed another service's private fields and refuses, and the
+    /// fallback that was meant to save the answer loses it instead. So a
+    /// conversation that changes hands is rebuilt from what every provider
+    /// agrees on: who spoke, what they said, and which functions they called.
+    public static func portable(messages: [[String: Any]]) -> [[String: Any]] {
+        messages.map { message in
+            guard message["role"] as? String == "assistant" else { return message }
+            var clean: [String: Any] = ["role": "assistant", "content": message["content"] as? String ?? ""]
+            guard let calls = message["tool_calls"] as? [[String: Any]], !calls.isEmpty else { return clean }
+            clean["tool_calls"] = calls.compactMap { call -> [String: Any]? in
+                guard let function = call["function"] as? [String: Any],
+                      let name = function["name"] as? String else { return nil }
+                let arguments: String
+                if let text = function["arguments"] as? String {
+                    arguments = text
+                } else if let object = function["arguments"],
+                          let data = try? JSONSerialization.data(withJSONObject: object),
+                          let text = String(data: data, encoding: .utf8) {
+                    arguments = text
+                } else {
+                    arguments = "{}"
+                }
+                return ["id": call["id"] as? String ?? "call_0", "type": "function",
+                        "function": ["name": name, "arguments": arguments]]
+            }
+            return clean
+        }
+    }
+
     public static func toolResultMessage(callID: String, output: String) -> [String: Any] {
         ["role": "tool", "tool_call_id": callID, "content": output]
     }

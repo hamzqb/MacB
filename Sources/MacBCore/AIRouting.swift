@@ -118,14 +118,29 @@ public struct AIProviderHealth: Codable, Sendable, Equatable {
 /// been failing, because "probably broken" still beats "nothing".
 public enum AIRouter {
     /// The providers to try for a job, best first.
+    /// How many providers one question may be tried on.
+    ///
+    /// Three. Every extra name is another wait the user sits through before
+    /// being told it did not work, and if three services in a row have
+    /// nothing to say, the fourth is not the problem.
+    public static let maximumAttempts = 3
+
     public static func order(for task: AITask,
                              stored: Set<AIProvider>,
                              preferred: AIProvider? = nil,
                              health: [AIProvider: AIProviderHealth] = [:],
                              freeOnly: Bool = false,
+                             limit: Int = maximumAttempts,
                              now: Date = Date()) -> [AIProvider] {
-        let able = AIProvider.textOrder.filter { provider in
+        var able = AIProvider.textOrder.filter { provider in
             stored.contains(provider) && provider.model(for: task) != nil && (!freeOnly || provider.isFree)
+        }
+        // Falling back is not a reason to start spending. A paid provider is
+        // in the list only when the user chose it, or when no free key can do
+        // the job at all — a free tier failing twice is not permission to
+        // send the next question somewhere that charges for it.
+        if preferred?.isFree != false, able.contains(where: { $0.isFree }) {
+            able = able.filter(\.isFree)
         }
         func rank(_ provider: AIProvider) -> Int {
             var rank = AIProvider.textOrder.firstIndex(of: provider) ?? 50
@@ -134,7 +149,7 @@ public enum AIRouter {
             if provider == preferred { rank -= 500 }
             return rank
         }
-        return able.sorted { first, second in
+        let sorted = able.sorted { first, second in
             let left = rank(first)
             let right = rank(second)
             // A stable order when nothing separates two providers, so the same
@@ -143,6 +158,7 @@ public enum AIRouter {
                 < (AIProvider.textOrder.firstIndex(of: second) ?? 0) }
             return left < right
         }
+        return Array(sorted.prefix(max(1, limit)))
     }
 
     /// The models to try for one provider: what the user chose first, then
@@ -191,6 +207,6 @@ public enum AIRouter {
     /// else. The last provider in the list gets the long wait, because there
     /// is nowhere to go after it.
     public static func timeout(attempt: Int, of total: Int) -> TimeInterval {
-        attempt + 1 >= total ? 120 : 30
+        attempt + 1 >= total ? 60 : 20
     }
 }

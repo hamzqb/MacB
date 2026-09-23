@@ -21,7 +21,12 @@ import Security
         // print to, and launching it that way is sometimes the only way to get
         // the permissions the real application holds — macOS grants
         // Accessibility to the application, not to whatever shell started it.
-        if let path = value(after: "--out") { freopen(path, "w", stdout) }
+        if let path = value(after: "--out") {
+            freopen(path, "w", stdout)
+            // A file is fully buffered, so a probe that is still working would
+            // have written nothing yet; line buffering makes it readable live.
+            setvbuf(stdout, nil, _IOLBF, 0)
+        }
 
         if let path = value(after: "--import-keys") {
             // A one-off: reads `provider=key` lines from a file and puts each in
@@ -282,6 +287,64 @@ import Security
                 store.clearDelivered()
                 try? FileManager.default.removeItem(at: URL(fileURLWithPath: NSTemporaryDirectory())
                     .appendingPathComponent("macb-probe-jobs.json"))
+            }
+        }
+        if let instruction = value(after: "--agent-probe") {
+            // The whole point of the screen tools, end to end: a real
+            // instruction, a real provider, and whatever it decides to press.
+            // Only the screen tools are offered, so what is being proved is
+            // that the model finds the control and presses the right one.
+            return {
+                let engine = FreeVoiceEngine(keys: AIKeyStore(), model: { $0.defaultModel })
+                let control = ScreenControlService()
+                guard let provider = engine.provider else { return print("ücretsiz sağlayıcı anahtarı yok") }
+                print("provider: \(provider.title) · \(engine.route.first?.model ?? "-")")
+                let tools: [JarvisTool] = [.screenControls, .clickControl, .typeText, .pressKeys, .scrollScreen]
+                var messages: [[String: Any]] = [
+                    ["role": "system", "content": """
+                        You work the Mac's screen for the user. Always call screen_controls first: it lists \
+                        every control with a number. Then press what they asked for with click_control and \
+                        that number. Answer in Turkish, in one short sentence, when the job is done.
+                        """],
+                    ["role": "user", "content": instruction]
+                ]
+                for round in 1...4 {
+                    let reply: FreeVoiceEngine.Reply
+                    do { reply = try await engine.answer(messages: messages, tools: tools, maximumTokens: 400) }
+                    catch { return print("MISS: \(error.localizedDescription)") }
+                    guard !reply.calls.isEmpty else {
+                        return print("round \(round) said: \(reply.text)")
+                    }
+                    messages.append(reply.historyMessage)
+                    for call in reply.calls {
+                        let arguments = call.argumentObject
+                        print("round \(round) call: \(call.name) \(call.arguments)")
+                        var output = "{\"ok\":false}"
+                        switch JarvisTool(rawValue: call.name) {
+                        case .screenControls:
+                            if let found = try? control.controls(limit: 40) {
+                                let list = found.controls.map { "\($0.number). \($0.label)" }.joined(separator: " | ")
+                                print("    listed \(found.controls.count) in \(found.app)")
+                                output = "{\"app\":\"\(found.app)\",\"controls\":\"\(list)\"}"
+                            }
+                        case .clickControl:
+                            do {
+                                let message = try control.press(arguments["target"] as? String ?? "",
+                                                                role: arguments["role"] as? String,
+                                                                number: (arguments["number"] as? NSNumber)?.intValue)
+                                print("    \(message)")
+                                output = "{\"ok\":true,\"message\":\"\(message)\"}"
+                            } catch {
+                                print("    MISS: \(error.localizedDescription)")
+                                output = "{\"ok\":false,\"error\":\"\(error.localizedDescription)\"}"
+                            }
+                        default:
+                            print("    (not run in this probe)")
+                        }
+                        messages.append(AIChatStream.toolResultMessage(callID: call.callID, output: output))
+                    }
+                }
+                print("gave up after four rounds")
             }
         }
         if arguments.contains("--controls-probe") {

@@ -2542,14 +2542,21 @@ struct CoreTestRunner {
                 try expect(order.first == .groq, "The chosen provider was not asked first")
                 try expect(order.last == .nvidia, "A failing provider was not moved to the back")
                 try expect(order.count == 3, "A provider with a key was dropped")
+                try expect(AIRouter.order(for: .chat, stored: [.nvidia, .gemini, .groq, .openRouter]).count
+                           == AIRouter.maximumAttempts,
+                           "A question would be tried on more providers than anyone waits for")
             }),
             ("AIRouter: only providers that can do the job are offered", {
                 let order = AIRouter.order(for: .vision, stored: [.groq, .gemini, .huggingFace])
                 try expect(order == [.gemini], "A provider that cannot see was offered a picture")
                 let free = AIRouter.order(for: .chat, stored: [.openAI, .gemini], freeOnly: true)
                 try expect(free == [.gemini], "The paid provider was offered where only free ones may be used")
-                let paidLast = AIRouter.order(for: .chat, stored: [.openAI, .gemini])
-                try expect(paidLast == [.gemini, .openAI], "Money was spent before a free key was tried")
+                try expect(AIRouter.order(for: .chat, stored: [.openAI, .gemini]) == [.gemini],
+                           "A free key failing would have started spending money")
+                try expect(AIRouter.order(for: .chat, stored: [.openAI, .gemini], preferred: .openAI)
+                           == [.openAI, .gemini], "The paid provider the user chose was not used first")
+                try expect(AIRouter.order(for: .vision, stored: [.openAI, .groq]) == [.openAI],
+                           "Nothing free could see, and the paid one was refused anyway")
             }),
             ("AIProviderHealth: one failure is a bad minute, two is a pattern, and success clears it", {
                 var health = AIProviderHealth()
@@ -2583,6 +2590,25 @@ struct CoreTestRunner {
                 try expect(!AIRouter.shouldTryAnother(status: 400), "A malformed request was sent to everyone")
                 try expect(AIRouter.timeout(attempt: 0, of: 3) < AIRouter.timeout(attempt: 2, of: 3),
                            "The last provider was not given the longer wait")
+            }),
+            ("A conversation that changes provider carries nothing private with it", {
+                let messages: [[String: Any]] = [
+                    ["role": "user", "content": "kalın düğmesine bas"],
+                    ["role": "assistant", "content": "",
+                     "extra_content": ["google": ["thought_signature": "abc"]],
+                     "tool_calls": [["id": "call_1", "type": "function",
+                                     "function": ["name": "click_control", "arguments": "{\"number\":7}"]]]],
+                    ["role": "tool", "tool_call_id": "call_1", "content": "{\"ok\":true}"]
+                ]
+                let clean = AIChatStream.portable(messages: messages)
+                try expect(clean.count == 3, "A message was lost on the way to the next provider")
+                try expect(!clean[1].keys.contains("extra_content"), "One provider's private field went to another")
+                let calls = clean[1]["tool_calls"] as? [[String: Any]]
+                try expect(calls?.count == 1, "The tool call was lost")
+                let function = calls?.first?["function"] as? [String: Any]
+                try expect(function?["name"] as? String == "click_control", "The tool's name was lost")
+                try expect(function?["arguments"] as? String == "{\"number\":7}", "The arguments were lost")
+                try expect(clean[2]["tool_call_id"] as? String == "call_1", "The answer lost the call it belongs to")
             }),
             ("Nemotron models are asked not to think out loud", {
                 let body = AIChatStream.requestBody(question: "merhaba", model: "nvidia/nemotron-3-super-120b-a12b")

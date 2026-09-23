@@ -969,7 +969,7 @@ private final class Flag: @unchecked Sendable {
             updates: updates, widgets: widgetLayout, desktopWidgets: desktopWidgets,
             background: islandBackground, weather: weather,
             faceUnlock: faceUnlock, launcher: launcher, automation: automation,
-            loginItem: loginItem, aiKey: aiKey, aiCost: aiCost, mail: mail, briefing: briefing, scenarios: scenarios,
+            loginItem: loginItem, aiKey: aiKey, aiCost: aiCost, aiHealth: aiHealth, mail: mail, briefing: briefing, scenarios: scenarios,
             assistant: assistant,
             arrangements: arrangements, keepAwake: keepAwake, watchers: watchers, agentCursor: agentCursor,
             jarvisHotKeyFailed: jarvisHotKey.failed, jarvisMemory: jarvisMemory,

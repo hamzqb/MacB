@@ -130,6 +130,7 @@ struct SettingsView: View {
     @ObservedObject var loginItem: LoginItemService
     @ObservedObject var aiKey: AIKeyStore
     @ObservedObject var aiCost: AICostMeter
+    @ObservedObject var aiHealth: AIHealthStore
     @ObservedObject var mail: MailService
     @ObservedObject var briefing: BriefingService
     @ObservedObject var scenarios: ScenarioStore
@@ -2006,18 +2007,26 @@ struct SettingsView: View {
                 Text("Model").font(.system(size: MacBDesign.TypeScale.caption))
                     .foregroundStyle(MacBDesign.muted)
                 Spacer(minLength: 8)
+                // Empty means "let MacB choose": a different model for a
+                // question, a picture and the assistant's own tool calls,
+                // rather than one name for all three.
                 Picker("Model", selection: Binding(
-                    get: { preferences.model(for: provider) },
+                    get: { preferences.chosenModel(for: provider) ?? "" },
                     set: { preferences.setModel($0, for: provider) })) {
+                    Text("Otomatik — işe göre").tag("")
                     let choices = aiKey.modelChoices(for: provider)
                     ForEach(choices, id: \.self) { Text($0).tag($0) }
-                    let current = preferences.model(for: provider)
-                    if !choices.contains(current) { Text(current).tag(current) }
+                    if let current = preferences.chosenModel(for: provider), !choices.contains(current) {
+                        Text(current).tag(current)
+                    }
                 }
                 .labelsHidden().frame(maxWidth: 260)
                 Button("Modelleri yenile") { Task { await aiKey.loadModels(provider) } }
                     .controlSize(.small)
                     .disabled(!aiKey.has(provider) || aiKey.isLoadingModels == provider)
+            }
+            if preferences.chosenModel(for: provider) == nil, let automatic = automaticModels(for: provider) {
+                message(automatic)
             }
             switch aiKey.status(of: provider) {
             case .idle: EmptyView()
@@ -2025,7 +2034,18 @@ struct SettingsView: View {
             case .valid(let text): message(text)
             case .invalid(let text): message(text, warning: true)
             }
+            if let note = aiHealth.note(for: provider) { message(note) }
         }
+    }
+
+    /// Which model this provider would be asked for which job, when the
+    /// choice is left to MacB.
+    private func automaticModels(for provider: AIProvider) -> String? {
+        guard let chat = provider.model(for: .chat) else { return nil }
+        var line = "Soru ve araçlar: \(chat)"
+        if let vision = provider.model(for: .vision), vision != chat { line += " · Görsel: \(vision)" }
+        if let deep = provider.model(for: .reasoning), deep != chat { line += " · Zor soru: \(deep)" }
+        return line
     }
 
     private func addScenario() {

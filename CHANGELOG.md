@@ -29,6 +29,22 @@
   sources — for every provider, not just the one that can search.
 - Face unlock uses a real face model, SFace under Apache 2.0, shipped with the
   app and compiled by Core ML on the Mac at first use.
+- The assistant can press what it can see. Everything on screen is listed with
+  a number, and it clicks by number instead of by name — a name is a guess, and
+  a wrong guess presses the wrong button. Where the Accessibility API sees
+  nothing, as in a browser's page, the page itself is read and appears in the
+  same list; where something has no name at all, the numbers are drawn on the
+  screenshot it is looking at.
+- When a name is not found, the answer says what is there, so the next try is
+  right instead of another guess.
+- Each question goes to the provider and model that suit it — a chat, a hard
+  question, a picture, the assistant's own tool calls — and moves on by itself
+  when one cannot answer. NVIDIA's models were corrected to the ones that
+  actually reply: the model MacB had been asking for was retired months ago and
+  every request to it failed. A paid provider is never used as a silent
+  fallback.
+- Settings shows which model each provider would be asked for which job, and
+  says when one has been failing or answering slowly.
 - Removed: "quit when the last window closes". The close button closes a
   window; Command-Q quits, as macOS intends.
 

@@ -57,6 +57,10 @@ import MacBCore
     private let preferred: () -> AIProvider?
     private let health: AIHealthStore?
     private let session: URLSession
+    /// Who answered the last turn of this conversation. When the next turn
+    /// goes somewhere else, the history has to be handed over in a form the
+    /// new provider will accept.
+    private var lastProvider: AIProvider?
 
     init(keys: AIKeyStore, model: @escaping (AIProvider) -> String,
          preferred: @escaping () -> AIProvider? = { nil },
@@ -175,11 +179,13 @@ import MacBCore
         var firstFailure: Error?
         for (attempt, candidate) in route.enumerated() {
             guard let key = keys.read(candidate.provider) else { continue }
+            MacBLog.note("ai: asking \(candidate.provider.rawValue) · \(candidate.model)")
             do {
                 return try await ask(candidate, key: key, messages: messages, tools: tools,
                                      maximumTokens: maximumTokens,
                                      timeout: AIRouter.timeout(attempt: attempt, of: route.count))
             } catch {
+                MacBLog.note("ai: \(candidate.provider.rawValue) failed — \(error.localizedDescription)")
                 firstFailure = firstFailure ?? error
                 health?.recordFailure(candidate.provider)
                 if case Failure.http(let code, _) = error {
@@ -205,7 +211,9 @@ import MacBCore
                      messages: [[String: Any]], tools: [JarvisTool],
                      maximumTokens: Int, timeout: TimeInterval) async throws -> Reply {
         let provider = candidate.provider
-        let body = AIChatStream.toolRequestBody(messages: messages, model: candidate.model,
+        let history = lastProvider == nil || lastProvider == provider ? messages
+            : AIChatStream.portable(messages: messages)
+        let body = AIChatStream.toolRequestBody(messages: history, model: candidate.model,
                                                 tools: tools.map(\.chatDeclaration),
                                                 maximumTokens: maximumTokens)
 
@@ -230,6 +238,7 @@ import MacBCore
             throw Failure.unreadable
         }
         health?.recordSuccess(provider, latency: Date().timeIntervalSince(started))
+        lastProvider = provider
         return Reply(text: AIChatStream.outputText(inResponse: object) ?? "",
                      calls: AIChatStream.toolCalls(inResponse: object),
                      usage: AITokenUsage(chatCompletions: object["usage"]),
