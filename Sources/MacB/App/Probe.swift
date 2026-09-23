@@ -49,6 +49,24 @@ import Security
                 }
             }
         }
+        // Sends one media key the way the keyboard does, so the volume and
+        // brightness paths can be exercised without a hand on the keys.
+        if let index = arguments.firstIndex(of: "--press-key"), arguments.count > index + 1,
+           let key = Int(arguments[index + 1]) {
+            return {
+                NSApplication.shared.setActivationPolicy(.prohibited)
+                for down in [true, false] {
+                    let state = down ? 0xA : 0xB
+                    guard let event = NSEvent.otherEvent(with: .systemDefined, location: .zero,
+                                                         modifierFlags: NSEvent.ModifierFlags(rawValue: UInt(state << 8)),
+                                                         timestamp: 0, windowNumber: 0, context: nil,
+                                                         subtype: 8, data1: (key << 16) | (state << 8), data2: -1),
+                          let cgEvent = event.cgEvent else { continue }
+                    cgEvent.post(tap: .cghidEventTap)
+                }
+                print("pressed: \(key)")
+            }
+        }
         if arguments.contains("--ocr-probe") {
             // Checks the recogniser against a picture MacB draws itself. The
             // user's own screen is never captured for a test.
