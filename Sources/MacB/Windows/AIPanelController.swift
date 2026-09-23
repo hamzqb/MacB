@@ -256,6 +256,13 @@ struct AIPanelView: View {
                 .accessibilityLabel("Yeni konuşma")
             }
             if !speech.isBusy && !assistant.isAnswering && assistant.hasKey {
+                Button(action: lookAtScreen) {
+                    Image(systemName: "eye").font(.system(size: 15))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(MacBDesign.IslandToken.Ink.secondary)
+                .help("Öndeki pencereye bak ve sorunu ona göre yanıtla")
+                .accessibilityLabel("Ekrana bak")
                 Button { assistant.clear(); speech.start() } label: {
                     Image(systemName: "mic.fill").font(.system(size: 15))
                 }
@@ -430,6 +437,14 @@ struct AIPanelView: View {
             .font(.system(size: MacBDesign.TypeScale.caption))
             .foregroundStyle(Color.orange)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Sends the question with a picture of the window in front of MacB.
+    private func lookAtScreen() {
+        speech.dismissError()
+        let text = question
+        question = ""
+        assistant.askAboutScreen(text)
     }
 
     private func send() {

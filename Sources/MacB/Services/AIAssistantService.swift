@@ -172,6 +172,45 @@ import MacBCore
         selectionResult = result
     }
 
+    /// Answers a question about the window in front, by looking at it.
+    ///
+    /// The picture is one window — never the whole screen — and it goes only
+    /// to a provider whose model can see. Nothing is written to disk; where no
+    /// provider can see, the caller falls back to reading the screen's text on
+    /// the Mac.
+    func askAboutScreen(_ raw: String) {
+        let question = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let prompt = question.isEmpty ? "Ekranda ne var? Kısaca anlat." : question
+        guard let provider, let key = keys.read(provider) else {
+            errorMessage = Self.missingKeyMessage
+            return
+        }
+        guard let visionModel = provider.visionModel else {
+            errorMessage = "\(provider.title) görsel anlamıyor. Ayarlar → Araçlar'dan görebilen bir sağlayıcı seç (NVIDIA, Gemini ya da OpenAI)."
+            return
+        }
+        let turn = AITurn(question: prompt, prompt: prompt)
+        turns.append(turn)
+        errorMessage = nil
+        isAnswering = true
+        task = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let capture = try await ScreenLookService.captureFrontmostWindow()
+                if Task.isCancelled { return }
+                let body = AIChatStream.visionRequestBody(
+                    question: "Bu \(capture.appName) penceresinin görüntüsü. \(prompt)",
+                    jpeg: capture.jpeg, model: visionModel)
+                await self.stream(body: body, provider: provider, model: visionModel, key: key, turnID: turn.id)
+            } catch {
+                await MainActor.run {
+                    self.isAnswering = false
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     private func send(_ turn: AITurn) {
         guard let provider, let key = keys.read(provider) else {
             errorMessage = Self.missingKeyMessage

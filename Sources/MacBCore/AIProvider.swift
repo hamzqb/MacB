@@ -73,6 +73,19 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     /// Whether the provider has a free tier worth relying on.
     public var isFree: Bool { self != .openAI }
 
+    /// A model of this provider's that can look at a picture, where it has
+    /// one. Nil means the provider cannot see, and MacB reads the screen's
+    /// text on the Mac instead.
+    public var visionModel: String? {
+        switch self {
+        case .nvidia: return "meta/llama-3.2-90b-vision-instruct"
+        case .gemini: return "gemini-flash-latest"
+        case .openAI: return "gpt-5-mini"
+        case .openRouter: return "meta-llama/llama-3.2-90b-vision-instruct:free"
+        case .groq, .huggingFace: return nil
+        }
+    }
+
     /// Whether the model can search the web itself and cite what it read.
     public var canSearchWeb: Bool { self == .openAI }
 

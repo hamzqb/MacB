@@ -59,6 +59,26 @@ public enum AIChatStream {
                 "stream_options": ["include_usage": true]]
     }
 
+    /// The same request with a picture beside the question.
+    ///
+    /// The compatible providers all take an image as a `data:` URL in the
+    /// user's message, which is how a model that can see gets to see. The
+    /// picture is one window the user asked about, never the whole screen, and
+    /// it is not kept anywhere after the request.
+    public static func visionRequestBody(question: String, jpeg: Data, model: String) -> [String: Any] {
+        let encoded = "data:image/jpeg;base64," + jpeg.base64EncodedString()
+        let content: [[String: Any]] = [
+            ["type": "text", "text": question],
+            ["type": "image_url", "image_url": ["url": encoded]]
+        ]
+        let messages: [[String: Any]] = [
+            ["role": "system", "content": instructions],
+            ["role": "user", "content": content]
+        ]
+        return ["model": model, "messages": messages, "stream": true,
+                "stream_options": ["include_usage": true]]
+    }
+
     /// Told to say when it does not know, because this is the path with no web
     /// search behind it: a confident wrong answer is worse here than anywhere
     /// else in MacB.
