@@ -256,12 +256,15 @@ private final class Flag: @unchecked Sendable {
     private let loginItem = LoginItemService()
     private let aiKey = AIKeyStore()
     private let aiCost = AICostMeter()
+    private let aiHealth = AIHealthStore()
     private lazy var assistant = AIAssistantService(
         keys: aiKey,
         model: { [weak self] provider in self?.preferences.model(for: provider) ?? provider.defaultModel },
         preferredProvider: { [weak self] in self?.preferences.preferredProvider },
         cost: aiCost,
-        searchesWeb: { [weak self] in self?.preferences.assistantWebSearch ?? true })
+        searchesWeb: { [weak self] in self?.preferences.assistantWebSearch ?? true },
+        chosenModel: { [weak self] provider in self?.preferences.chosenModel(for: provider) },
+        health: aiHealth)
     private let speech = SpeechInputService()
     private let selectedText = SelectedTextService()
     private let translator = OfflineTranslator()
@@ -280,7 +283,9 @@ private final class Flag: @unchecked Sendable {
             keys: aiKey,
             model: { [weak self] provider in self?.preferences.model(for: provider) ?? provider.defaultModel },
             preferred: { [weak self] in AIProvider(rawValue: self?.preferences.aiProvider ?? "") },
-            usesLocal: { [weak self] in self?.preferences.localModelEnabled ?? false }),
+            usesLocal: { [weak self] in self?.preferences.localModelEnabled ?? false },
+            chosenModel: { [weak self] provider in self?.preferences.chosenModel(for: provider) },
+            health: aiHealth),
         cost: aiCost)
     private lazy var mail: MailService = {
         let service = MailService()
@@ -307,7 +312,9 @@ private final class Flag: @unchecked Sendable {
             model: { [weak self] provider in self?.preferences.model(for: provider) ?? provider.defaultModel },
             preferred: { [weak self] in AIProvider(rawValue: self?.preferences.aiProvider ?? "") },
             readsScreen: { [weak self] in self?.preferences.freeEngineReadsScreen ?? false },
-            usesLocal: { [weak self] in self?.preferences.localModelEnabled ?? false }),
+            usesLocal: { [weak self] in self?.preferences.localModelEnabled ?? false },
+            chosenModel: { [weak self] provider in self?.preferences.chosenModel(for: provider) },
+            health: aiHealth),
         model: { [weak self] in self?.preferences.jarvisModel ?? JarvisProtocol.defaultModel })
     private lazy var jarvisTools = MacBJarvisToolbox(
         keys: aiKey, searchModel: { [weak self] in self?.preferences.aiModel ?? Preferences.defaultAIModel },

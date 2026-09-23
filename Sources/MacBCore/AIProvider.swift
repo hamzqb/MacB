@@ -62,7 +62,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     public var defaultModel: String {
         switch self {
         case .openAI: return "gpt-5-mini"
-        case .nvidia: return "meta/llama-3.3-70b-instruct"
+        case .nvidia: return "nvidia/nemotron-3-super-120b-a12b"
         case .groq: return "openai/gpt-oss-120b"
         case .openRouter: return "meta-llama/llama-3.3-70b-instruct:free"
         case .gemini: return "gemini-3.6-flash"
@@ -78,7 +78,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
     /// text on the Mac instead.
     public var visionModel: String? {
         switch self {
-        case .nvidia: return "meta/llama-3.2-90b-vision-instruct"
+        case .nvidia: return "meta/llama-3.2-11b-vision-instruct"
         case .gemini: return "gemini-flash-latest"
         case .openAI: return "gpt-5-mini"
         case .openRouter: return "meta-llama/llama-3.2-90b-vision-instruct:free"
@@ -137,7 +137,7 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .openAI:
             return "Ücretli. Canlı sesli asistan ve kaynak gösteren web araması yalnız bunda var."
         case .nvidia:
-            return "NVIDIA'nın kendi sunucularında çalışan büyük açık modeller. Anahtarın varsa metin soruları için ilk sırada bu kullanılır. Web araması yok."
+            return "NVIDIA'nın kendi sunucularında çalışan büyük açık modeller; anahtarın varsa metin soruları önce buraya gider. Ara sıra 500 döndürür, MacB o zaman kendi tekrar dener ya da başka sağlayıcıya geçer. Web araması yok."
         case .groq:
             return "Ücretsiz ve çok hızlı; ama küçük modelleri zayıf cevap verir. Web araması yok."
         case .openRouter:
@@ -158,11 +158,14 @@ public enum AIProvider: String, CaseIterable, Codable, Sendable, Identifiable {
         case .openAI:
             return ["gpt-6-astra", "gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-4.1-mini"]
         case .nvidia:
-            // NVIDIA's catalogue moves as fast as the others; "Modelleri
-            // yenile" in Settings asks the service itself for the real list.
-            return ["meta/llama-3.3-70b-instruct", "deepseek-ai/deepseek-r1",
-                    "moonshotai/kimi-k2-instruct", "qwen/qwen3-235b-a22b",
-                    "nvidia/llama-3.1-nemotron-70b-instruct", "openai/gpt-oss-120b"]
+            // NVIDIA's catalogue lists many more models than a given key can
+            // actually call — most of the list answers 404, and several of the
+            // rest never answer at all. These are the ones that replied.
+            // "Modelleri yenile" in Settings asks the service for the full
+            // catalogue, which is a wider list than a working one.
+            return ["nvidia/nemotron-3-super-120b-a12b", "meta/llama-3.2-11b-vision-instruct",
+                    "nvidia/nemotron-3-ultra-550b-a55b", "openai/gpt-oss-20b",
+                    "moonshotai/kimi-k3", "z-ai/glm-5.3"]
         case .groq:
             // Groq retires model names constantly — these are the ones that
             // answered in 2026; "Modelleri yenile" in Settings asks the

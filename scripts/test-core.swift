@@ -1613,12 +1613,13 @@ struct CoreTestRunner {
                 try expect(!JarvisTool.clickControl.involvesMoney(screenSave), "Saving counted as money")
                 try expect(JarvisTool.clickControl.needsConfirmation(call: screenPay, afterReadingOutsideContent: false),
                            "Money did not ask when asked plainly")
-                try expect(Set(JarvisTool.allCases.filter(\.isScreenControl)) == [.clickControl, .typeText, .pressKeys],
+                try expect(Set(JarvisTool.allCases.filter(\.isScreenControl))
+                    == [.clickControl, .clickPoint, .scrollScreen, .typeText, .pressKeys],
                            "The screen-control grant covers the wrong tools")
                 try expect(Set(JarvisTool.allCases.filter(\.readsOutsideContent))
                            == [.webSearch, .lookAtScreen, .readScreenText, .readBrowserPage, .readSelection, .calendarEvents,
                                .media, .codingAgents, .readMail, .screenControls,
-                               .clickControl, .typeText, .pressKeys],
+                               .clickControl, .clickPoint, .scrollScreen, .typeText, .pressKeys],
                            "The outside-content set drifted")
                 for tool in JarvisTool.allCases where tool.isScreenControl || tool == .screenControls {
                     try expect(AgentPolicy.isForbidden(tool), "A background job could touch the screen with \(tool)")
@@ -2531,6 +2532,86 @@ struct CoreTestRunner {
                 try expect(prompt.contains("uydurma"), "Nothing told the model to stay with the sources")
             })
             ,
+            ("AIRouter: the chosen provider goes first, and a sick one goes last", {
+                let stored: Set<AIProvider> = [.nvidia, .gemini, .groq]
+                var sick = AIProviderHealth()
+                sick.recordFailure()
+                sick.recordFailure()
+                let order = AIRouter.order(for: .chat, stored: stored, preferred: .groq,
+                                           health: [.nvidia: sick])
+                try expect(order.first == .groq, "The chosen provider was not asked first")
+                try expect(order.last == .nvidia, "A failing provider was not moved to the back")
+                try expect(order.count == 3, "A provider with a key was dropped")
+            }),
+            ("AIRouter: only providers that can do the job are offered", {
+                let order = AIRouter.order(for: .vision, stored: [.groq, .gemini, .huggingFace])
+                try expect(order == [.gemini], "A provider that cannot see was offered a picture")
+                let free = AIRouter.order(for: .chat, stored: [.openAI, .gemini], freeOnly: true)
+                try expect(free == [.gemini], "The paid provider was offered where only free ones may be used")
+                let paidLast = AIRouter.order(for: .chat, stored: [.openAI, .gemini])
+                try expect(paidLast == [.gemini, .openAI], "Money was spent before a free key was tried")
+            }),
+            ("AIProviderHealth: one failure is a bad minute, two is a pattern, and success clears it", {
+                var health = AIProviderHealth()
+                health.recordFailure()
+                try expect(!health.isSick(), "One failure was enough to condemn a provider")
+                health.recordFailure()
+                try expect(health.isSick(), "Two failures in a row were forgiven")
+                health.recordSuccess(latency: 1.2)
+                try expect(!health.isSick(), "A provider that answered was still called sick")
+                var old = AIProviderHealth()
+                old.recordFailure(now: Date(timeIntervalSinceNow: -3600))
+                old.recordFailure(now: Date(timeIntervalSinceNow: -3600))
+                try expect(!old.isSick(), "An hour-old failure still counted")
+            }),
+            ("AIRouter: a stale chosen model is tried first, then MacB's own pick", {
+                let both = AIRouter.models(of: .nvidia, for: .chat, chosen: "meta/llama-3.3-70b-instruct")
+                try expect(both.count == 2, "The fallback model was not offered")
+                try expect(both[0].model == "meta/llama-3.3-70b-instruct", "The user's own choice was not tried first")
+                try expect(both[1].model == AIProvider.nvidia.model(for: .chat), "MacB's pick did not follow")
+                let one = AIRouter.models(of: .groq, for: .chat, chosen: nil)
+                try expect(one.count == 1 && one[0].model == AIProvider.groq.model(for: .chat),
+                           "Without a choice there should be exactly one model")
+                try expect(AIRouter.models(of: .groq, for: .vision, chosen: nil).isEmpty,
+                           "A provider that cannot see offered a model for a picture")
+            }),
+            ("AIRouter: a server error is retried, a refusal is not", {
+                try expect(AIRouter.shouldRetrySame(status: 500), "A 500 was not retried")
+                try expect(!AIRouter.shouldRetrySame(status: 404), "A missing model was retried pointlessly")
+                try expect(AIRouter.shouldTryAnother(status: 404), "A retired model did not move on")
+                try expect(AIRouter.shouldTryAnother(status: 429), "A rate limit did not move on")
+                try expect(!AIRouter.shouldTryAnother(status: 400), "A malformed request was sent to everyone")
+                try expect(AIRouter.timeout(attempt: 0, of: 3) < AIRouter.timeout(attempt: 2, of: 3),
+                           "The last provider was not given the longer wait")
+            }),
+            ("Nemotron models are asked not to think out loud", {
+                let body = AIChatStream.requestBody(question: "merhaba", model: "nvidia/nemotron-3-super-120b-a12b")
+                let options = body["chat_template_kwargs"] as? [String: Any]
+                try expect(options?["thinking"] as? Bool == false, "Nemotron was left thinking into its answer")
+                try expect(AIChatStream.requestBody(question: "merhaba", model: "gemini-3.6-flash")["chat_template_kwargs"] == nil,
+                           "Another provider was sent NVIDIA's own switch")
+            }),
+            ("A tool that takes nothing does not carry an empty schema", {
+                let parameters = JarvisTool.systemStatus.parameters
+                try expect(parameters["required"] == nil, "An empty required list was sent")
+                try expect(parameters["additionalProperties"] == nil, "additionalProperties was sent with no properties")
+                let search = JarvisTool.webSearch.parameters
+                try expect(search["required"] as? [String] == ["query"], "A required argument was lost")
+                try expect(search["additionalProperties"] as? Bool == false, "A tool with arguments lost its strictness")
+            }),
+            ("ControlMatching: a name matches what is written on the button", {
+                try expect(ControlMatching.match("kaydet", "kaydet") == 100, "An exact name did not win")
+                try expect(ControlMatching.match(ControlMatching.normalise("Kaydet…"),
+                                                 ControlMatching.normalise("kaydet")) == 100,
+                           "A trailing ellipsis lost the button")
+                try expect(ControlMatching.match(ControlMatching.normalise("Gönder ⌘↩"),
+                                                 ControlMatching.normalise("gönder")) > 0,
+                           "A shortcut hint lost the button")
+                try expect(ControlMatching.match("yeni sekme", "sekme yeni") > 0, "Word order defeated the match")
+                try expect(ControlMatching.match("iptal", "kaydet") == 0, "A different button matched")
+                try expect(ControlMatching.normalise("İPTAL") == ControlMatching.normalise("iptal"),
+                           "Turkish capitals did not fold to the same name")
+            }),
             ("RadialAction: text and arrangement slices need Accessibility, voice does not", {
                 for action in [RadialAction.summarizeSelection, .fixSelection, .translateSelection, .applyArrangement] {
                     try expect(action.requiresAccessibility, "\(action) was offered without Accessibility")

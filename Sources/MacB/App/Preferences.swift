@@ -292,6 +292,18 @@ enum WeatherWidgetStyle: String, CaseIterable, Identifiable {
         return trimmed.isEmpty ? provider.defaultModel : trimmed
     }
 
+    /// The model the user typed or picked for a provider, or nil when they
+    /// never chose one — in which case MacB picks the right model for the job
+    /// rather than one fixed name.
+    func chosenModel(for provider: AIProvider) -> String? {
+        if provider == .openAI {
+            return aiModel == Self.defaultAIModel ? nil : aiModel
+        }
+        let stored = (defaults.string(forKey: "aiModel." + provider.account) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return stored.isEmpty || stored == provider.defaultModel ? nil : stored
+    }
+
     func setModel(_ name: String, for provider: AIProvider) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if provider == .openAI {

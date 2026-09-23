@@ -53,7 +53,11 @@ import MacBCore
 
     private let keys: AIKeyStore
     private let model: (AIProvider) -> String
+    /// The model the user chose for a provider, when they chose one. Nil means
+    /// MacB picks the right model for the job.
+    private let chosenModel: (AIProvider) -> String?
     private let preferredProvider: () -> AIProvider?
+    private let health: AIHealthStore?
     private let cost: AICostMeter?
     /// Whether MacB may look something up before answering. The question's
     /// own words go to the search engine and nothing else.
@@ -64,10 +68,14 @@ import MacBCore
     init(keys: AIKeyStore, model: @escaping (AIProvider) -> String,
          preferredProvider: @escaping () -> AIProvider? = { nil },
          cost: AICostMeter? = nil,
-         searchesWeb: @escaping () -> Bool = { true }) {
+         searchesWeb: @escaping () -> Bool = { true },
+         chosenModel: @escaping (AIProvider) -> String? = { _ in nil },
+         health: AIHealthStore? = nil) {
         self.keys = keys
         self.model = model
+        self.chosenModel = chosenModel
         self.preferredProvider = preferredProvider
+        self.health = health
         self.cost = cost
         self.searchesWebSetting = searchesWeb
         // A key entered in Settings while the panel is open has to unlock the
@@ -84,6 +92,19 @@ import MacBCore
     var provider: AIProvider? {
         if let chosen = preferredProvider(), keys.has(chosen) { return chosen }
         return AIProvider.automatic(stored: keys.stored)
+    }
+
+    /// Where a question of this kind goes, in order, with the model each one
+    /// should answer it with.
+    ///
+    /// More than one, because a free tier is a promise rather than a
+    /// guarantee: a model is retired, a queue backs up, a key hits its limit.
+    /// When the first cannot answer, MacB moves to the next by itself instead
+    /// of handing the user an error they can do nothing about.
+    func candidates(for task: AITask) -> [(provider: AIProvider, model: String)] {
+        AIRouter.order(for: task, stored: keys.stored, preferred: preferredProvider(),
+                       health: health?.health ?? [:])
+            .flatMap { provider in AIRouter.models(of: provider, for: task, chosen: chosenModel(provider)) }
     }
 
     static let missingKeyMessage = "Önce Ayarlar → Araçlar'dan bir yapay zekâ anahtarı gir."
@@ -181,12 +202,10 @@ import MacBCore
     func askAboutScreen(_ raw: String) {
         let question = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let prompt = question.isEmpty ? "Ekranda ne var? Kısaca anlat." : question
-        guard let provider, let key = keys.read(provider) else {
-            errorMessage = Self.missingKeyMessage
-            return
-        }
-        guard let visionModel = provider.visionModel else {
-            errorMessage = "\(provider.title) görsel anlamıyor. Ayarlar → Araçlar'dan görebilen bir sağlayıcı seç (NVIDIA, Gemini ya da OpenAI)."
+        let route = usable(candidates(for: .vision))
+        guard !route.isEmpty else {
+            errorMessage = keys.stored.isEmpty ? Self.missingKeyMessage
+                : "Anahtarı olan sağlayıcıların hiçbiri görsel anlamıyor. Ayarlar → Araçlar'dan NVIDIA, Gemini ya da OpenAI ekle."
             return
         }
         let turn = AITurn(question: prompt, prompt: prompt)
@@ -195,32 +214,54 @@ import MacBCore
         isAnswering = true
         task = Task { [weak self] in
             guard let self else { return }
+            let capture: (jpeg: Data, appName: String)
             do {
-                let capture = try await ScreenLookService.captureFrontmostWindow()
+                capture = try await ScreenLookService.captureFrontmostWindow()
+            } catch {
+                self.errorMessage = error.localizedDescription
+                self.finish(turn.id)
+                return
+            }
+            var firstProblem: String?
+            for (attempt, candidate) in route.enumerated() {
                 if Task.isCancelled { return }
+                guard let key = self.keys.read(candidate.provider) else { continue }
                 let body = AIChatStream.visionRequestBody(
                     question: "Bu \(capture.appName) penceresinin görüntüsü. \(prompt)",
-                    jpeg: capture.jpeg, model: visionModel)
-                await self.stream(body: body, provider: provider, model: visionModel, key: key, turnID: turn.id)
-            } catch {
-                await MainActor.run {
-                    self.isAnswering = false
-                    self.errorMessage = error.localizedDescription
+                    jpeg: capture.jpeg, model: candidate.model)
+                var outcome = await self.stream(body: body, provider: candidate.provider, model: candidate.model,
+                                                key: key, turnID: turn.id,
+                                                timeout: AIRouter.timeout(attempt: attempt, of: route.count))
+                // A server error is usually a bad moment rather than a broken
+                // provider: ask the same one once more before moving on.
+                if case .failed(_, _, true) = outcome {
+                    outcome = await self.stream(body: body, provider: candidate.provider, model: candidate.model,
+                                                key: key, turnID: turn.id,
+                                                timeout: AIRouter.timeout(attempt: attempt, of: route.count))
+                }
+                switch outcome {
+                case .answered, .cancelled:
+                    self.finish(turn.id)
+                    return
+                case .failed(let message, let tryAnother, _):
+                    firstProblem = firstProblem ?? message
+                    guard tryAnother, attempt + 1 < route.count else {
+                        self.errorMessage = firstProblem
+                        self.finish(turn.id)
+                        return
+                    }
                 }
             }
+            self.errorMessage = firstProblem
+            self.finish(turn.id)
         }
     }
 
     private func send(_ turn: AITurn) {
-        guard let provider, let key = keys.read(provider) else {
-            errorMessage = Self.missingKeyMessage
-            return
-        }
-        // The ceiling only applies to the provider that charges. A free key
-        // that is already stored should never be refused because a paid one
-        // was used earlier in the day.
-        if !provider.isFree, let cost, cost.isOverDailyLimit {
-            errorMessage = "Bugünlük harcama sınırına ulaşıldı (\(cost.limitText)). Ayarlar \u{203A} Maliyet'ten değiştir ya da ücretsiz bir sağlayıcı seç."
+        let route = usable(candidates(for: .chat))
+        guard !route.isEmpty else {
+            errorMessage = provider == nil ? Self.missingKeyMessage
+                : "Bugünlük harcama sınırına ulaşıldı (\(cost?.limitText ?? "")). Ayarlar \u{203A} Maliyet'ten değiştir ya da ücretsiz bir sağlayıcı seç."
             return
         }
         let history = turns
@@ -229,26 +270,68 @@ import MacBCore
         isAnswering = true
         isSearching = false
 
-        let name = model(provider)
         task = Task { [weak self] in
             guard let self else { return }
-            var question = turn.prompt
-            // Only OpenAI's own models can search while they answer. For the
-            // others MacB searches first and hands over what it found, so an
-            // answer about today is about today.
-            if !provider.canSearchWeb, self.searchesWeb, WebGrounding.needsSearch(turn.prompt) {
-                await MainActor.run { self.isSearching = true }
-                let results = await WebSearchService.search(WebGrounding.query(from: turn.prompt))
-                await MainActor.run { self.isSearching = false }
+            var grounded: String?
+            var firstProblem: String?
+            for (attempt, candidate) in route.enumerated() {
                 if Task.isCancelled { return }
-                if !results.isEmpty {
-                    question = WebGrounding.prompt(question: turn.prompt, results: results)
+                guard let key = self.keys.read(candidate.provider) else { continue }
+                var question = turn.prompt
+                // Only OpenAI's own models can search while they answer. For
+                // the others MacB searches first and hands over what it found,
+                // so an answer about today is about today. Searched once, even
+                // when the question ends up going to a second provider.
+                if !candidate.provider.canSearchWeb, self.searchesWeb, WebGrounding.needsSearch(turn.prompt) {
+                    if grounded == nil {
+                        await MainActor.run { self.isSearching = true }
+                        let results = await WebSearchService.search(WebGrounding.query(from: turn.prompt))
+                        await MainActor.run { self.isSearching = false }
+                        if Task.isCancelled { return }
+                        if !results.isEmpty {
+                            grounded = WebGrounding.prompt(question: turn.prompt, results: results)
+                        }
+                    }
+                    question = grounded ?? question
+                }
+                let body = candidate.provider.canSearchWeb
+                    ? AIResponseStream.requestBody(question: question, model: candidate.model, history: history)
+                    : AIChatStream.requestBody(question: question, model: candidate.model, history: history)
+                var outcome = await self.stream(body: body, provider: candidate.provider, model: candidate.model,
+                                                key: key, turnID: turn.id,
+                                                timeout: AIRouter.timeout(attempt: attempt, of: route.count))
+                // A server error is usually a bad moment rather than a broken
+                // provider: ask the same one once more before moving on.
+                if case .failed(_, _, true) = outcome {
+                    outcome = await self.stream(body: body, provider: candidate.provider, model: candidate.model,
+                                                key: key, turnID: turn.id,
+                                                timeout: AIRouter.timeout(attempt: attempt, of: route.count))
+                }
+                switch outcome {
+                case .answered, .cancelled:
+                    self.finish(turn.id)
+                    return
+                case .failed(let message, let tryAnother, _):
+                    firstProblem = firstProblem ?? message
+                    guard tryAnother, attempt + 1 < route.count else {
+                        self.errorMessage = firstProblem
+                        self.finish(turn.id)
+                        return
+                    }
                 }
             }
-            let body = provider.canSearchWeb
-                ? AIResponseStream.requestBody(question: question, model: name, history: history)
-                : AIChatStream.requestBody(question: question, model: name, history: history)
-            await self.stream(body: body, provider: provider, model: name, key: key, turnID: turn.id)
+            self.errorMessage = firstProblem
+            self.finish(turn.id)
+        }
+    }
+
+    /// The candidates that may actually be used right now: the paid one is
+    /// left out once the day's ceiling is reached, because a free key that is
+    /// already stored should never be skipped in favour of a bill.
+    private func usable(_ route: [(provider: AIProvider, model: String)]) -> [(provider: AIProvider, model: String)] {
+        route.filter { candidate in
+            guard !candidate.provider.isFree, let cost else { return true }
+            return !cost.isOverDailyLimit
         }
     }
 
@@ -269,17 +352,19 @@ import MacBCore
         languageDownload = nil
     }
 
+    /// What became of one attempt at an answer.
+    private enum StreamOutcome {
+        /// Something arrived and is on screen. Never retried: a second
+        /// provider would write its answer underneath the first.
+        case answered
+        case cancelled
+        case failed(message: String, tryAnother: Bool, retrySame: Bool = false)
+    }
+
     private func stream(body: [String: Any], provider: AIProvider, model: String,
-                        key: String, turnID: UUID) async {
-        defer {
-            // Only the question still on screen may say it has finished: a
-            // stopped answer's stream winding down must not mark a newer one
-            // as done.
-            if turns.last?.id == turnID {
-                isAnswering = false
-                isSearching = false
-            }
-        }
+                        key: String, turnID: UUID, timeout: TimeInterval = 120) async -> StreamOutcome {
+        var wrote = false
+        let started = Date()
         var request = URLRequest(url: provider.chatURL)
         request.httpMethod = "POST"
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
@@ -291,26 +376,38 @@ import MacBCore
             request.setValue("https://github.com/hamzqb/MacB", forHTTPHeaderField: "HTTP-Referer")
             request.setValue("MacB", forHTTPHeaderField: "X-Title")
         }
-        request.timeoutInterval = 120
+        // The timeout is really "how long with nothing arriving": every chunk
+        // of the stream resets it. So a provider that has started answering is
+        // given as long as it needs, and one that has gone quiet is dropped
+        // quickly enough to ask somewhere else while the user is still
+        // waiting.
+        request.timeoutInterval = timeout
+        var failure: StreamOutcome?
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
             let (bytes, response) = try await URLSession.shared.bytes(for: request)
             let code = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard code == 200 else {
-                // The body of a failed request is a small JSON error from
-                // OpenAI; read enough of it to say what went wrong.
+                // The body of a failed request is a small JSON error; read
+                // enough of it to say what went wrong.
                 var text = ""
                 for try await line in bytes.lines { text += line; if text.count > 4000 { break } }
-                errorMessage = Self.message(forStatus: code, body: text, provider: provider)
-                return
+                health?.recordFailure(provider)
+                return .failed(message: Self.message(forStatus: code, body: text, provider: provider),
+                               tryAnother: AIRouter.shouldTryAnother(status: code),
+                               retrySame: AIRouter.shouldRetrySame(status: code))
             }
             for try await line in bytes.lines {
-                if Task.isCancelled { return }
+                if Task.isCancelled { return .cancelled }
                 let event = provider.canSearchWeb ? AIResponseStream.event(fromData: line)
                                                   : AIChatStream.event(fromData: line)
                 switch event {
                 case .text(let delta):
                     isSearching = false
+                    if !wrote {
+                        wrote = true
+                        health?.recordSuccess(provider, latency: Date().timeIntervalSince(started))
+                    }
                     update(turnID) { $0.answer += delta }
                 case .searching:
                     isSearching = true
@@ -322,18 +419,36 @@ import MacBCore
                         copyResult()
                     }
                 case .failed(let message):
-                    errorMessage = message
+                    failure = .failed(message: message, tryAnother: !wrote)
                 case .ignored:
                     break
                 }
             }
         } catch is CancellationError {
-            return
+            return .cancelled
         } catch let error as URLError where error.code == .cancelled {
-            return
+            return .cancelled
         } catch {
-            errorMessage = "\(provider.title)'ye ulaşılamadı: \(error.localizedDescription)"
+            health?.recordFailure(provider)
+            return .failed(message: "\(provider.title)'ye ulaşılamadı: \(error.localizedDescription)",
+                           tryAnother: !wrote)
         }
+        if wrote { return .answered }
+        if let failure { return failure }
+        // A stream that ended without a word is a failure however politely it
+        // was delivered.
+        health?.recordFailure(provider)
+        return .failed(message: "\(provider.title) boş cevap döndürdü.", tryAnother: true)
+    }
+
+    /// The question is done with, whether it was answered or not.
+    ///
+    /// Only the question still on screen may say so: a stopped answer's stream
+    /// winding down must not mark a newer one as finished.
+    private func finish(_ turnID: UUID) {
+        guard turns.last?.id == turnID else { return }
+        isAnswering = false
+        isSearching = false
     }
 
     private func update(_ id: UUID, _ change: (inout AITurn) -> Void) {

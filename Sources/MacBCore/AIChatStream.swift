@@ -13,6 +13,21 @@ import Foundation
 /// streaming client is a line it misreads, and that is provable with strings,
 /// without a network or a key.
 public enum AIChatStream {
+    /// Anything a particular model needs in the body beyond the standard
+    /// fields.
+    ///
+    /// NVIDIA's Nemotron models think out loud by default and put the thinking
+    /// in `content`, so an answer to "say hello" begins "Okay, the user said…"
+    /// — their own template switch turns it off. Everything here is keyed on
+    /// the model's name and nothing else; no provider sees another's options.
+    public static func options(forModel model: String) -> [String: Any] {
+        let name = model.lowercased()
+        if name.contains("nemotron") {
+            return ["chat_template_kwargs": ["thinking": false]]
+        }
+        return [:]
+    }
+
     /// Reads one `data:` payload of a chat-completions stream.
     public static func event(fromData line: String) -> AIStreamEvent {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -55,8 +70,10 @@ public enum AIChatStream {
         messages.append(["role": "user", "content": question])
         // Ask for the token counts on the last chunk, so the cost counter has
         // the provider's own number rather than a guess.
-        return ["model": model, "messages": messages, "stream": true,
-                "stream_options": ["include_usage": true]]
+        var body: [String: Any] = ["model": model, "messages": messages, "stream": true,
+                                   "stream_options": ["include_usage": true]]
+        body.merge(options(forModel: model)) { current, _ in current }
+        return body
     }
 
     /// The same request with a picture beside the question.
@@ -75,8 +92,10 @@ public enum AIChatStream {
             ["role": "system", "content": instructions],
             ["role": "user", "content": content]
         ]
-        return ["model": model, "messages": messages, "stream": true,
-                "stream_options": ["include_usage": true]]
+        var body: [String: Any] = ["model": model, "messages": messages, "stream": true,
+                                   "stream_options": ["include_usage": true]]
+        body.merge(options(forModel: model)) { current, _ in current }
+        return body
     }
 
     /// Told to say when it does not know, because this is the path with no web
@@ -96,6 +115,7 @@ public enum AIChatStream {
                                        maximumTokens: Int = 500) -> [String: Any] {
         var body: [String: Any] = ["model": model, "messages": messages,
                                    "max_tokens": maximumTokens, "temperature": 0.6]
+        body.merge(options(forModel: model)) { current, _ in current }
         if !tools.isEmpty {
             body["tools"] = tools
             body["tool_choice"] = "auto"

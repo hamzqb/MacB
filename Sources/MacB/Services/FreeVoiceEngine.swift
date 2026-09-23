@@ -53,18 +53,24 @@ import MacBCore
 
     private let keys: AIKeyStore
     private let model: (AIProvider) -> String
+    private let chosenModel: (AIProvider) -> String?
     private let preferred: () -> AIProvider?
+    private let health: AIHealthStore?
     private let session: URLSession
 
     init(keys: AIKeyStore, model: @escaping (AIProvider) -> String,
          preferred: @escaping () -> AIProvider? = { nil },
          readsScreen: @escaping () -> Bool = { false },
-         usesLocal: @escaping () -> Bool = { false }, session: URLSession = .shared) {
+         usesLocal: @escaping () -> Bool = { false }, session: URLSession = .shared,
+         chosenModel: @escaping (AIProvider) -> String? = { _ in nil },
+         health: AIHealthStore? = nil) {
         self.readsScreen = readsScreen
         self.usesLocal = usesLocal
         self.keys = keys
         self.model = model
+        self.chosenModel = chosenModel
         self.preferred = preferred
+        self.health = health
         self.session = session
     }
 
@@ -72,9 +78,18 @@ import MacBCore
     ///
     /// Never OpenAI: this is the engine that exists so that nothing is billed,
     /// and quietly falling back to the paid one would defeat the point.
-    var provider: AIProvider? {
-        if let chosen = preferred(), chosen.isFree, keys.has(chosen) { return chosen }
-        return AIProvider.textOrder.first { $0.isFree && keys.has($0) }
+    var provider: AIProvider? { route.first?.provider }
+
+    /// Every free provider that could run this conversation, best first.
+    ///
+    /// The list matters as much as the first entry: a free tier goes down, or
+    /// answers in two minutes, and the conversation should move on rather than
+    /// stop. Never OpenAI — this is the engine that exists so that nothing is
+    /// billed, and quietly falling back to the paid one would defeat the point.
+    var route: [(provider: AIProvider, model: String)] {
+        AIRouter.order(for: .tools, stored: keys.stored, preferred: preferred(),
+                       health: health?.health ?? [:], freeOnly: true)
+            .flatMap { provider in AIRouter.models(of: provider, for: .tools, chosen: chosenModel(provider)) }
     }
 
     var isAvailable: Bool { runsLocally || provider != nil }
@@ -155,8 +170,42 @@ import MacBCore
 
     private func answerByProvider(messages: [[String: Any]], tools: [JarvisTool],
                                   maximumTokens: Int) async throws -> Reply {
-        guard let provider, let key = keys.read(provider) else { throw Failure.noProvider }
-        let body = AIChatStream.toolRequestBody(messages: messages, model: model(provider),
+        let route = self.route
+        guard !route.isEmpty else { throw Failure.noProvider }
+        var firstFailure: Error?
+        for (attempt, candidate) in route.enumerated() {
+            guard let key = keys.read(candidate.provider) else { continue }
+            do {
+                return try await ask(candidate, key: key, messages: messages, tools: tools,
+                                     maximumTokens: maximumTokens,
+                                     timeout: AIRouter.timeout(attempt: attempt, of: route.count))
+            } catch {
+                firstFailure = firstFailure ?? error
+                health?.recordFailure(candidate.provider)
+                if case Failure.http(let code, _) = error {
+                    // A server error is usually a bad moment rather than a
+                    // broken provider: ask the same one once more.
+                    if AIRouter.shouldRetrySame(status: code),
+                       let reply = try? await ask(candidate, key: key, messages: messages, tools: tools,
+                                                  maximumTokens: maximumTokens,
+                                                  timeout: AIRouter.timeout(attempt: attempt, of: route.count)) {
+                        return reply
+                    }
+                    // A provider that refused for a reason another one would
+                    // share — a malformed request, say — is not worth asking
+                    // twice.
+                    if !AIRouter.shouldTryAnother(status: code) { throw error }
+                }
+            }
+        }
+        throw firstFailure ?? Failure.noProvider
+    }
+
+    private func ask(_ candidate: (provider: AIProvider, model: String), key: String,
+                     messages: [[String: Any]], tools: [JarvisTool],
+                     maximumTokens: Int, timeout: TimeInterval) async throws -> Reply {
+        let provider = candidate.provider
+        let body = AIChatStream.toolRequestBody(messages: messages, model: candidate.model,
                                                 tools: tools.map(\.chatDeclaration),
                                                 maximumTokens: maximumTokens)
 
@@ -168,9 +217,10 @@ import MacBCore
             request.setValue("https://github.com/hamzqb/MacB", forHTTPHeaderField: "HTTP-Referer")
             request.setValue("MacB", forHTTPHeaderField: "X-Title")
         }
-        request.timeoutInterval = 45
+        request.timeoutInterval = timeout
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
+        let started = Date()
         let (data, response) = try await session.data(for: request)
         let code = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard code == 200 else {
@@ -179,6 +229,7 @@ import MacBCore
         guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw Failure.unreadable
         }
+        health?.recordSuccess(provider, latency: Date().timeIntervalSince(started))
         return Reply(text: AIChatStream.outputText(inResponse: object) ?? "",
                      calls: AIChatStream.toolCalls(inResponse: object),
                      usage: AITokenUsage(chatCompletions: object["usage"]),

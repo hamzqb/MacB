@@ -17,6 +17,11 @@ import Security
             guard let index = arguments.firstIndex(of: flag) else { return [] }
             return Array(arguments[(index + 1)...].prefix { !$0.hasPrefix("--") })
         }
+        // A probe launched with `open -a MacB.app --args …` has no terminal to
+        // print to, and launching it that way is sometimes the only way to get
+        // the permissions the real application holds — macOS grants
+        // Accessibility to the application, not to whatever shell started it.
+        if let path = value(after: "--out") { freopen(path, "w", stdout) }
 
         if let path = value(after: "--import-keys") {
             // A one-off: reads `provider=key` lines from a file and puts each in
@@ -279,6 +284,50 @@ import Security
                     .appendingPathComponent("macb-probe-jobs.json"))
             }
         }
+        if arguments.contains("--controls-probe") {
+            // Read-only: what the assistant sees in the app in front, with the
+            // numbers it would press them by. Touches nothing.
+            return {
+                let control = ScreenControlService()
+                print("accessibility: \(AXIsProcessTrusted()) locked: \(ScreenControlService.screenIsLocked)")
+                if arguments.contains("--enhanced"), let front = ScreenControlService.frontApplication() {
+                    let app = AXUIElementCreateApplication(front.processIdentifier)
+                    let manual = AXUIElementSetAttributeValue(app, "AXManualAccessibility" as CFString, kCFBooleanTrue)
+                    let enhanced = AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+                    print("manual: \(manual.rawValue) enhanced: \(enhanced.rawValue)")
+                }
+                for round in 0..<(Int(value(after: "--repeat") ?? "") ?? 1) {
+                    if round > 0 { try? await Task.sleep(nanoseconds: 1_500_000_000) }
+                    let started = Date()
+                    do {
+                        let found = try control.controls(limit: Int(value(after: "--limit") ?? "") ?? 80)
+                        print("round \(round + 1) app: \(found.app) window: \(found.window) in "
+                              + String(format: "%.2fs", Date().timeIntervalSince(started)))
+                        print("controls: \(found.controls.count) menus: \(found.menus.count)")
+                        for item in found.controls {
+                            let role = item.role.replacingOccurrences(of: "AX", with: "").lowercased()
+                            print("  \(item.number). [\(role)] \(item.label)")
+                        }
+                    } catch {
+                        print("MISS: \(error.localizedDescription)")
+                    }
+                }
+            }
+        }
+        if let target = value(after: "--press-probe") {
+            // Presses one control of the app in front, by number or by name,
+            // through exactly the path the assistant uses.
+            return {
+                let control = ScreenControlService()
+                do {
+                    _ = try control.controls(limit: 200)
+                    let number = Int(target)
+                    print(try control.press(number == nil ? target : "", number: number))
+                } catch {
+                    print("MISS: \(error.localizedDescription)")
+                }
+            }
+        }
         if arguments.contains("--screen-control-probe") {
             // Drives whatever window is in front — meant for a throwaway test
             // window the caller opened — through the same service the
@@ -498,17 +547,36 @@ import Security
                 request.httpMethod = "POST"
                 request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                let withTools = !arguments.contains("--no-tools")
+                let seconds = Double(value(after: "--timeout") ?? "") ?? 45
+                request.timeoutInterval = seconds
+                let question = withTools ? "Hava İstanbul'da nasıl? Aracı kullan."
+                                         : "tek kelimeyle merhaba de"
+                let simple: [String: Any] = ["type": "function", "function": [
+                    "name": "get_weather", "description": "Hava durumu",
+                    "parameters": ["type": "object",
+                                   "properties": ["city": ["type": "string"]],
+                                   "required": ["city"]]]]
+                let named = value(after: "--tool").flatMap { JarvisTool(rawValue: $0) }
+                let declaration = arguments.contains("--simple-tool") ? simple
+                    : (named ?? JarvisTool.weather).chatDeclaration
                 let body = AIChatStream.toolRequestBody(
-                    messages: [["role": "user", "content": "tek kelimeyle merhaba de"]],
-                    model: model, tools: [JarvisTool.weather.chatDeclaration], maximumTokens: 60)
+                    messages: [["role": "user", "content": question]],
+                    model: model, tools: withTools ? [declaration] : [],
+                    maximumTokens: 120)
                 request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+                let started = Date()
                 do {
                     let (data, response) = try await URLSession.shared.data(for: request)
                     let code = (response as? HTTPURLResponse)?.statusCode ?? 0
-                    print("model: \(model) status: \(code)")
-                    print(String(data: data.prefix(400), encoding: .utf8) ?? "-")
+                    let elapsed = String(format: "%.1fs", Date().timeIntervalSince(started))
+                    let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                    let calls = object.map { AIChatStream.toolCalls(inResponse: $0).count } ?? 0
+                    let text = object.flatMap { AIChatStream.outputText(inResponse: $0) } ?? ""
+                    print("model: \(model) status: \(code) in \(elapsed) tools: \(calls) text: \(text.prefix(80))")
+                    if code != 200 { print(String(data: data.prefix(300), encoding: .utf8) ?? "-") }
                 } catch {
-                    print("hata: \(error.localizedDescription)")
+                    print("model: \(model) hata: \(error.localizedDescription)")
                 }
             }
         }
