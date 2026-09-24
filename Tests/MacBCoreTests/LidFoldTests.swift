@@ -69,15 +69,16 @@ final class LidFoldTests: XCTestCase {
         XCTAssertEqual(tracker.update(angle: 100), .opened)
     }
 
-    func testTheGreetingFitsTheTimeOfDay() {
-        XCTAssertEqual(IslandEvent.greeting(forHour: 7), "Günaydın")
-        XCTAssertEqual(IslandEvent.greeting(forHour: 13), "İyi günler")
-        XCTAssertEqual(IslandEvent.greeting(forHour: 20), "İyi akşamlar")
-        XCTAssertEqual(IslandEvent.greeting(forHour: 2), "İyi geceler")
-        let event = IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: 78)
+    func testTheLidLineCarriesTheTimeAndTheBatteryWithIt() throws {
+        let event = try XCTUnwrap(IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: 78,
+                                                      custom: "Günaydın"),
+                                  "A written greeting produced nothing")
         XCTAssertEqual(event.kind, .welcome)
         XCTAssertEqual(event.detail, "09:14 · %78")
-        XCTAssertEqual(IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: nil).detail, "09:14")
+        let noBattery = try XCTUnwrap(IslandEvent.welcome(hour: 9, time: "09:14", batteryPercent: nil,
+                                                          custom: "Günaydın"),
+                                      "A written greeting produced nothing")
+        XCTAssertEqual(noBattery.detail, "09:14", "A machine with no battery printed one")
     }
 
     // MARK: - Screen blur
@@ -126,21 +127,35 @@ final class LidFoldTests: XCTestCase {
         XCTAssertEqual(LidScreenBlur.layerAlpha(LidScreenBlur.layerCount, progress: 1), 0)
     }
 
-    func testAHandWrittenLineReplacesTheGreetingWithoutLosingTheDetail() {
-        let event = IslandEvent.welcome(hour: 2, time: "09:14", batteryPercent: 78, custom: "Hoş geldin")
+    func testAHandWrittenLineReplacesTheGreetingWithoutLosingTheDetail() throws {
+        let event = try XCTUnwrap(IslandEvent.welcome(hour: 2, time: "09:14", batteryPercent: 78,
+                                                      custom: "Hoş geldin"),
+                                  "A written line produced no greeting at all")
         XCTAssertEqual(event.title, "Hoş geldin")
         XCTAssertEqual(event.detail, "09:14 · %78")
-        let bye = IslandEvent.farewell(hour: 2, batteryPercent: 72, custom: "  Kendine iyi bak  ")
+        let bye = try XCTUnwrap(IslandEvent.farewell(hour: 2, batteryPercent: 72,
+                                                     custom: "  Kendine iyi bak  "),
+                                "A written farewell produced nothing")
         XCTAssertEqual(bye.title, "Kendine iyi bak")
         XCTAssertEqual(bye.detail, "%72")
     }
 
-    func testAnEmptyLineLeavesTheTimeOfDayInCharge() {
+    func testAnEmptyLineSaysNothingAtAll() {
         XCTAssertNil(IslandEvent.customTitle(nil))
         XCTAssertNil(IslandEvent.customTitle(""))
-        // Spaces alone must not blank the island out.
+        // Spaces alone are still an empty field.
         XCTAssertNil(IslandEvent.customTitle("   \n "))
-        XCTAssertEqual(IslandEvent.farewell(hour: 2, batteryPercent: nil, custom: " ").title, "İyi geceler")
+        // Both ends of the lid follow the same rule: an empty field is an
+        // instruction to say nothing, not a request to have something picked.
+        for blank in [nil, "", "   \n "] as [String?] {
+            XCTAssertNil(IslandEvent.welcome(hour: 2, time: "09:14", batteryPercent: 78, custom: blank),
+                         "An empty welcome line still put something on screen")
+            XCTAssertNil(IslandEvent.farewell(hour: 2, batteryPercent: 78, custom: blank),
+                         "An empty farewell line still put something on screen")
+        }
+        let long = String(repeating: "a", count: IslandEvent.customTitleLimit + 20)
+        XCTAssertEqual(IslandEvent.customTitle(long)?.count, IslandEvent.customTitleLimit,
+                       "A line too long for the island was not cut")
     }
 
     func testALineTooLongForTheIslandIsCut() {
