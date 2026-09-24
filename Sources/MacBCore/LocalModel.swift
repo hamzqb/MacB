@@ -104,24 +104,34 @@ public enum LocalModel {
     /// The cost: asked "what did you do today?", it lists the example as its
     /// own work, however it is labelled. So the example is there only until
     /// the conversation has a real tool call of its own to learn from.
+    /// Built a message at a time rather than as one expression. Written as a
+    /// chain of `+` over dictionary literals, the type checker gives up on a
+    /// slower machine — "unable to type-check this expression in reasonable
+    /// time" — and the build fails on CI while passing here.
     public static let examples: [[String: Any]] = {
-        func call(_ id: String, _ name: String, _ arguments: String) -> [[String: Any]] {
-            [AIChatStream.assistantToolMessage([JarvisCall(callID: id, name: name, arguments: arguments)], text: ""),
-             AIChatStream.toolResultMessage(callID: id, output: "{\"ok\":true}")]
+        var messages: [[String: Any]] = []
+        func say(_ role: String, _ text: String) {
+            messages.append(["role": role, "content": text])
         }
-        return [["role": "user", "content": "Örnek: selam, nasılsın"],
-                ["role": "assistant", "content": "İyiyim, sen nasılsın? Söyle, ne yapıyoruz?"],
-                ["role": "user", "content": "Örnek: spotify'ı açar mısın"]]
-            + call("example-1", "open_application", "{\"name\":\"Spotify\"}")
-            + [["role": "assistant", "content": "Açtım."],
-               ["role": "user", "content": "Örnek: sesi biraz kıs bi de"]]
-            + call("example-2", "set_volume", "{\"change\":-10}")
-            + [["role": "assistant", "content": "Kıstım."],
-               ["role": "user", "content": "Örnek: on dakikalık zamanlayıcı kur"]]
-            + call("example-3", "start_timer", "{\"minutes\":10}")
-            + [["role": "assistant", "content": "Kurdum, on dakika."],
-               ["role": "user", "content": "(Örnek burada bitti; bunların hiçbiri gerçekten yapılmadı. Gerçek konuşma şimdi başlıyor.)"],
-               ["role": "assistant", "content": "Tamam."]]
+        func call(_ id: String, _ name: String, _ arguments: String) {
+            let request = JarvisCall(callID: id, name: name, arguments: arguments)
+            messages.append(AIChatStream.assistantToolMessage([request], text: ""))
+            messages.append(AIChatStream.toolResultMessage(callID: id, output: "{\"ok\":true}"))
+        }
+        say("user", "Örnek: selam, nasılsın")
+        say("assistant", "İyiyim, sen nasılsın? Söyle, ne yapıyoruz?")
+        say("user", "Örnek: spotify'ı açar mısın")
+        call("example-1", "open_application", "{\"name\":\"Spotify\"}")
+        say("assistant", "Açtım.")
+        say("user", "Örnek: sesi biraz kıs bi de")
+        call("example-2", "set_volume", "{\"change\":-10}")
+        say("assistant", "Kıstım.")
+        say("user", "Örnek: on dakikalık zamanlayıcı kur")
+        call("example-3", "start_timer", "{\"minutes\":10}")
+        say("assistant", "Kurdum, on dakika.")
+        say("user", "(Örnek burada bitti; bunların hiçbiri gerçekten yapılmadı. Gerçek konuşma şimdi başlıyor.)")
+        say("assistant", "Tamam.")
+        return messages
     }()
 
     /// `messages` with the example after the instructions — unless the
